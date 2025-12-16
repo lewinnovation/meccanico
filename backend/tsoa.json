@@ -1,0 +1,38 @@
+{
+  "entryFile": "src/server.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "controllerPathGlobs": ["src/controllers/**/*.ts"],
+  "spec": {
+    "outputDirectory": "src/generated",
+    "specVersion": 3,
+    "securityDefinitions": {
+      "jwt": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "info": {
+      "title": "Meccanico API",
+      "version": "0.1.0",
+      "description": "Vehicle repair shop management API"
+    },
+    "tags": [
+      { "name": "Auth", "description": "Authentication endpoints" },
+      { "name": "Jobs", "description": "Job management" },
+      { "name": "Customers", "description": "Customer management" },
+      { "name": "Vehicles", "description": "Vehicle management" },
+      { "name": "Inventory", "description": "Inventory management" },
+      { "name": "Labour", "description": "Labour rates management" },
+      { "name": "Services", "description": "Service packages management" },
+      { "name": "Templates", "description": "Job templates management" },
+      { "name": "Settings", "description": "System settings" },
+      { "name": "Reports", "description": "Reporting and exports" }
+    ]
+  },
+  "routes": {
+    "routesDir": "src/generated",
+    "authenticationModule": "src/middleware/auth.ts"
+  }
+}
+

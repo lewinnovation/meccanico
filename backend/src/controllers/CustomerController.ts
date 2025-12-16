@@ -1,0 +1,88 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Path,
+  Query,
+  Route,
+  Tags,
+  Security,
+  SuccessResponse,
+} from 'tsoa';
+import {
+  CustomerService,
+  CreateCustomerDto,
+  UpdateCustomerDto,
+  PaginatedResult,
+} from '../services/CustomerService';
+import { Customer } from '../models/Customer';
+
+@Route('api/customers')
+@Tags('Customers')
+@Security('jwt')
+export class CustomerController extends Controller {
+  private customerService = new CustomerService();
+
+  /**
+   * Get all customers with pagination and search
+   */
+  @Get('/')
+  public async getCustomers(
+    @Query() page: number = 1,
+    @Query() limit: number = 50,
+    @Query() search?: string
+  ): Promise<PaginatedResult<Customer>> {
+    return this.customerService.findAll(page, limit, search);
+  }
+
+  /**
+   * Get a customer by ID
+   */
+  @Get('/{id}')
+  public async getCustomer(@Path() id: string): Promise<Customer> {
+    return this.customerService.findById(id);
+  }
+
+  /**
+   * Get a customer by code (e.g., C001)
+   */
+  @Get('/code/{code}')
+  public async getCustomerByCode(@Path() code: string): Promise<Customer> {
+    return this.customerService.findByCode(code);
+  }
+
+  /**
+   * Create a new customer
+   */
+  @Post('/')
+  @SuccessResponse(201, 'Created')
+  public async createCustomer(@Body() body: CreateCustomerDto): Promise<Customer> {
+    this.setStatus(201);
+    return this.customerService.create(body);
+  }
+
+  /**
+   * Update a customer
+   */
+  @Patch('/{id}')
+  public async updateCustomer(
+    @Path() id: string,
+    @Body() body: UpdateCustomerDto
+  ): Promise<Customer> {
+    return this.customerService.update(id, body);
+  }
+
+  /**
+   * Delete a customer
+   */
+  @Delete('/{id}')
+  @SuccessResponse(204, 'Deleted')
+  public async deleteCustomer(@Path() id: string): Promise<void> {
+    this.setStatus(204);
+    return this.customerService.delete(id);
+  }
+}
+

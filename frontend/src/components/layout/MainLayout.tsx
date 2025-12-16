@@ -1,0 +1,128 @@
+import React from 'react';
+import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, useTheme } from '@mui/material';
+import { Menu as MenuIcon, Search as SearchIcon } from '@mui/icons-material';
+import { observer } from 'mobx-react-lite';
+import { useStore } from '../../stores/RootStore';
+import { Sidebar } from './Sidebar';
+import { CommandPalette } from '../common/CommandPalette';
+
+const SIDEBAR_WIDTH = 240;
+
+interface MainLayoutProps {
+  children: React.ReactNode;
+}
+
+export const MainLayout: React.FC<MainLayoutProps> = observer(({ children }) => {
+  const theme = useTheme();
+  const { uiStore } = useStore();
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* App Bar */}
+      <AppBar
+        position="fixed"
+        elevation={0}
+        sx={{
+          width: uiStore.sidebarOpen ? `calc(100% - ${SIDEBAR_WIDTH}px)` : '100%',
+          ml: uiStore.sidebarOpen ? `${SIDEBAR_WIDTH}px` : 0,
+          bgcolor: 'background.paper',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
+        }}
+      >
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <IconButton
+              color="inherit"
+              onClick={() => uiStore.toggleSidebar()}
+              edge="start"
+              sx={{ color: 'text.secondary' }}
+            >
+              <MenuIcon />
+            </IconButton>
+          </Box>
+
+          <Box
+            onClick={() => uiStore.toggleCommandPalette()}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 2,
+              py: 1,
+              bgcolor: 'grey.100',
+              borderRadius: 1,
+              cursor: 'pointer',
+              '&:hover': { bgcolor: 'grey.200' },
+            }}
+          >
+            <SearchIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+            <Typography variant="body2" color="text.secondary">
+              Search...
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                ml: 2,
+                px: 1,
+                py: 0.25,
+                bgcolor: 'grey.200',
+                borderRadius: 0.5,
+                fontSize: '0.75rem',
+                fontFamily: 'monospace',
+              }}
+            >
+              ⌘K
+            </Typography>
+          </Box>
+
+          <Box sx={{ width: 48 }} /> {/* Spacer for balance */}
+        </Toolbar>
+      </AppBar>
+
+      {/* Sidebar */}
+      <Drawer
+        variant="persistent"
+        anchor="left"
+        open={uiStore.sidebarOpen}
+        sx={{
+          width: SIDEBAR_WIDTH,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            width: SIDEBAR_WIDTH,
+            boxSizing: 'border-box',
+            borderRight: '1px solid',
+            borderColor: 'divider',
+          },
+        }}
+      >
+        <Sidebar />
+      </Drawer>
+
+      {/* Main Content */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          mt: 8,
+          ml: uiStore.sidebarOpen ? 0 : `-${SIDEBAR_WIDTH}px`,
+          transition: theme.transitions.create('margin', {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
+        }}
+      >
+        {children}
+      </Box>
+
+      {/* Command Palette */}
+      <CommandPalette />
+    </Box>
+  );
+});
+
