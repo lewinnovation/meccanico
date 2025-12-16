@@ -36,6 +36,7 @@
 ### Technology Stack
 | Layer | Technology | Version | Purpose |
 |-------|------------|---------|---------|
+| **Runtime** | **Node.js** | **24.x (LTS)** | **JavaScript runtime** |
 | Frontend | React | 18.x | UI Framework |
 | State Management | MobX | 6.x | Reactive state |
 | UI Components | MUI | 5.x | Material Design components |
@@ -45,6 +46,8 @@
 | Database | PostgreSQL | 15.x | Primary data store |
 | Container | Docker | 24.x | Deployment |
 | Testing | Jest + Playwright | Latest | Unit + E2E testing |
+
+> ⚠️ **Node.js 24 Required:** Use `nvm use` in project root to auto-switch (reads `.nvmrc`)
 
 ### Domain Model Overview
 ```
@@ -204,8 +207,10 @@ class JobHandler {
 
 ## 🧪 Testing Requirements
 
-### Coverage Targets
-- **Overall:** ≥80%
+> ⚠️ **MANDATORY:** All code changes MUST include test coverage. Pull requests without adequate tests will be rejected.
+
+### Coverage Targets (ENFORCED)
+- **Overall:** ≥80% (MANDATORY - builds will fail below this)
 - **Critical Business Logic:** ≥95%
 - **API Endpoints:** ≥90%
 - **UI Components:** ≥75%
@@ -213,7 +218,7 @@ class JobHandler {
 ### Test Structure
 
 ```
-tests/
+backend/tests/
 ├── unit/
 │   ├── services/           # Service layer tests
 │   ├── models/             # Model validation tests
@@ -221,6 +226,12 @@ tests/
 ├── integration/
 │   ├── api/                # API endpoint tests
 │   └── database/           # Database operation tests
+
+frontend/tests/
+├── unit/
+│   ├── components/         # Component unit tests
+│   ├── stores/             # MobX store tests
+│   └── utils/              # Utility function tests
 └── e2e/
     ├── workflows/          # User journey tests
     └── pages/              # Page-specific tests
@@ -237,15 +248,135 @@ describe('JobService', () => {
 });
 ```
 
+### E2E Test Requirements (Playwright)
+
+> ⚠️ **MANDATORY:** All main user paths MUST have E2E test coverage before feature is considered complete.
+
+#### Customer E2E Tests (Required)
+All customer-related features must have the following E2E tests:
+
+| Test | Description | Path |
+|------|-------------|------|
+| `customer-create.spec.ts` | Create new customer with all fields | `/customers/new` |
+| `customer-create-minimal.spec.ts` | Create customer with only required fields | `/customers/new` |
+| `customer-create-validation.spec.ts` | Validate form errors (duplicate email, required fields) | `/customers/new` |
+| `customer-list.spec.ts` | List, search, filter, paginate customers | `/customers` |
+| `customer-view.spec.ts` | View customer details with vehicles | `/customers/:id` |
+| `customer-edit.spec.ts` | Edit customer information | `/customers/:id/edit` |
+| `customer-delete.spec.ts` | Delete customer (with/without vehicles) | `/customers/:id` |
+| `customer-add-vehicle.spec.ts` | Add vehicle to customer | `/customers/:id/vehicles/new` |
+| `customer-search.spec.ts` | Search by name, email, phone, code | `/customers` |
+
+#### E2E Test Template
+```typescript
+// e2e/customer/customer-create.spec.ts
+import { test, expect } from '@playwright/test';
+
+test.describe('Customer Creation', () => {
+  test.beforeEach(async ({ page }) => {
+    // Login and navigate
+    await page.goto('/login');
+    await page.fill('[data-testid="email"]', 'admin@test.com');
+    await page.fill('[data-testid="password"]', 'password');
+    await page.click('[data-testid="login-button"]');
+    await page.waitForURL('/dashboard');
+  });
+
+  test('should create customer with valid data', async ({ page }) => {
+    await page.goto('/customers/new');
+    
+    await page.fill('[data-testid="customer-name"]', 'John Smith');
+    await page.fill('[data-testid="customer-email"]', 'john@example.com');
+    await page.fill('[data-testid="customer-phone"]', '555-1234');
+    await page.click('[data-testid="submit-button"]');
+    
+    // Verify redirect to customer detail
+    await expect(page).toHaveURL(/\/customers\/[a-f0-9-]+/);
+    
+    // Verify customer code format: C{5 letters}{000}
+    const codeElement = await page.locator('[data-testid="customer-code"]');
+    await expect(codeElement).toHaveText(/^CJOHNS\d{3}$/);
+  });
+
+  test('should show validation error for duplicate email', async ({ page }) => {
+    // ... test implementation
+  });
+
+  test('should require name field', async ({ page }) => {
+    // ... test implementation
+  });
+});
+```
+
+#### Other Entity E2E Requirements
+
+| Entity | Required E2E Tests |
+|--------|-------------------|
+| **Vehicle** | create, list, view, edit, delete, search |
+| **Job** | create, list, view, edit, status transitions, add line items, generate invoice |
+| **Inventory** | create, list, view, edit, delete, search, stock management |
+| **Labour** | create, list, view, edit, delete |
+| **Service** | create, list, view, edit, delete |
+| **Template** | create, list, view, edit, delete, apply to job |
+| **Auth** | login, logout, session expiry, role-based access |
+
+### Unit Test Requirements
+
+Every new function/method MUST have unit tests covering:
+- ✅ Happy path (valid inputs)
+- ✅ Edge cases (empty, null, boundary values)
+- ✅ Error cases (invalid inputs, exceptions)
+- ✅ Business rule validation
+
+#### Example: Code Generator Tests
+```typescript
+// backend/tests/unit/utils/codeGenerator.test.ts
+describe('generateCustomerCode', () => {
+  it('should generate code with first 5 letters of name', async () => {
+    const code = await generateCustomerCode('John Smith');
+    expect(code).toMatch(/^CJOHNS\d{3}$/);
+  });
+
+  it('should pad short names with X', async () => {
+    const code = await generateCustomerCode('Bob');
+    expect(code).toMatch(/^CBOXXX\d{3}$/);
+  });
+
+  it('should remove spaces from name', async () => {
+    const code = await generateCustomerCode('Mary Jane Watson');
+    expect(code).toMatch(/^CMARYJ\d{3}$/);
+  });
+
+  it('should increment number for same name prefix', async () => {
+    const code1 = await generateCustomerCode('John Smith');
+    const code2 = await generateCustomerCode('John Doe');
+    // Both should be CJOHNS but different numbers
+    expect(code1).toMatch(/^CJOHNS001$/);
+    expect(code2).toMatch(/^CJOHND001$/);
+  });
+
+  it('should uppercase the name prefix', async () => {
+    const code = await generateCustomerCode('alice');
+    expect(code).toMatch(/^CALIC/);
+  });
+});
+```
+
 ---
 
 ## 🚀 Pre-Release Checklist
 
 Before any release or merge to main:
 
+### Testing (MANDATORY - BLOCKING)
+- [ ] All unit tests pass (`npm test`)
+- [ ] All E2E tests pass (`npm run test:e2e`)
+- [ ] Coverage ≥80% overall (`npm run test:coverage`)
+- [ ] New code has corresponding unit tests
+- [ ] New features have E2E tests for all main paths
+- [ ] Customer entity tests: create, list, view, edit, delete, search
+
 ### Code Quality
-- [ ] All tests pass (`npm test`)
-- [ ] Coverage meets thresholds (`npm run coverage`)
 - [ ] No linting errors (`npm run lint`)
 - [ ] TypeScript compiles without errors (`npm run build`)
 - [ ] No console.log statements in production code
@@ -325,29 +456,76 @@ When working on any task:
    - Read relevant `/docs` files
    - Check `agent.md` for guidelines
    - Review related existing code
+   - Review existing tests for patterns
 
 2. **Planning**
    - Identify affected models/entities
    - Plan database migrations
    - Define API endpoints
    - Plan frontend state changes
-   - Outline test coverage
+   - **Outline test coverage (MANDATORY)**
+   - **Identify E2E test scenarios**
 
 3. **Implementation**
    - Follow coding guidelines
    - Add inline comments for tradeoffs
    - Keep commits atomic and well-described
+   - **Write unit tests alongside code (TDD encouraged)**
 
-4. **Verification**
-   - Run test suite
-   - Check coverage
-   - Run linter
-   - Verify documentation
+4. **Build & Test After EVERY Change (MANDATORY)**
+   > ⚠️ **CRITICAL:** After EVERY code change, you MUST run build and test commands.
+   > Do NOT wait until the end. Run these commands incrementally.
+   
+   ```bash
+   # Backend - Run after EVERY backend change
+   cd backend
+   npm run build     # TypeScript compilation + TSOA generation
+   npm test          # Unit tests
+   
+   # Frontend - Run after EVERY frontend change  
+   cd frontend
+   npm run build     # TypeScript compilation + Vite build
+   npm test          # Unit tests (if any)
+   
+   # E2E Tests - Run for feature completion
+   cd frontend
+   npm run test:e2e  # Playwright E2E tests
+   ```
+   
+   **Build/Test Failure Protocol:**
+   1. If build fails → FIX IMMEDIATELY before any other changes
+   2. If tests fail → FIX IMMEDIATELY before any other changes
+   3. Never proceed with more changes while build/tests are broken
+   4. Document any test failures and fixes in commit messages
 
-5. **Documentation**
+5. **Verification Checklist (BLOCKING)**
+   - [ ] `npm run build` passes (BOTH backend and frontend)
+   - [ ] `npm test` passes (BOTH backend and frontend)
+   - [ ] `npm run lint` passes
+   - [ ] Coverage meets ≥80% threshold
+   - [ ] No TypeScript errors
+   - [ ] No console warnings in build output
+
+6. **Documentation**
    - Update `/docs` as needed
    - Update API documentation
    - Add to CHANGELOG
+   - Document test scenarios in test files
+
+### Quick Verification Script
+```bash
+# Run this to verify everything is working
+cd /path/to/meccanico
+
+# Backend
+(cd backend && npm run build && npm test) || echo "❌ BACKEND FAILED"
+
+# Frontend  
+(cd frontend && npm run build) || echo "❌ FRONTEND FAILED"
+
+# If all pass
+echo "✅ All builds and tests pass"
+```
 
 ---
 
@@ -441,6 +619,6 @@ When working on any task:
 
 ---
 
-*Last Updated: 2024-12-16*
-*Version: 0.1.0*
+*Last Updated: 2025-12-16*
+*Version: 0.3.0*
 

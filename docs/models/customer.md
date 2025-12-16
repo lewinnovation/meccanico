@@ -114,10 +114,23 @@ export class Customer {
 | notes | Optional, max 5000 characters |
 
 ### Code Generation
-- Format: `C{NNN}` (e.g., C001, C042)
-- Auto-incremented on creation
+- Format: `C{5 letters of name in caps}{NNN}` (e.g., CJOHNS001, CALICE002)
+- First 5 letters extracted from customer name (uppercase, only letters)
+- Non-alphabetic characters (spaces, numbers, special chars) are removed
+- Names shorter than 5 characters are padded with 'X' (e.g., "Bob" → CBOBXX001)
+- Sequential number per name prefix
+- Auto-generated on creation
 - Immutable after creation
 - Unique across all customers
+
+#### Code Examples
+| Customer Name | Generated Code |
+|--------------|----------------|
+| John Smith | CJOHNS001 |
+| Alice | CALICE001 |
+| Bob | CBOBXX001 |
+| O'Brien | COBRIE001 |
+| Ann-Marie Chen | CANNMA001 |
 
 ### Business Logic
 1. Email must be unique if provided

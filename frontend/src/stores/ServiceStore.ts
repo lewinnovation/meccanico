@@ -1,0 +1,203 @@
+import { makeAutoObservable, runInAction } from 'mobx';
+import { RootStore } from './RootStore';
+import { api } from '../utils/api';
+
+export interface ServiceItem {
+  id: string;
+  serviceId: string;
+  itemType: 'INVENTORY' | 'LABOUR';
+  itemId: string;
+  quantity: number;
+  createdAt: string;
+}
+
+export interface Service {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  basePrice: number;
+  category: string | null;
+  isActive: boolean;
+  items: ServiceItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateServiceItemDto {
+  itemType: 'INVENTORY' | 'LABOUR';
+  itemId: string;
+  quantity: number;
+}
+
+export interface CreateServiceDto {
+  name: string;
+  description?: string;
+  basePrice: number;
+  category?: string;
+  items?: CreateServiceItemDto[];
+}
+
+export interface UpdateServiceDto {
+  name?: string;
+  description?: string;
+  basePrice?: number;
+  category?: string;
+  isActive?: boolean;
+  items?: CreateServiceItemDto[];
+}
+
+export class ServiceStore {
+  rootStore: RootStore;
+  items: Service[] = [];
+  categories: string[] = [];
+  selectedItem: Service | null = null;
+  total = 0;
+  page = 1;
+  limit = 50;
+  search = '';
+  categoryFilter = '';
+  isLoading = false;
+  error: string | null = null;
+
+  constructor(rootStore: RootStore) {
+    this.rootStore = rootStore;
+    makeAutoObservable(this);
+  }
+
+  async fetchItems(): Promise<void> {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      const params = new URLSearchParams({
+        page: this.page.toString(),
+        limit: this.limit.toString(),
+      });
+      if (this.search) params.append('search', this.search);
+      if (this.categoryFilter) params.append('category', this.categoryFilter);
+
+      const response = await api.get(`/api/services?${params}`);
+      runInAction(() => {
+        this.items = response.data.data;
+        this.total = response.data.total;
+        this.isLoading = false;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to fetch services';
+        this.isLoading = false;
+      });
+    }
+  }
+
+  async fetchCategories(): Promise<void> {
+    try {
+      const response = await api.get('/api/services/categories');
+      runInAction(() => {
+        this.categories = response.data;
+      });
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+    }
+  }
+
+  async fetchById(id: string): Promise<Service | null> {
+    this.isLoading = true;
+    try {
+      const response = await api.get(`/api/services/${id}`);
+      runInAction(() => {
+        this.selectedItem = response.data;
+        this.isLoading = false;
+      });
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to fetch service';
+        this.isLoading = false;
+      });
+      return null;
+    }
+  }
+
+  async create(data: CreateServiceDto): Promise<Service | null> {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      const response = await api.post('/api/services', data);
+      runInAction(() => {
+        this.items.unshift(response.data);
+        this.total += 1;
+        this.isLoading = false;
+      });
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to create service';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
+
+  async update(id: string, data: UpdateServiceDto): Promise<Service | null> {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      const response = await api.patch(`/api/services/${id}`, data);
+      runInAction(() => {
+        const index = this.items.findIndex((i) => i.id === id);
+        if (index >= 0) {
+          this.items[index] = response.data;
+        }
+        if (this.selectedItem?.id === id) {
+          this.selectedItem = response.data;
+        }
+        this.isLoading = false;
+      });
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to update service';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
+
+  async delete(id: string): Promise<void> {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      await api.delete(`/api/services/${id}`);
+      runInAction(() => {
+        this.items = this.items.filter((i) => i.id !== id);
+        this.total -= 1;
+        if (this.selectedItem?.id === id) {
+          this.selectedItem = null;
+        }
+        this.isLoading = false;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to delete service';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
+
+  setSearch(search: string): void {
+    this.search = search;
+    this.page = 1;
+  }
+
+  setCategoryFilter(category: string): void {
+    this.categoryFilter = category;
+    this.page = 1;
+  }
+
+  setPage(page: number): void {
+    this.page = page;
+  }
+}
+

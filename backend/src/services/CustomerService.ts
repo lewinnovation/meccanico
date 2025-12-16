@@ -1,7 +1,8 @@
 import { AppDataSource } from '../config/database';
 import { Customer } from '../models/Customer';
-import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
+import { generateCustomerCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError } from '../middleware/errorHandler';
+import { PaginatedResult } from '../types/common';
 
 export interface CreateCustomerDto {
   name: string;
@@ -19,12 +20,7 @@ export interface UpdateCustomerDto {
   notes?: string;
 }
 
-export interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
+export { PaginatedResult };
 
 export class CustomerService {
   private repository = AppDataSource.getRepository(Customer);
@@ -89,7 +85,7 @@ export class CustomerService {
       }
     }
 
-    const code = await generateCode('customers', CODE_PREFIXES.CUSTOMER);
+    const code = await generateCustomerCode(data.name);
     
     const customer = this.repository.create({
       ...data,

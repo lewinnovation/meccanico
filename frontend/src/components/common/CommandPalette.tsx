@@ -16,7 +16,6 @@ import {
   Add as AddIcon,
   Build as JobIcon,
   People as CustomerIcon,
-  DirectionsCar as VehicleIcon,
   Inventory as InventoryIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';

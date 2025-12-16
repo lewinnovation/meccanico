@@ -9,6 +9,7 @@ import { appConfig } from './config/app';
 import { initializeDatabase } from './config/database';
 import { errorHandler } from './middleware/errorHandler';
 import { RegisterRoutes } from './generated/routes';
+import { seedDatabase } from './utils/seedData';
 
 const app: Application = express();
 
@@ -49,6 +50,9 @@ async function bootstrap() {
   try {
     // Initialize database
     await initializeDatabase();
+
+    // Run database seeding
+    await seedDatabase();
 
     // Start listening
     app.listen(appConfig.port, () => {

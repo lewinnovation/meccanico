@@ -47,6 +47,13 @@ export class ConflictError extends ApiError {
   }
 }
 
+export class BadRequestError extends ApiError {
+  constructor(message: string = 'Bad request') {
+    super(400, message);
+    this.name = 'BadRequestError';
+  }
+}
+
 export function errorHandler(
   err: Error,
   req: Request,
@@ -65,11 +72,14 @@ export function errorHandler(
 
   // Custom API errors
   if (err instanceof ApiError) {
-    return res.status(err.statusCode).json({
+    const response: { status: string; message: string; details?: unknown } = {
       status: 'error',
       message: err.message,
-      ...(err.details && { details: err.details }),
-    });
+    };
+    if (err.details) {
+      response.details = err.details;
+    }
+    return res.status(err.statusCode).json(response);
   }
 
   // JWT authentication errors

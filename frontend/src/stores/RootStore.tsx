@@ -3,18 +3,36 @@ import { AuthStore } from './AuthStore';
 import { UIStore } from './UIStore';
 import { JobStore } from './JobStore';
 import { CustomerStore } from './CustomerStore';
+import { SettingsStore } from './SettingsStore';
+import { InventoryStore } from './InventoryStore';
+import { LabourStore } from './LabourStore';
+import { ServiceStore } from './ServiceStore';
+import { TemplateStore } from './TemplateStore';
+import { VehicleStore } from './VehicleStore';
 
 class RootStore {
   authStore: AuthStore;
   uiStore: UIStore;
   jobStore: JobStore;
   customerStore: CustomerStore;
+  settingsStore: SettingsStore;
+  inventoryStore: InventoryStore;
+  labourStore: LabourStore;
+  serviceStore: ServiceStore;
+  templateStore: TemplateStore;
+  vehicleStore: VehicleStore;
 
   constructor() {
     this.authStore = new AuthStore(this);
     this.uiStore = new UIStore(this);
     this.jobStore = new JobStore(this);
     this.customerStore = new CustomerStore(this);
+    this.settingsStore = new SettingsStore(this);
+    this.inventoryStore = new InventoryStore(this);
+    this.labourStore = new LabourStore(this);
+    this.serviceStore = new ServiceStore(this);
+    this.templateStore = new TemplateStore(this);
+    this.vehicleStore = new VehicleStore(this);
   }
 }
 

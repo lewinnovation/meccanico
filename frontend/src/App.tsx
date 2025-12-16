@@ -5,6 +5,7 @@ import { MainLayout } from './components/layout/MainLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Jobs } from './pages/Jobs';
 import { Customers } from './pages/Customers';
+import { Vehicles } from './pages/Vehicles';
 import { Inventory } from './pages/Inventory';
 import { Settings } from './pages/Settings';
 import { Login } from './pages/Login';
@@ -28,6 +29,7 @@ const App = observer(() => {
         <Route path="/" element={<Dashboard />} />
         <Route path="/jobs/*" element={<Jobs />} />
         <Route path="/customers/*" element={<Customers />} />
+        <Route path="/vehicles/*" element={<Vehicles />} />
         <Route path="/inventory/*" element={<Inventory />} />
         <Route path="/settings/*" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />

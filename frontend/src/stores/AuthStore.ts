@@ -62,7 +62,11 @@ export class AuthStore {
         this.isLoading = false;
       });
 
+      // Save both access token and refresh token
       this.saveToStorage();
+      if (response.data.refreshToken) {
+        localStorage.setItem('refreshToken', response.data.refreshToken);
+      }
       return true;
     } catch (err) {
       runInAction(() => {
@@ -77,6 +81,7 @@ export class AuthStore {
     this.user = null;
     this.accessToken = null;
     this.saveToStorage();
+    localStorage.removeItem('refreshToken');
   }
 
   async refreshToken(): Promise<boolean> {

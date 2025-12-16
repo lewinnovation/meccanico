@@ -14,6 +14,7 @@ import {
   Dashboard as DashboardIcon,
   Build as JobsIcon,
   People as CustomersIcon,
+  DirectionsCar as VehiclesIcon,
   Inventory as InventoryIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
@@ -25,6 +26,7 @@ const menuItems = [
   { path: '/', label: 'Dashboard', icon: DashboardIcon },
   { path: '/jobs', label: 'Jobs', icon: JobsIcon },
   { path: '/customers', label: 'Customers', icon: CustomersIcon },
+  { path: '/vehicles', label: 'Vehicles', icon: VehiclesIcon },
   { path: '/inventory', label: 'Inventory', icon: InventoryIcon },
 ];
 

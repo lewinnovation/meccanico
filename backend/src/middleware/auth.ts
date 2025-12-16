@@ -49,10 +49,17 @@ export async function expressAuthentication(
 
     // Check role-based scopes
     if (scopes && scopes.length > 0) {
+      // ADMIN can do everything - short circuit
+      if (user.role === UserRole.ADMIN) {
+        return user;
+      }
+      
       const hasRequiredRole = scopes.some((scope) => {
-        if (scope === 'admin') return user.role === UserRole.ADMIN;
-        if (scope === 'mechanic') return user.role === UserRole.MECHANIC || user.role === UserRole.ADMIN;
-        if (scope === 'viewer') return true; // All authenticated users
+        const normalizedScope = scope.toUpperCase();
+        // Check specific roles (ADMIN already returned above)
+        if (normalizedScope === 'ADMIN') return false; // User is not admin
+        if (normalizedScope === 'MECHANIC') return user.role === UserRole.MECHANIC;
+        if (normalizedScope === 'VIEWER') return true; // All authenticated users
         return false;
       });
 
@@ -84,11 +91,11 @@ export function generateTokens(user: User): { accessToken: string; refreshToken:
   };
 
   const accessToken = jwt.sign(payload, appConfig.jwt.secret, {
-    expiresIn: appConfig.jwt.expiresIn,
+    expiresIn: appConfig.jwt.expiresIn as jwt.SignOptions['expiresIn'],
   });
 
   const refreshToken = jwt.sign(payload, appConfig.jwt.secret, {
-    expiresIn: appConfig.jwt.refreshExpiresIn,
+    expiresIn: appConfig.jwt.refreshExpiresIn as jwt.SignOptions['expiresIn'],
   });
 
   return { accessToken, refreshToken };
