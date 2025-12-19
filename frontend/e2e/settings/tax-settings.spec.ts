@@ -17,7 +17,11 @@ test.describe('Tax Settings', () => {
   test('should update tax name', async ({ page }) => {
     await page.goto('/settings/tax');
     
+    // Wait for form to load
+    await expect(page.locator('[data-testid="tax-name-input"]')).toBeVisible({ timeout: 5000 });
+    
     const taxNameInput = page.locator('[data-testid="tax-name-input"] input');
+    const currentValue = await taxNameInput.inputValue();
     await taxNameInput.clear();
     await taxNameInput.fill('VAT');
     
@@ -26,11 +30,15 @@ test.describe('Tax Settings', () => {
     
     // Verify persistence
     await page.reload();
+    await page.waitForTimeout(500); // Wait for form to load
     await expect(taxNameInput).toHaveValue('VAT');
   });
 
   test('should update tax rate', async ({ page }) => {
     await page.goto('/settings/tax');
+    
+    // Wait for form to load
+    await expect(page.locator('[data-testid="tax-rate-input"]')).toBeVisible({ timeout: 5000 });
     
     const taxRateInput = page.locator('[data-testid="tax-rate-input"] input');
     await taxRateInput.clear();
@@ -41,11 +49,15 @@ test.describe('Tax Settings', () => {
     
     // Verify persistence
     await page.reload();
+    await page.waitForTimeout(500); // Wait for form to load
     await expect(taxRateInput).toHaveValue('15');
   });
 
   test('should update both tax name and rate together', async ({ page }) => {
     await page.goto('/settings/tax');
+    
+    // Wait for form to load
+    await expect(page.locator('[data-testid="tax-name-input"]')).toBeVisible({ timeout: 5000 });
     
     const taxNameInput = page.locator('[data-testid="tax-name-input"] input');
     await taxNameInput.clear();
@@ -60,6 +72,7 @@ test.describe('Tax Settings', () => {
     
     // Verify persistence
     await page.reload();
+    await page.waitForTimeout(500); // Wait for form to load
     await expect(taxNameInput).toHaveValue('Sales Tax');
     await expect(taxRateInput).toHaveValue('8.5');
   });

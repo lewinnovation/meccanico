@@ -51,8 +51,10 @@ async function bootstrap() {
     // Initialize database
     await initializeDatabase();
 
-    // Run database seeding
-    await seedDatabase();
+    // Run database seeding only if AUTO_SEED is enabled (default: true for development)
+    if (process.env.AUTO_SEED !== 'false') {
+      await seedDatabase();
+    }
 
     // Start listening
     app.listen(appConfig.port, () => {

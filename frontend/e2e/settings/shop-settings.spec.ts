@@ -51,6 +51,9 @@ test.describe('Shop Settings', () => {
   test('should update shop contact details', async ({ page }) => {
     await page.goto('/settings/shop');
     
+    // Wait for form to load
+    await expect(page.locator('[data-testid="shop-phone-input"]')).toBeVisible({ timeout: 5000 });
+    
     // Update phone
     const phoneInput = page.locator('[data-testid="shop-phone-input"] input');
     await phoneInput.clear();
@@ -72,6 +75,9 @@ test.describe('Shop Settings', () => {
 
   test('should preserve data when navigating away and back', async ({ page }) => {
     await page.goto('/settings/shop');
+    
+    // Wait for form to load
+    await expect(page.locator('[data-testid="shop-name-input"]')).toBeVisible({ timeout: 5000 });
     
     // Enter data
     const nameInput = page.locator('[data-testid="shop-name-input"] input');

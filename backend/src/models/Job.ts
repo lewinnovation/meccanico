@@ -36,8 +36,8 @@ export class Job {
   @Column({ name: 'customer_id', type: 'uuid' })
   customerId: string;
 
-  @Column({ name: 'vehicle_id', type: 'uuid' })
-  vehicleId: string;
+  @Column({ name: 'vehicle_id', type: 'uuid', nullable: true })
+  vehicleId: string | null;
 
   @Column({ name: 'assigned_to', type: 'uuid', nullable: true })
   assignedTo: string | null;
@@ -89,9 +89,9 @@ export class Job {
   @JoinColumn({ name: 'customer_id' })
   customer: Customer;
 
-  @ManyToOne(() => Vehicle)
+  @ManyToOne(() => Vehicle, { nullable: true })
   @JoinColumn({ name: 'vehicle_id' })
-  vehicle: Vehicle;
+  vehicle: Vehicle | null;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'assigned_to' })

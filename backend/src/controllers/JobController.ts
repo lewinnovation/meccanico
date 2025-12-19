@@ -87,6 +87,8 @@ export class JobController extends Controller {
     @Path() id: string,
     @Body() body: UpdateJobDto
   ): Promise<Job> {
+    console.log('DEBUG: updateJob called with id:', id);
+    console.log('DEBUG: updateJob body:', JSON.stringify(body, null, 2));
     return this.jobService.update(id, body);
   }
 

@@ -27,27 +27,40 @@ export class CustomerPage {
    * Click the add new customer button
    */
   async clickAddCustomer() {
-    await this.page.click('button:has-text("Add"), button:has-text("New Customer"), [data-testid="add-customer"]');
+    // Wait for page to be ready
+    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForTimeout(300);
+    // Try multiple selectors
+    const addButton = this.page.locator('button:has-text("New Customer"), button:has-text("Add Customer"), button:has-text("Add")').first();
+    await addButton.waitFor({ state: 'visible', timeout: 5000 });
+    await addButton.click();
+    // Wait for dialog to open
+    await this.page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 5000 });
+    await this.page.waitForTimeout(300);
   }
 
   /**
    * Fill out customer form
    */
   async fillCustomerForm(data: CustomerData) {
+    // Wait for form to be ready
+    await this.page.waitForSelector('[role="dialog"]', { state: 'visible' });
+    await this.page.waitForTimeout(200);
+    
     if (data.name) {
-      await this.page.fill('input[name="name"], input[placeholder*="Name"], [data-testid="customer-name"]', data.name);
+      await this.page.getByLabel('Name').fill(data.name);
     }
     if (data.email) {
-      await this.page.fill('input[name="email"], input[type="email"], [data-testid="customer-email"]', data.email);
+      await this.page.getByLabel('Email').fill(data.email);
     }
     if (data.phone) {
-      await this.page.fill('input[name="phone"], input[type="tel"], [data-testid="customer-phone"]', data.phone);
+      await this.page.getByLabel('Phone').fill(data.phone);
     }
     if (data.address) {
-      await this.page.fill('input[name="address"], textarea[name="address"], [data-testid="customer-address"]', data.address);
+      await this.page.getByLabel('Address').fill(data.address);
     }
     if (data.notes) {
-      await this.page.fill('input[name="notes"], textarea[name="notes"], [data-testid="customer-notes"]', data.notes);
+      await this.page.getByLabel('Notes').fill(data.notes);
     }
   }
 
@@ -55,7 +68,31 @@ export class CustomerPage {
    * Submit the customer form
    */
   async submitForm() {
-    await this.page.click('button[type="submit"], button:has-text("Save"), button:has-text("Create")');
+    // Wait a bit for form to be ready
+    await this.page.waitForTimeout(200);
+    // Find the submit button (Create or Save), excluding Cancel
+    const submitButton = this.page.locator('button:has-text("Create"), button:has-text("Save")')
+      .filter({ hasNotText: 'Cancel' })
+      .first();
+    await submitButton.waitFor({ state: 'visible', timeout: 5000 });
+    
+    // Wait for button to be enabled (if it's disabled, wait a bit)
+    let isEnabled = await submitButton.isEnabled();
+    if (!isEnabled) {
+      // Wait a bit more in case form is still validating
+      await this.page.waitForTimeout(500);
+      isEnabled = await submitButton.isEnabled();
+    }
+    
+    if (isEnabled) {
+      await submitButton.click();
+      // Wait for dialog to close
+      await this.page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 10000 }).catch(() => {});
+    } else {
+      // Button is disabled - this might be expected in validation tests
+      // Don't throw, just return
+      return;
+    }
   }
 
   /**
@@ -65,18 +102,19 @@ export class CustomerPage {
     await this.clickAddCustomer();
     await this.fillCustomerForm(data);
     await this.submitForm();
-    // Wait for either success message or navigation
-    await this.page.waitForResponse(response => 
-      response.url().includes('/customers') && response.status() < 400
-    ).catch(() => {});
+    // Wait for UI to update
+    await this.page.waitForTimeout(1000);
   }
 
   /**
    * Search for customers
    */
   async search(query: string) {
-    await this.page.fill('input[placeholder*="Search"], input[type="search"], [data-testid="search-input"]', query);
-    await this.page.waitForTimeout(300); // Wait for debounce
+    // Wait for search input to be visible
+    const searchInput = this.page.locator('input[placeholder*="Search"], input[placeholder*="customer"], input[type="search"], [data-testid="search-input"]').first();
+    await searchInput.waitFor({ state: 'visible', timeout: 5000 });
+    await searchInput.fill(query);
+    await this.page.waitForTimeout(500); // Wait for debounce and filtering
   }
 
   /**

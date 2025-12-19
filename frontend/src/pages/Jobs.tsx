@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
@@ -34,6 +34,7 @@ import {
   ListItemText,
   Autocomplete,
   Tooltip,
+  Link,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -54,12 +55,35 @@ import {
   Work as JobIcon,
   Print as PrintIcon,
   Description as EstimateIcon,
+  DragIndicator as DragIcon,
+  DirectionsCar as VehicleIcon,
+  OpenInNew as OpenIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
-import type { JobStatus, LineItemType, CreateLineItemDto } from '../stores/JobStore';
+import type { JobStatus, LineItemType, CreateLineItemDto, LineItem, Job } from '../stores/JobStore';
 import type { Template } from '../stores/TemplateStore';
 import type { Customer as CustomerType } from '../stores/CustomerStore';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // Status colors and labels
 const statusConfig: Record<JobStatus, { label: string; color: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' }> = {
@@ -72,6 +96,14 @@ const statusConfig: Record<JobStatus, { label: string; color: 'default' | 'prima
   CANCELLED: { label: 'Cancelled', color: 'error' },
   DECLINED: { label: 'Declined', color: 'error' },
   DISPUTED: { label: 'Disputed', color: 'warning' },
+};
+
+// Line item type colors (faint backgrounds)
+const lineItemTypeColors: Record<LineItemType, string> = {
+  INVENTORY: 'rgba(25, 118, 210, 0.04)', // Blue
+  LABOUR: 'rgba(245, 124, 0, 0.04)',     // Orange
+  SERVICE: 'rgba(56, 142, 60, 0.04)',    // Green
+  TEXT: 'transparent',                    // No background for text
 };
 
 // Valid status transitions
@@ -87,9 +119,182 @@ const statusTransitions: Record<JobStatus, JobStatus[]> = {
   DISPUTED: ['PAID'],
 };
 
+// ==================== SORTABLE LINE ITEM ROW ====================
+interface SortableLineItemRowProps {
+  item: LineItem;
+  canEdit: boolean;
+  onDelete: (id: string) => void;
+  onUpdate: (id: string, data: { description?: string; quantity?: number; unitPrice?: number }) => void;
+  formatCurrency: (amount: number) => string;
+  formatQuantity: (qty: number) => string;
+  currencySymbol: string;
+}
+
+const SortableLineItemRow: React.FC<SortableLineItemRowProps> = ({ item, canEdit, onDelete, onUpdate, formatCurrency, formatQuantity, currencySymbol }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const [editingField, setEditingField] = useState<'description' | 'quantity' | 'unitPrice' | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    backgroundColor: lineItemTypeColors[item.type],
+  };
+
+  const isTextType = item.type === 'TEXT';
+
+  const startEditing = (field: 'description' | 'quantity' | 'unitPrice') => {
+    if (!canEdit) return;
+    setEditingField(field);
+    if (field === 'description') {
+      setEditValue(item.description);
+    } else if (field === 'quantity') {
+      setEditValue(item.quantity.toString());
+    } else {
+      setEditValue(item.unitPrice.toString());
+    }
+  };
+
+  const handleSave = () => {
+    if (!editingField) return;
+    
+    if (editingField === 'description' && editValue.trim() !== item.description) {
+      onUpdate(item.id, { description: editValue.trim() });
+    } else if (editingField === 'quantity') {
+      const newQty = parseFloat(editValue);
+      if (!isNaN(newQty) && newQty !== item.quantity) {
+        onUpdate(item.id, { quantity: newQty });
+      }
+    } else if (editingField === 'unitPrice') {
+      const newPrice = parseFloat(editValue);
+      if (!isNaN(newPrice) && newPrice !== item.unitPrice) {
+        onUpdate(item.id, { unitPrice: newPrice });
+      }
+    }
+    setEditingField(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setEditingField(null);
+    }
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style} {...attributes}>
+      {canEdit && (
+        <TableCell sx={{ width: 40, cursor: 'grab' }} {...listeners}>
+          <DragIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+        </TableCell>
+      )}
+      <TableCell
+        onClick={() => startEditing('description')}
+        sx={{ cursor: canEdit ? 'pointer' : 'default' }}
+      >
+        {editingField === 'description' ? (
+          <TextField
+            size="small"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleSave}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            fullWidth
+            variant="standard"
+          />
+        ) : (
+          <Typography sx={{ '&:hover': canEdit ? { bgcolor: 'action.hover', borderRadius: 1 } : {} }}>
+            {item.description}
+          </Typography>
+        )}
+      </TableCell>
+      <TableCell
+        align="right"
+        onClick={() => !isTextType && startEditing('quantity')}
+        sx={{ cursor: canEdit && !isTextType ? 'pointer' : 'default' }}
+      >
+        {!isTextType && (
+          editingField === 'quantity' ? (
+            <TextField
+              size="small"
+              type="number"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              variant="standard"
+              inputProps={{ min: 0, step: 1, style: { textAlign: 'right' } }}
+              sx={{ width: 60 }}
+            />
+          ) : (
+            <Typography sx={{ '&:hover': canEdit ? { bgcolor: 'action.hover', borderRadius: 1 } : {} }}>
+              {formatQuantity(item.quantity)}
+            </Typography>
+          )
+        )}
+      </TableCell>
+      <TableCell
+        align="right"
+        onClick={() => !isTextType && startEditing('unitPrice')}
+        sx={{ cursor: canEdit && !isTextType ? 'pointer' : 'default' }}
+      >
+        {!isTextType && (
+          editingField === 'unitPrice' ? (
+            <TextField
+              size="small"
+              type="number"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              variant="standard"
+              InputProps={{ startAdornment: <InputAdornment position="start">{currencySymbol}</InputAdornment> }}
+              inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+              sx={{ width: 80 }}
+            />
+          ) : (
+            <Typography sx={{ '&:hover': canEdit ? { bgcolor: 'action.hover', borderRadius: 1 } : {} }}>
+              {formatCurrency(item.unitPrice)}
+            </Typography>
+          )
+        )}
+      </TableCell>
+      <TableCell align="right">
+        {!isTextType && formatCurrency(item.quantity * item.unitPrice)}
+      </TableCell>
+      {canEdit && (
+        <TableCell sx={{ width: 50 }}>
+          <Tooltip title="Delete">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => onDelete(item.id)}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </TableCell>
+      )}
+    </TableRow>
+  );
+};
+
 // ==================== JOB LIST ====================
 const JobList: React.FC = observer(() => {
-  const { jobStore } = useStore();
+  const { jobStore, settingsStore } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState('');
@@ -100,7 +305,7 @@ const JobList: React.FC = observer(() => {
 
   const handleTabChange = (_: unknown, newValue: number) => {
     setTab(newValue);
-    const statusMap: (JobStatus | null)[] = [null, 'ESTIMATE', 'APPROVED', 'IN_PROGRESS', 'INVOICED', 'PAID'];
+    const statusMap: (JobStatus | null)[] = [null, 'ESTIMATE', 'APPROVED', 'IN_PROGRESS', 'ON_HOLD', 'INVOICED', 'PAID'];
     jobStore.setStatusFilter(statusMap[newValue]);
     jobStore.fetchJobs();
   };
@@ -112,6 +317,23 @@ const JobList: React.FC = observer(() => {
   };
 
   const formatDate = (date: string) => new Date(date).toLocaleDateString();
+
+  // Calculate job totals
+  const calculateJobTotals = (job: Job) => {
+    const subtotal = job.lineItems?.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) || 0;
+    let discount = 0;
+    if (job.discountPercent > 0) {
+      discount = subtotal * (job.discountPercent / 100);
+    } else {
+      discount = job.discountAmount || 0;
+    }
+    const afterDiscount = subtotal - discount;
+    const gst = afterDiscount * (job.taxRate / 100);
+    const total = afterDiscount + gst;
+    return { subtotal: afterDiscount, gst, total };
+  };
+
+  const formatCurrency = (amount: number) => `${settingsStore.currencySettings.symbol || '$'}${amount.toFixed(2)}`;
 
   return (
     <Box>
@@ -131,6 +353,7 @@ const JobList: React.FC = observer(() => {
         <Tab label="Estimates" />
         <Tab label="Approved" />
         <Tab label="In Progress" />
+        <Tab label="On Hold" />
         <Tab label="Invoiced" />
         <Tab label="Paid" />
       </Tabs>
@@ -186,6 +409,9 @@ const JobList: React.FC = observer(() => {
                 <TableCell>Customer</TableCell>
                 <TableCell>Vehicle</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell align="right">Excl. GST</TableCell>
+                <TableCell align="right">GST</TableCell>
+                <TableCell align="right">Total</TableCell>
                 <TableCell>Created</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -227,6 +453,15 @@ const JobList: React.FC = observer(() => {
                       size="small"
                     />
                   </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2">{formatCurrency(calculateJobTotals(job).subtotal)}</Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2" color="text.secondary">{formatCurrency(calculateJobTotals(job).gst)}</Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2" fontWeight={500}>{formatCurrency(calculateJobTotals(job).total)}</Typography>
+                  </TableCell>
                   <TableCell>{formatDate(job.createdAt)}</TableCell>
                   <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <IconButton size="small" onClick={() => navigate(`/jobs/${job.id}`)}>
@@ -265,7 +500,7 @@ interface VehicleOption {
 }
 
 const NewJob: React.FC = observer(() => {
-  const { jobStore, customerStore, vehicleStore } = useStore();
+  const { jobStore, customerStore, vehicleStore, settingsStore } = useStore();
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<CustomerWithVehicles[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithVehicles | null>(null);
@@ -275,10 +510,13 @@ const NewJob: React.FC = observer(() => {
   const [loading, setLoading] = useState(false);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createVehicleOpen, setCreateVehicleOpen] = useState(false);
 
   useEffect(() => {
     customerStore.fetchCustomers();
-  }, [customerStore]);
+    vehicleStore.fetchMakes();
+    settingsStore.fetchSettings();
+  }, [customerStore, vehicleStore, settingsStore]);
 
   useEffect(() => {
     setCustomers(customerStore.customers as CustomerWithVehicles[]);
@@ -320,10 +558,14 @@ const NewJob: React.FC = observer(() => {
     setError(null);
 
     try {
+      // Get default tax rate from settings
+      const defaultTaxRate = settingsStore.taxSettings.defaultRate || 0;
+      
       const job = await jobStore.createJob({
         customerId: selectedCustomer.id,
         vehicleId: selectedVehicle.id,
         notes: notes || undefined,
+        taxRate: defaultTaxRate,
       });
 
       if (job) {
@@ -335,11 +577,17 @@ const NewJob: React.FC = observer(() => {
     }
   };
 
+  const handleVehicleCreated = (vehicle: VehicleOption) => {
+    setCustomerVehicles(prev => [...prev, vehicle]);
+    setSelectedVehicle(vehicle);
+    setCreateVehicleOpen(false);
+  };
+
   return (
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-        <IconButton onClick={() => navigate('/jobs')}>
+        <IconButton onClick={() => navigate('/jobs')} aria-label="Back">
           <BackIcon />
         </IconButton>
         <Typography variant="h4" fontWeight={600}>
@@ -369,30 +617,45 @@ const NewJob: React.FC = observer(() => {
             />
 
             {selectedCustomer && (
-              <FormControl fullWidth required>
-                <InputLabel>Vehicle</InputLabel>
-                <Select
-                  value={selectedVehicle?.id || ''}
-                  label="Vehicle"
-                  disabled={loadingVehicles}
-                  onChange={(e) => {
-                    const vehicle = customerVehicles.find((v) => v.id === e.target.value);
-                    setSelectedVehicle(vehicle || null);
-                  }}
-                >
-                  {loadingVehicles ? (
-                    <MenuItem disabled>Loading vehicles...</MenuItem>
-                  ) : customerVehicles.length === 0 ? (
-                    <MenuItem disabled>No vehicles found for this customer</MenuItem>
-                  ) : (
-                    customerVehicles.map((v) => (
-                      <MenuItem key={v.id} value={v.id}>
-                        {v.year ? v.year : ''} {v.make} {v.model} {v.licensePlate ? `(${v.licensePlate})` : ''}
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-              </FormControl>
+              <Box>
+                <FormControl fullWidth required>
+                  <InputLabel>Vehicle</InputLabel>
+                  <Select
+                    value={selectedVehicle?.id || ''}
+                    label="Vehicle"
+                    disabled={loadingVehicles}
+                    onChange={(e) => {
+                      const vehicle = customerVehicles.find((v) => v.id === e.target.value);
+                      setSelectedVehicle(vehicle || null);
+                    }}
+                  >
+                    {loadingVehicles ? (
+                      <MenuItem disabled>Loading vehicles...</MenuItem>
+                    ) : customerVehicles.length === 0 ? (
+                      <MenuItem disabled>No vehicles found for this customer</MenuItem>
+                    ) : (
+                      customerVehicles.map((v) => (
+                        <MenuItem key={v.id} value={v.id}>
+                          {v.year ? v.year : ''} {v.make} {v.model} {v.licensePlate ? `(${v.licensePlate})` : ''}
+                        </MenuItem>
+                      ))
+                    )}
+                  </Select>
+                </FormControl>
+                
+                {/* Create Vehicle Link */}
+                <Box sx={{ mt: 1 }}>
+                  <Link
+                    component="button"
+                    variant="body2"
+                    onClick={() => setCreateVehicleOpen(true)}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                  >
+                    <AddIcon sx={{ fontSize: 16 }} />
+                    Add new vehicle for {selectedCustomer.name}
+                  </Link>
+                </Box>
+              </Box>
             )}
 
             <TextField
@@ -417,7 +680,214 @@ const NewJob: React.FC = observer(() => {
           </Box>
         </CardContent>
       </Card>
+
+      {/* Create Vehicle Dialog */}
+      {selectedCustomer && (
+        <CreateVehicleDialog
+          open={createVehicleOpen}
+          onClose={() => setCreateVehicleOpen(false)}
+          customerId={selectedCustomer.id}
+          customerName={selectedCustomer.name}
+          onCreated={handleVehicleCreated}
+        />
+      )}
     </Box>
+  );
+});
+
+// ==================== CREATE VEHICLE DIALOG ====================
+interface CreateVehicleDialogProps {
+  open: boolean;
+  onClose: () => void;
+  customerId: string;
+  customerName: string;
+  onCreated: (vehicle: VehicleOption) => void;
+}
+
+const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
+  open,
+  onClose,
+  customerId,
+  customerName,
+  onCreated,
+}) => {
+  const { vehicleStore } = useStore();
+  const [formData, setFormData] = useState({
+    make: '',
+    model: '',
+    year: new Date().getFullYear().toString(),
+    licensePlate: '',
+    vin: '',
+    color: '',
+  });
+  const [selectedMake, setSelectedMake] = useState<{ id: string; name: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      vehicleStore.fetchMakes();
+      setFormData({
+        make: '',
+        model: '',
+        year: new Date().getFullYear().toString(),
+        licensePlate: '',
+        vin: '',
+        color: '',
+      });
+      setSelectedMake(null);
+      setError(null);
+    }
+  }, [open, vehicleStore]);
+
+  // Get models for selected make
+  const modelsForMake = useMemo(() => {
+    if (!selectedMake) return [];
+    return vehicleStore.getModelsForMake(selectedMake.name);
+  }, [selectedMake, vehicleStore, vehicleStore.makes]);
+
+  const handleSave = async () => {
+    const makeName = selectedMake?.name || formData.make;
+    const modelName = formData.model;
+
+    if (!makeName || !modelName) {
+      setError('Please enter make and model');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const vehicle = await vehicleStore.createVehicle({
+        customerId,
+        make: makeName,
+        model: modelName,
+        year: parseInt(formData.year) || undefined,
+        licensePlate: formData.licensePlate || undefined,
+        vin: formData.vin || undefined,
+        color: formData.color || undefined,
+      });
+
+      if (vehicle) {
+        onCreated({
+          id: vehicle.id,
+          code: vehicle.code,
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.year || 0,
+          licensePlate: vehicle.licensePlate,
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create vehicle');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isValid = (selectedMake?.name || formData.make) && formData.model;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        Add Vehicle for {customerName}
+      </DialogTitle>
+      <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2, mt: 1 }}>
+            {error}
+          </Alert>
+        )}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <Autocomplete
+            options={vehicleStore.makes}
+            getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
+            value={selectedMake}
+            onChange={(_, value) => {
+              if (typeof value === 'string') {
+                setFormData(prev => ({ ...prev, make: value }));
+                setSelectedMake(null);
+              } else {
+                setSelectedMake(value);
+                setFormData(prev => ({ ...prev, make: value?.name || '' }));
+              }
+              setFormData(prev => ({ ...prev, model: '' }));
+            }}
+            renderInput={(params) => <TextField {...params} label="Make" required />}
+            freeSolo
+            onInputChange={(_, value, reason) => {
+              if (reason === 'input') {
+                setFormData(prev => ({ ...prev, make: value }));
+              }
+            }}
+          />
+
+          <Autocomplete
+            options={modelsForMake}
+            getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
+            value={null}
+            inputValue={formData.model}
+            onChange={(_, value) => {
+              if (typeof value === 'string') {
+                setFormData(prev => ({ ...prev, model: value }));
+              } else if (value) {
+                setFormData(prev => ({ ...prev, model: value.name }));
+              }
+            }}
+            onInputChange={(_, value, reason) => {
+              if (reason === 'input') {
+                setFormData(prev => ({ ...prev, model: value }));
+              }
+            }}
+            renderInput={(params) => <TextField {...params} label="Model" required />}
+            freeSolo
+          />
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField
+              label="Year"
+              type="number"
+              fullWidth
+              value={formData.year}
+              onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+              inputProps={{ min: 1900, max: new Date().getFullYear() + 2 }}
+            />
+            <TextField
+              label="Color"
+              fullWidth
+              value={formData.color}
+              onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+            />
+          </Box>
+
+          <TextField
+            label="License Plate"
+            fullWidth
+            value={formData.licensePlate}
+            onChange={(e) => setFormData({ ...formData, licensePlate: e.target.value.toUpperCase() })}
+          />
+
+          <TextField
+            label="VIN"
+            fullWidth
+            value={formData.vin}
+            onChange={(e) => setFormData({ ...formData, vin: e.target.value.toUpperCase() })}
+            inputProps={{ maxLength: 17 }}
+          />
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={saving || !isValid}
+        >
+          {saving ? <CircularProgress size={20} /> : 'Create Vehicle'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 });
 
@@ -441,15 +911,22 @@ const JobDetail: React.FC = observer(() => {
   const [deleteItemConfirm, setDeleteItemConfirm] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [printDialogOpen, setPrintDialogOpen] = useState(false);
-  const [printType, setPrintType] = useState<'estimate' | 'invoice'>('estimate');
+  const [vehicleDialogOpen, setVehicleDialogOpen] = useState(false);
   
   // Line item form state
-  const [lineItemType, setLineItemType] = useState<LineItemType>('INVENTORY');
+  const [lineItemType, setLineItemType] = useState<LineItemType>('TEXT');
   const [selectedLineItem, setSelectedLineItem] = useState<SelectedLineItem | null>(null);
   const [textDescription, setTextDescription] = useState('');
-  const [textPrice, setTextPrice] = useState('0');
   const [lineItemQuantity, setLineItemQuantity] = useState('1');
+  const [lineItemPrice, setLineItemPrice] = useState('0');
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     if (id) {
@@ -465,7 +942,7 @@ const JobDetail: React.FC = observer(() => {
       jobStore.clearSelectedJob();
     };
   }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore]);
-  
+
   // Build options for line item autocomplete
   const getLineItemOptions = (): SelectedLineItem[] => {
     switch (lineItemType) {
@@ -500,6 +977,30 @@ const JobDetail: React.FC = observer(() => {
 
   const job = jobStore.selectedJob;
 
+  // Sort line items by sortOrder
+  const sortedLineItems = useMemo(() => {
+    if (!job?.lineItems) return [];
+    return [...job.lineItems].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }, [job?.lineItems]);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id && job) {
+      const oldIndex = sortedLineItems.findIndex((item) => item.id === active.id);
+      const newIndex = sortedLineItems.findIndex((item) => item.id === over.id);
+      const newOrder = arrayMove(sortedLineItems, oldIndex, newIndex);
+      
+      // Update sort order
+      const reorderData = newOrder.map((item, index) => ({
+        id: item.id,
+        sortOrder: index,
+      }));
+      
+      await jobStore.reorderLineItems(job.id, reorderData);
+    }
+  };
+
   const handleStatusChange = async (newStatus: JobStatus) => {
     if (job) {
       await jobStore.updateJobStatus(job.id, newStatus);
@@ -526,15 +1027,16 @@ const JobDetail: React.FC = observer(() => {
 
   const handleAddItem = async () => {
     if (!job) return;
-    
+
     let itemData: CreateLineItemDto;
-    
+
     if (lineItemType === 'TEXT') {
+      // TEXT items: no qty, no price - just description
       itemData = {
         type: 'TEXT',
         description: textDescription,
-        quantity: parseFloat(lineItemQuantity) || 1,
-        unitPrice: parseFloat(textPrice) || 0,
+        quantity: 1,
+        unitPrice: 0,
       };
     } else if (selectedLineItem) {
       itemData = {
@@ -542,30 +1044,30 @@ const JobDetail: React.FC = observer(() => {
         referenceId: selectedLineItem.id,
         description: `${selectedLineItem.name} (${selectedLineItem.code})`,
         quantity: parseFloat(lineItemQuantity) || 1,
-        unitPrice: selectedLineItem.unitPrice,
+        unitPrice: parseFloat(lineItemPrice) || selectedLineItem.unitPrice,
       };
     } else {
       return;
     }
-    
+
     await jobStore.addLineItem(job.id, itemData);
     setItemDialogOpen(false);
     // Reset form
-    setLineItemType('INVENTORY');
+    setLineItemType('TEXT');
     setSelectedLineItem(null);
     setTextDescription('');
-    setTextPrice('0');
     setLineItemQuantity('1');
+    setLineItemPrice('0');
   };
-  
+
   const canAddLineItem = lineItemType === 'TEXT' ? textDescription.trim() !== '' : selectedLineItem !== null;
-  
+
   const openAddItemDialog = () => {
-    setLineItemType('INVENTORY');
+    setLineItemType('TEXT');
     setSelectedLineItem(null);
     setTextDescription('');
-    setTextPrice('0');
     setLineItemQuantity('1');
+    setLineItemPrice('0');
     setItemDialogOpen(true);
   };
 
@@ -584,22 +1086,187 @@ const JobDetail: React.FC = observer(() => {
     }
   };
 
-  const formatCurrency = (amount: number) => `$${Number(amount).toFixed(2)}`;
+  const handleUpdateLineItem = async (itemId: string, data: { description?: string; quantity?: number; unitPrice?: number }) => {
+    if (job) {
+      await jobStore.updateLineItem(job.id, itemId, data);
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    const symbol = settingsStore.currencySettings.symbol || '$';
+    return `${symbol}${Number(amount).toFixed(2)}`;
+  };
+  const formatQuantity = (qty: number | string) => {
+    const num = typeof qty === 'string' ? parseFloat(qty) : qty;
+    return Number.isInteger(num) ? num.toString() : num.toFixed(2);
+  };
   const formatDate = (date: string | null) => (date ? new Date(date).toLocaleDateString() : '-');
 
-  const getItemTypeLabel = (type: LineItemType) => {
-    switch (type) {
-      case 'INVENTORY':
-        return 'Part';
-      case 'LABOUR':
-        return 'Labour';
-      case 'SERVICE':
-        return 'Service';
-      case 'TEXT':
-        return 'Text';
-      default:
-        return type;
-    }
+  const handlePrint = (type: 'estimate' | 'invoice') => {
+    if (!job) return;
+
+    const shopName = settingsStore.shopSettings.name || 'Meccanico';
+    const shopAddress = settingsStore.shopSettings.address || '';
+    const shopPhone = settingsStore.shopSettings.phone || '';
+    const shopEmail = settingsStore.shopSettings.email || '';
+    const invoiceTerms = settingsStore.invoiceSettings.terms || '';
+    const invoiceFooter = settingsStore.invoiceSettings.footer || '';
+    const currencySymbol = settingsStore.currencySettings.symbol || '$';
+    const taxName = settingsStore.taxSettings.name || 'GST';
+
+    const title = type === 'estimate' ? 'Estimate' : 'Invoice';
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${title} - ${job?.code}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
+            .header { display: flex; justify-content: space-between; margin-bottom: 40px; }
+            .shop-info h1 { font-size: 24px; color: #1976d2; margin-bottom: 8px; }
+            .shop-info p { font-size: 12px; color: #666; }
+            .document-info { text-align: right; }
+            .document-info h2 { font-size: 28px; color: ${type === 'estimate' ? '#1976d2' : '#2e7d32'}; margin-bottom: 8px; }
+            .document-info p { font-size: 14px; }
+            .details { display: flex; justify-content: space-between; margin-bottom: 30px; }
+            .customer-info, .vehicle-info { width: 48%; }
+            .customer-info h3, .vehicle-info h3 { font-size: 14px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+            .customer-info p, .vehicle-info p { font-size: 14px; line-height: 1.6; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            th { background: #f5f5f5; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #ddd; }
+            td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+            .text-right { text-align: right; }
+            .text-row td { background: transparent; font-style: italic; color: #666; }
+            .totals { margin-left: auto; width: 300px; }
+            .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
+            .totals .row.total { border-top: 2px solid #333; font-weight: bold; font-size: 18px; margin-top: 8px; padding-top: 16px; }
+            .totals .row.discount { color: #2e7d32; }
+            .totals .row.tax { color: #666; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; }
+            .terms { font-size: 12px; color: #666; margin-bottom: 20px; }
+            .terms h4 { margin-bottom: 8px; }
+            .footer-text { font-size: 12px; color: #999; text-align: center; }
+            @media print {
+              body { padding: 20px; }
+              @page { margin: 0.5cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="shop-info">
+              <h1>${shopName}</h1>
+              <p>${shopAddress}</p>
+              <p>${shopPhone}</p>
+              <p>${shopEmail}</p>
+            </div>
+            <div class="document-info">
+              <h2>${title}</h2>
+              <p><strong>${job?.code}</strong></p>
+              <p>Date: ${new Date().toLocaleDateString()}</p>
+              ${type === 'invoice' && job?.invoicedAt ? `<p>Invoiced: ${new Date(job.invoicedAt).toLocaleDateString()}</p>` : ''}
+            </div>
+          </div>
+
+          <div class="details">
+            <div class="customer-info">
+              <h3>Bill To</h3>
+              <p><strong>${job?.customer?.name || 'N/A'}</strong></p>
+              <p>${job?.customer?.phone || ''}</p>
+              <p>${job?.customer?.email || ''}</p>
+            </div>
+            <div class="vehicle-info">
+              <h3>Vehicle</h3>
+              <p><strong>${job?.vehicle?.year || ''} ${job?.vehicle?.make || ''} ${job?.vehicle?.model || ''}</strong></p>
+              ${job?.vehicle?.licensePlate ? `<p>License: ${job.vehicle.licensePlate}</p>` : ''}
+              ${job?.vehicle?.vin ? `<p>VIN: ${job.vehicle.vin}</p>` : ''}
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Price</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${job?.lineItems?.map((item) => item.type === 'TEXT' ? `
+                <tr class="text-row">
+                  <td colspan="4">${item.description}</td>
+                </tr>
+              ` : `
+                <tr>
+                  <td>${item.description}</td>
+                  <td class="text-right">${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}</td>
+                  <td class="text-right">${currencySymbol}${Number(item.unitPrice).toFixed(2)}</td>
+                  <td class="text-right">${currencySymbol}${(item.quantity * item.unitPrice).toFixed(2)}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="4">No items</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div class="row">
+              <span>Subtotal</span>
+              <span>${currencySymbol}${jobStore.subtotal.toFixed(2)}</span>
+            </div>
+            ${jobStore.discountTotal > 0 ? `
+              <div class="row discount">
+                <span>Discount${job?.discountPercent && job.discountPercent > 0 ? ` (${job.discountPercent}%)` : ''}</span>
+                <span>-${currencySymbol}${jobStore.discountTotal.toFixed(2)}</span>
+              </div>
+            ` : ''}
+            ${job?.taxRate && job.taxRate > 0 ? `
+              <div class="row tax">
+                <span>${taxName} (${job.taxRate}%)</span>
+                <span>${currencySymbol}${jobStore.taxTotal.toFixed(2)}</span>
+              </div>
+            ` : ''}
+            <div class="row total">
+              <span>Total</span>
+              <span>${currencySymbol}${jobStore.grandTotal.toFixed(2)}</span>
+            </div>
+          </div>
+
+          ${job?.notes ? `
+            <div class="footer">
+              <div class="terms">
+                <h4>Notes</h4>
+                <p>${job.notes}</p>
+              </div>
+            </div>
+          ` : ''}
+
+          ${invoiceTerms || invoiceFooter ? `
+            <div class="footer">
+              ${invoiceTerms ? `
+                <div class="terms">
+                  <h4>Terms & Conditions</h4>
+                  <p>${invoiceTerms}</p>
+                </div>
+              ` : ''}
+              ${invoiceFooter ? `
+                <div class="footer-text">${invoiceFooter}</div>
+              ` : ''}
+            </div>
+          ` : ''}
+
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
   };
 
   if (jobStore.isLoading || !job) {
@@ -612,12 +1279,13 @@ const JobDetail: React.FC = observer(() => {
 
   const canEdit = job.status === 'ESTIMATE';
   const validTransitions = statusTransitions[job.status];
+  const taxName = settingsStore.taxSettings.name || 'GST';
 
   return (
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-        <IconButton onClick={() => navigate('/jobs')}>
+        <IconButton onClick={() => navigate('/jobs')} aria-label="Back">
           <BackIcon />
         </IconButton>
         <Box sx={{ flex: 1 }}>
@@ -631,6 +1299,29 @@ const JobDetail: React.FC = observer(() => {
             {job.customer?.name} • {job.vehicle?.year} {job.vehicle?.make} {job.vehicle?.model}
           </Typography>
         </Box>
+        
+        {/* Print Buttons - Status aware */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {job.status === 'ESTIMATE' && (
+            <Button
+              variant="outlined"
+              startIcon={<EstimateIcon />}
+              onClick={() => handlePrint('estimate')}
+            >
+              Print Estimate
+            </Button>
+          )}
+          {['INVOICED', 'PAID', 'DISPUTED'].includes(job.status) && (
+            <Button
+              variant="outlined"
+              startIcon={<PrintIcon />}
+              onClick={() => handlePrint('invoice')}
+            >
+              Print Invoice
+            </Button>
+          )}
+        </Box>
+        
         <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
           <MoreIcon />
         </IconButton>
@@ -701,18 +1392,6 @@ const JobDetail: React.FC = observer(() => {
           </MenuItem>
         )}
         <Divider />
-        <MenuItem onClick={() => { setPrintType('estimate'); setPrintDialogOpen(true); setAnchorEl(null); }}>
-          <ListItemIcon>
-            <EstimateIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Print Estimate</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => { setPrintType('invoice'); setPrintDialogOpen(true); setAnchorEl(null); }}>
-          <ListItemIcon>
-            <PrintIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Print Invoice</ListItemText>
-        </MenuItem>
         {canEdit && (
           <MenuItem onClick={() => { setEditDialogOpen(true); setAnchorEl(null); }}>
             <ListItemIcon>
@@ -721,7 +1400,6 @@ const JobDetail: React.FC = observer(() => {
             <ListItemText>Edit Details</ListItemText>
           </MenuItem>
         )}
-        <Divider />
         <MenuItem onClick={handleDuplicate}>
           <ListItemIcon>
             <DuplicateIcon fontSize="small" />
@@ -759,49 +1437,48 @@ const JobDetail: React.FC = observer(() => {
                 )}
               </Box>
 
-              {!job.lineItems || job.lineItems.length === 0 ? (
+              {!sortedLineItems || sortedLineItems.length === 0 ? (
                 <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                   No items added yet. Add parts, labour, services, or custom text.
                 </Typography>
               ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Type</TableCell>
-                      <TableCell>Description</TableCell>
-                      <TableCell align="right">Qty</TableCell>
-                      <TableCell align="right">Price</TableCell>
-                      <TableCell align="right">Total</TableCell>
-                      {canEdit && <TableCell></TableCell>}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {job.lineItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <Chip label={getItemTypeLabel(item.type)} size="small" />
-                        </TableCell>
-                        <TableCell>{item.description}</TableCell>
-                        <TableCell align="right">{item.quantity}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.unitPrice)}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.quantity * item.unitPrice)}</TableCell>
-                        {canEdit && (
-                          <TableCell>
-                            <Tooltip title="Delete">
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => setDeleteItemConfirm(item.id)}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </TableCell>
-                        )}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        {canEdit && <TableCell sx={{ width: 40 }}></TableCell>}
+                        <TableCell>Description</TableCell>
+                        <TableCell align="right" sx={{ width: 80 }}>Qty</TableCell>
+                        <TableCell align="right" sx={{ width: 100 }}>Price</TableCell>
+                        <TableCell align="right" sx={{ width: 100 }}>Total</TableCell>
+                        {canEdit && <TableCell sx={{ width: 50 }}></TableCell>}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHead>
+                    <TableBody>
+                      <SortableContext
+                        items={sortedLineItems.map(item => item.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {sortedLineItems.map((item) => (
+                          <SortableLineItemRow
+                            key={item.id}
+                            item={item}
+                            canEdit={canEdit}
+                            onDelete={(id) => setDeleteItemConfirm(id)}
+                            onUpdate={handleUpdateLineItem}
+                            formatCurrency={formatCurrency}
+                            formatQuantity={formatQuantity}
+                            currencySymbol={settingsStore.currencySettings.symbol || '$'}
+                          />
+                        ))}
+                      </SortableContext>
+                    </TableBody>
+                  </Table>
+                </DndContext>
               )}
             </CardContent>
           </Card>
@@ -816,13 +1493,15 @@ const JobDetail: React.FC = observer(() => {
                 </Box>
                 {jobStore.discountTotal > 0 && (
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'success.main' }}>
-                    <Typography>Discount</Typography>
+                    <Typography>
+                      Discount{job.discountPercent > 0 ? ` (${job.discountPercent}%)` : ''}
+                    </Typography>
                     <Typography>-{formatCurrency(jobStore.discountTotal)}</Typography>
                   </Box>
                 )}
                 {job.taxRate > 0 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography>Tax ({job.taxRate}%)</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: 'action.hover', mx: -2, px: 2, py: 1 }}>
+                    <Typography>{taxName} ({job.taxRate}%)</Typography>
                     <Typography>{formatCurrency(jobStore.taxTotal)}</Typography>
                   </Box>
                 )}
@@ -848,29 +1527,72 @@ const JobDetail: React.FC = observer(() => {
                 Customer
               </Typography>
               <Typography fontWeight={500}>{job.customer?.name}</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {job.customer?.code}
               </Typography>
+              {job.customer?.phone && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                  <PhoneIcon fontSize="small" color="action" />
+                  <Typography variant="body2">
+                    <a href={`tel:${job.customer.phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                      {job.customer.phone}
+                    </a>
+                  </Typography>
+                </Box>
+              )}
+              {job.customer?.email && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                  <EmailIcon fontSize="small" color="action" />
+                  <Typography variant="body2">
+                    <a href={`mailto:${job.customer.email}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                      {job.customer.email}
+                    </a>
+                  </Typography>
+                </Box>
+              )}
+              {job.customer?.address && (
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 0.5 }}>
+                  <LocationIcon fontSize="small" color="action" sx={{ mt: 0.25 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {job.customer.address}
+                  </Typography>
+                </Box>
+              )}
             </CardContent>
           </Card>
 
-          <Card sx={{ mb: 3 }}>
+          {/* Vehicle Card - Clickable */}
+          <Card
+            sx={{
+              mb: 3,
+              cursor: 'pointer',
+              transition: 'box-shadow 0.2s',
+              '&:hover': { boxShadow: 4 },
+            }}
+            onClick={() => setVehicleDialogOpen(true)}
+          >
             <CardContent>
-              <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                Vehicle
-              </Typography>
-              <Typography fontWeight={500}>
-                {job.vehicle?.year} {job.vehicle?.make} {job.vehicle?.model}
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                  Vehicle
+                </Typography>
+                <Tooltip title="View details">
+                  <OpenIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                </Tooltip>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                <VehicleIcon color="primary" />
+                <Typography fontWeight={500}>
+                  {job.vehicle?.year} {job.vehicle?.make} {job.vehicle?.model}
+                </Typography>
+              </Box>
               {job.vehicle?.licensePlate && (
-                <Typography variant="body2" color="text.secondary">
-                  Plate: {job.vehicle.licensePlate}
-                </Typography>
-              )}
-              {job.vehicle?.vin && (
-                <Typography variant="body2" color="text.secondary">
-                  VIN: {job.vehicle.vin}
-                </Typography>
+                <Chip
+                  label={job.vehicle.licensePlate}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontFamily: 'monospace', mt: 1 }}
+                />
               )}
             </CardContent>
           </Card>
@@ -923,13 +1645,60 @@ const JobDetail: React.FC = observer(() => {
             </CardContent>
           </Card>
 
-          {job.notes && (
-            <Card sx={{ mt: 3 }}>
+          {/* Notes Section */}
+          {(job.notes || job.internalNotes || canEdit) && (
+            <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
                   Notes
                 </Typography>
-                <Typography>{job.notes}</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Customer Notes
+                    </Typography>
+                    {job.notes ? (
+                      <Typography
+                        sx={{
+                          whiteSpace: 'pre-wrap',
+                          bgcolor: 'action.hover',
+                          p: 1.5,
+                          borderRadius: 1,
+                        }}
+                      >
+                        {job.notes}
+                      </Typography>
+                    ) : (
+                      <Typography color="text.secondary" fontStyle="italic">
+                        No customer notes
+                      </Typography>
+                    )}
+                  </Box>
+                  <Divider />
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Internal Notes
+                    </Typography>
+                    {job.internalNotes ? (
+                      <Typography
+                        sx={{
+                          whiteSpace: 'pre-wrap',
+                          bgcolor: 'warning.lighter',
+                          p: 1.5,
+                          borderRadius: 1,
+                          border: '1px dashed',
+                          borderColor: 'warning.light',
+                        }}
+                      >
+                        {job.internalNotes}
+                      </Typography>
+                    ) : (
+                      <Typography color="text.secondary" fontStyle="italic">
+                        No internal notes
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
               </CardContent>
             </Card>
           )}
@@ -951,44 +1720,26 @@ const JobDetail: React.FC = observer(() => {
                   setSelectedLineItem(null);
                 }}
               >
+                <MenuItem value="TEXT">Text (note/description)</MenuItem>
                 <MenuItem value="INVENTORY">Part (from inventory)</MenuItem>
                 <MenuItem value="LABOUR">Labour</MenuItem>
                 <MenuItem value="SERVICE">Service</MenuItem>
-                <MenuItem value="TEXT">Text (custom description)</MenuItem>
               </Select>
             </FormControl>
-            
+
             {lineItemType === 'TEXT' ? (
-              // Custom text entry
-              <>
-                <TextField
-                  label="Description"
-                  required
-                  fullWidth
-                  value={textDescription}
-                  onChange={(e) => setTextDescription(e.target.value)}
-                  placeholder="Enter custom line item description"
-                />
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <TextField
-                    label="Quantity"
-                    type="number"
-                    fullWidth
-                    value={lineItemQuantity}
-                    onChange={(e) => setLineItemQuantity(e.target.value)}
-                    inputProps={{ min: 0, step: 0.01 }}
-                  />
-                  <TextField
-                    label="Unit Price"
-                    type="number"
-                    fullWidth
-                    value={textPrice}
-                    onChange={(e) => setTextPrice(e.target.value)}
-                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                    inputProps={{ min: 0, step: 0.01 }}
-                  />
-                </Box>
-              </>
+              // Text entry - just description, no qty/price
+              <TextField
+                label="Text / Note"
+                required
+                fullWidth
+                multiline
+                rows={2}
+                value={textDescription}
+                onChange={(e) => setTextDescription(e.target.value)}
+                placeholder="Enter text that will appear on the invoice (e.g., 'Customer requested extra inspection')"
+                helperText="This text will appear on the invoice without price"
+              />
             ) : (
               // Autocomplete for existing items
               <>
@@ -996,13 +1747,18 @@ const JobDetail: React.FC = observer(() => {
                   options={getLineItemOptions()}
                   getOptionLabel={(option) => `${option.name} (${option.code})`}
                   value={selectedLineItem}
-                  onChange={(_, value) => setSelectedLineItem(value)}
+                  onChange={(_, value) => {
+                    setSelectedLineItem(value);
+                    if (value) {
+                      setLineItemPrice(value.unitPrice.toString());
+                    }
+                  }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label={`Select ${getItemTypeLabel(lineItemType)}`}
+                      label={`Select ${lineItemType === 'INVENTORY' ? 'Part' : lineItemType === 'LABOUR' ? 'Labour' : 'Service'}`}
                       required
-                      placeholder={`Search ${getItemTypeLabel(lineItemType).toLowerCase()}s...`}
+                      placeholder="Search..."
                     />
                   )}
                   renderOption={(props, option) => (
@@ -1013,7 +1769,7 @@ const JobDetail: React.FC = observer(() => {
                           <Typography variant="caption" color="text.secondary">{option.code}</Typography>
                         </Box>
                         <Typography variant="body2" color="primary">
-                          ${Number(option.unitPrice).toFixed(2)}
+                          {settingsStore.currencySettings.symbol || '$'}{Number(option.unitPrice).toFixed(2)}
                         </Typography>
                       </Box>
                     </li>
@@ -1034,21 +1790,21 @@ const JobDetail: React.FC = observer(() => {
                     fullWidth
                     value={lineItemQuantity}
                     onChange={(e) => setLineItemQuantity(e.target.value)}
-                    inputProps={{ min: 0, step: 0.01 }}
+                    inputProps={{ min: 0, step: 1 }}
                   />
                   <TextField
                     label="Unit Price"
                     type="number"
                     fullWidth
-                    value={selectedLineItem ? selectedLineItem.unitPrice.toString() : '0'}
-                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                    disabled
-                    helperText="Price from selected item"
+                    value={lineItemPrice}
+                    onChange={(e) => setLineItemPrice(e.target.value)}
+                    InputProps={{ startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment> }}
+                    inputProps={{ min: 0, step: 0.01 }}
                   />
                 </Box>
                 {selectedLineItem && (
                   <Alert severity="info" sx={{ py: 0.5 }}>
-                    Total: ${(parseFloat(lineItemQuantity) * selectedLineItem.unitPrice).toFixed(2)}
+                    Total: {settingsStore.currencySettings.symbol || '$'}{(parseFloat(lineItemQuantity) * parseFloat(lineItemPrice)).toFixed(2)}
                   </Alert>
                 )}
               </>
@@ -1091,10 +1847,25 @@ const JobDetail: React.FC = observer(() => {
                   </TableHead>
                   <TableBody>
                     {selectedTemplate.items.map((item, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell>{item.description}</TableCell>
-                        <TableCell align="right">{item.quantity}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.unitPrice)}</TableCell>
+                      <TableRow
+                        key={idx}
+                        sx={{ bgcolor: lineItemTypeColors[item.itemType as LineItemType] || 'transparent' }}
+                      >
+                        <TableCell>
+                          {item.itemType === 'TEXT' ? (
+                            <Typography fontStyle="italic" color="text.secondary">
+                              {item.description}
+                            </Typography>
+                          ) : (
+                            item.description
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          {item.itemType !== 'TEXT' && formatQuantity(item.quantity)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {item.itemType !== 'TEXT' && formatCurrency(item.unitPrice)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1108,6 +1879,61 @@ const JobDetail: React.FC = observer(() => {
           <Button variant="contained" onClick={handleApplyTemplate} disabled={!selectedTemplate}>
             Apply
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Vehicle Details Dialog */}
+      <Dialog open={vehicleDialogOpen} onClose={() => setVehicleDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <VehicleIcon color="primary" />
+            Vehicle Details
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {job.vehicle && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <Box>
+                <Typography variant="h5" fontWeight={600}>
+                  {job.vehicle.year} {job.vehicle.make} {job.vehicle.model}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" fontFamily="monospace">
+                  {job.vehicle.code}
+                </Typography>
+              </Box>
+              
+              <Divider />
+              
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                {job.vehicle.licensePlate && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">License Plate</Typography>
+                    <Typography fontWeight={500}>{job.vehicle.licensePlate}</Typography>
+                  </Box>
+                )}
+                {job.vehicle.vin && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">VIN</Typography>
+                    <Typography fontFamily="monospace" fontSize={12}>{job.vehicle.vin}</Typography>
+                  </Box>
+                )}
+              </Box>
+              
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<OpenIcon />}
+                  onClick={() => navigate(`/vehicles/${job.vehicle?.id}`)}
+                  fullWidth
+                >
+                  View Full Vehicle Details
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVehicleDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 
@@ -1145,18 +1971,6 @@ const JobDetail: React.FC = observer(() => {
         onClose={() => setEditDialogOpen(false)}
         job={job}
       />
-
-      {/* Print Dialog */}
-      <PrintJobDialog
-        open={printDialogOpen}
-        onClose={() => setPrintDialogOpen(false)}
-        job={job}
-        printType={printType}
-        subtotal={jobStore.subtotal}
-        discountTotal={jobStore.discountTotal}
-        taxTotal={jobStore.taxTotal}
-        grandTotal={jobStore.grandTotal}
-      />
     </Box>
   );
 });
@@ -1168,8 +1982,23 @@ interface EditJobDialogProps {
   job: import('../stores/JobStore').Job | null;
 }
 
+interface EditCustomer {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface EditVehicle {
+  id: string;
+  code: string;
+  make: string;
+  model: string;
+  year: number;
+  licensePlate: string | null;
+}
+
 const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, job }) => {
-  const { jobStore } = useStore();
+  const { jobStore, settingsStore, customerStore, vehicleStore } = useStore();
   const [formData, setFormData] = useState({
     notes: '',
     internalNotes: '',
@@ -1177,21 +2006,122 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
     discountAmount: '0',
     discountPercent: '0',
   });
+  const [selectedCustomer, setSelectedCustomer] = useState<EditCustomer | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<EditVehicle | null>(null);
+  // Use refs to track current values synchronously (state updates are async)
+  const selectedCustomerRef = useRef<EditCustomer | null>(null);
+  const selectedVehicleRef = useRef<EditVehicle | null>(null);
+  const [customers, setCustomers] = useState<EditCustomer[]>([]);
+  const [vehicles, setVehicles] = useState<EditVehicle[]>([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isEstimate = job?.status === 'ESTIMATE';
+
   useEffect(() => {
-    if (job && open) {
+    if (open) {
+      customerStore.fetchCustomers();
+    }
+  }, [open, customerStore]);
+
+  useEffect(() => {
+    setCustomers(customerStore.customers.map(c => ({
+      id: c.id,
+      name: c.name,
+      code: c.code,
+    })));
+  }, [customerStore.customers]);
+
+  // Track if we've initialized the form values for this dialog session
+  const [initialized, setInitialized] = useState(false);
+
+  // Reset initialized state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setInitialized(false);
+    }
+  }, [open]);
+
+  // Initialize form values ONLY when dialog first opens (not on subsequent job updates)
+  useEffect(() => {
+    if (job && open && !initialized) {
       setFormData({
         notes: job.notes || '',
         internalNotes: job.internalNotes || '',
-        taxRate: job.taxRate?.toString() || '0',
+        taxRate: job.taxRate?.toString() || settingsStore.taxSettings.defaultRate?.toString() || '0',
         discountAmount: job.discountAmount?.toString() || '0',
         discountPercent: job.discountPercent?.toString() || '0',
       });
+      if (job.customer) {
+        const customer = {
+          id: job.customer.id,
+          name: job.customer.name,
+          code: job.customer.code,
+        };
+        selectedCustomerRef.current = customer;
+        setSelectedCustomer(customer);
+      } else {
+        selectedCustomerRef.current = null;
+        setSelectedCustomer(null);
+      }
+      if (job.vehicle) {
+        const vehicle = {
+          id: job.vehicle.id,
+          code: job.vehicle.code,
+          make: job.vehicle.make,
+          model: job.vehicle.model,
+          year: job.vehicle.year,
+          licensePlate: job.vehicle.licensePlate,
+        };
+        selectedVehicleRef.current = vehicle;
+        setSelectedVehicle(vehicle);
+      } else {
+        selectedVehicleRef.current = null;
+        setSelectedVehicle(null);
+      }
       setError(null);
+      setInitialized(true);
     }
-  }, [job, open]);
+  }, [job, open, initialized, settingsStore.taxSettings.defaultRate]);
+
+  // Load vehicles when customer changes
+  useEffect(() => {
+    if (selectedCustomer && open) {
+      setLoadingVehicles(true);
+      vehicleStore.fetchVehiclesByCustomer(selectedCustomer.id)
+        .then((data) => {
+          setVehicles(data.map((v: { id: string; code: string; make: string; model: string; year: number | null; licensePlate: string | null }) => ({
+            id: v.id,
+            code: v.code,
+            make: v.make,
+            model: v.model,
+            year: v.year || 0,
+            licensePlate: v.licensePlate,
+          })));
+        })
+        .finally(() => setLoadingVehicles(false));
+    } else {
+      setVehicles([]);
+    }
+  }, [selectedCustomer, open, vehicleStore]);
+
+  const handleCustomerChange = (_: unknown, newCustomer: EditCustomer | null) => {
+    // Update ref synchronously (before state update)
+    selectedCustomerRef.current = newCustomer;
+    setSelectedCustomer(newCustomer);
+    // Clear vehicle when customer changes
+    if (newCustomer?.id !== job?.customer?.id) {
+      selectedVehicleRef.current = null;
+      setSelectedVehicle(null);
+    }
+  };
+  
+  const handleVehicleChange = (_: unknown, newVehicle: EditVehicle | null) => {
+    // Update ref synchronously (before state update)
+    selectedVehicleRef.current = newVehicle;
+    setSelectedVehicle(newVehicle);
+  };
 
   const handleSave = async () => {
     if (!job) return;
@@ -1208,13 +2138,32 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
         return;
       }
 
-      await jobStore.updateJob(job.id, {
+      const updateData: import('../stores/JobStore').UpdateJobDto = {
         notes: formData.notes || undefined,
         internalNotes: formData.internalNotes || undefined,
         taxRate: parseFloat(formData.taxRate) || 0,
         discountAmount: discountAmount,
         discountPercent: discountPercent,
-      });
+      };
+
+      // Add customer/vehicle changes only if in estimate status
+      // Use refs to get current values (state updates are async, refs are sync)
+      if (isEstimate) {
+        const currentCustomer = selectedCustomerRef.current;
+        const currentVehicle = selectedVehicleRef.current;
+        
+        // Always send customerId if we have a selected customer (even if unchanged)
+        if (currentCustomer) {
+          updateData.customerId = currentCustomer.id;
+        }
+        // Always send vehicleId if we have a selected vehicle (even if unchanged)
+        if (currentVehicle) {
+          updateData.vehicleId = currentVehicle.id;
+        }
+      }
+      await jobStore.updateJob(job.id, updateData);
+      // Force refresh to ensure we have the latest data with relations
+      await jobStore.fetchJobById(job.id);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update job');
@@ -1222,6 +2171,8 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
       setSaving(false);
     }
   };
+
+  const taxName = settingsStore.taxSettings.name || 'GST';
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -1233,6 +2184,54 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
           </Alert>
         )}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          {/* Customer & Vehicle Selection - Only in ESTIMATE status */}
+          {isEstimate && (
+            <>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 1 }}>
+                Customer & Vehicle (only editable in Estimate status)
+              </Typography>
+              <Autocomplete
+                options={customers}
+                getOptionLabel={(option) => `${option.name} (${option.code})`}
+                value={selectedCustomer}
+                onChange={handleCustomerChange}
+                renderInput={(params) => (
+                  <TextField {...params} label="Customer" />
+                )}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+              />
+              <Autocomplete
+                options={vehicles}
+                getOptionLabel={(option) => `${option.year} ${option.make} ${option.model}${option.licensePlate ? ` (${option.licensePlate})` : ''}`}
+                value={selectedVehicle}
+                onChange={handleVehicleChange}
+                loading={loadingVehicles}
+                disabled={!selectedCustomer}
+                renderInput={(params) => (
+                  <TextField 
+                    {...params} 
+                    label="Vehicle" 
+                    helperText={!selectedCustomer ? 'Select a customer first' : ''}
+                  />
+                )}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <Box>
+                      <Typography fontWeight={500}>
+                        {option.year} {option.make} {option.model}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.code}{option.licensePlate && ` • ${option.licensePlate}`}
+                      </Typography>
+                    </Box>
+                  </li>
+                )}
+              />
+              <Divider sx={{ my: 1 }} />
+            </>
+          )}
+
           <TextField
             label="Notes"
             multiline
@@ -1252,7 +2251,7 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
             helperText="Internal use only - not visible to customer"
           />
           <TextField
-            label="Tax Rate"
+            label={`${taxName} Rate`}
             type="number"
             fullWidth
             value={formData.taxRate}
@@ -1267,7 +2266,7 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
               fullWidth
               value={formData.discountAmount}
               onChange={(e) => setFormData({ ...formData, discountAmount: e.target.value, discountPercent: '0' })}
-              InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+              InputProps={{ startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment> }}
               inputProps={{ min: 0, step: 0.01 }}
               disabled={parseFloat(formData.discountPercent) > 0}
             />
@@ -1290,284 +2289,6 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
         </Button>
         <Button variant="contained" onClick={handleSave} disabled={saving}>
           {saving ? <CircularProgress size={20} /> : 'Save'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-});
-
-// ==================== PRINT JOB DIALOG ====================
-interface PrintJobDialogProps {
-  open: boolean;
-  onClose: () => void;
-  job: import('../stores/JobStore').Job | null;
-  printType: 'estimate' | 'invoice';
-  subtotal: number;
-  discountTotal: number;
-  taxTotal: number;
-  grandTotal: number;
-}
-
-const PrintJobDialog: React.FC<PrintJobDialogProps> = observer(({ open, onClose, job, printType, subtotal, discountTotal, taxTotal, grandTotal }) => {
-  const { settingsStore } = useStore();
-  const printRef = React.useRef<HTMLDivElement>(null);
-
-  const handlePrint = () => {
-    const printContent = printRef.current;
-    if (!printContent) return;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const shopName = settingsStore.shopSettings.name || 'Meccanico';
-    const shopAddress = settingsStore.shopSettings.address || '';
-    const shopPhone = settingsStore.shopSettings.phone || '';
-    const shopEmail = settingsStore.shopSettings.email || '';
-    const invoiceTerms = settingsStore.invoiceSettings.terms || '';
-    const invoiceFooter = settingsStore.invoiceSettings.footer || '';
-    const currencySymbol = settingsStore.currencySettings.symbol || '$';
-
-    const title = printType === 'estimate' ? 'Estimate' : 'Invoice';
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${title} - ${job?.code}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
-            .header { display: flex; justify-content: space-between; margin-bottom: 40px; }
-            .shop-info h1 { font-size: 24px; color: #1976d2; margin-bottom: 8px; }
-            .shop-info p { font-size: 12px; color: #666; }
-            .document-info { text-align: right; }
-            .document-info h2 { font-size: 28px; color: ${printType === 'estimate' ? '#1976d2' : '#2e7d32'}; margin-bottom: 8px; }
-            .document-info p { font-size: 14px; }
-            .details { display: flex; justify-content: space-between; margin-bottom: 30px; }
-            .customer-info, .vehicle-info { width: 48%; }
-            .customer-info h3, .vehicle-info h3 { font-size: 14px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-            .customer-info p, .vehicle-info p { font-size: 14px; line-height: 1.6; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { background: #f5f5f5; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #ddd; }
-            td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
-            .text-right { text-align: right; }
-            .totals { margin-left: auto; width: 300px; }
-            .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
-            .totals .row.total { border-top: 2px solid #333; font-weight: bold; font-size: 18px; margin-top: 8px; padding-top: 16px; }
-            .totals .row.discount { color: #2e7d32; }
-            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; }
-            .terms { font-size: 12px; color: #666; margin-bottom: 20px; }
-            .terms h4 { margin-bottom: 8px; }
-            .footer-text { font-size: 12px; color: #999; text-align: center; }
-            @media print {
-              body { padding: 20px; }
-              @page { margin: 0.5cm; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="shop-info">
-              <h1>${shopName}</h1>
-              <p>${shopAddress}</p>
-              <p>${shopPhone}</p>
-              <p>${shopEmail}</p>
-            </div>
-            <div class="document-info">
-              <h2>${title}</h2>
-              <p><strong>${job?.code}</strong></p>
-              <p>Date: ${new Date().toLocaleDateString()}</p>
-              ${printType === 'invoice' && job?.invoicedAt ? `<p>Invoiced: ${new Date(job.invoicedAt).toLocaleDateString()}</p>` : ''}
-            </div>
-          </div>
-
-          <div class="details">
-            <div class="customer-info">
-              <h3>Bill To</h3>
-              <p><strong>${job?.customer?.name || 'N/A'}</strong></p>
-              <p>${job?.customer?.phone || ''}</p>
-              <p>${job?.customer?.email || ''}</p>
-            </div>
-            <div class="vehicle-info">
-              <h3>Vehicle</h3>
-              <p><strong>${job?.vehicle?.year || ''} ${job?.vehicle?.make || ''} ${job?.vehicle?.model || ''}</strong></p>
-              ${job?.vehicle?.licensePlate ? `<p>License: ${job.vehicle.licensePlate}</p>` : ''}
-              ${job?.vehicle?.vin ? `<p>VIN: ${job.vehicle.vin}</p>` : ''}
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th class="text-right">Qty</th>
-                <th class="text-right">Price</th>
-                <th class="text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${job?.lineItems?.map((item) => `
-                <tr>
-                  <td>${item.description}</td>
-                  <td class="text-right">${item.quantity}</td>
-                  <td class="text-right">${currencySymbol}${Number(item.unitPrice).toFixed(2)}</td>
-                  <td class="text-right">${currencySymbol}${(item.quantity * item.unitPrice).toFixed(2)}</td>
-                </tr>
-              `).join('') || '<tr><td colspan="4">No items</td></tr>'}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <div class="row">
-              <span>Subtotal</span>
-              <span>${currencySymbol}${subtotal.toFixed(2)}</span>
-            </div>
-            ${discountTotal > 0 ? `
-              <div class="row discount">
-                <span>Discount</span>
-                <span>-${currencySymbol}${discountTotal.toFixed(2)}</span>
-              </div>
-            ` : ''}
-            ${job?.taxRate && job.taxRate > 0 ? `
-              <div class="row">
-                <span>Tax (${job.taxRate}%)</span>
-                <span>${currencySymbol}${taxTotal.toFixed(2)}</span>
-              </div>
-            ` : ''}
-            <div class="row total">
-              <span>Total</span>
-              <span>${currencySymbol}${grandTotal.toFixed(2)}</span>
-            </div>
-          </div>
-
-          ${job?.notes ? `
-            <div class="footer">
-              <div class="terms">
-                <h4>Notes</h4>
-                <p>${job.notes}</p>
-              </div>
-            </div>
-          ` : ''}
-
-          ${invoiceTerms || invoiceFooter ? `
-            <div class="footer">
-              ${invoiceTerms ? `
-                <div class="terms">
-                  <h4>Terms & Conditions</h4>
-                  <p>${invoiceTerms}</p>
-                </div>
-              ` : ''}
-              ${invoiceFooter ? `
-                <div class="footer-text">${invoiceFooter}</div>
-              ` : ''}
-            </div>
-          ` : ''}
-
-          <script>
-            window.onload = function() { window.print(); }
-          </script>
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    onClose();
-  };
-
-  const formatCurrency = (amount: number) => {
-    const symbol = settingsStore.currencySettings.symbol || '$';
-    return `${symbol}${Number(amount).toFixed(2)}`;
-  };
-
-  if (!job) return null;
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        Print {printType === 'estimate' ? 'Estimate' : 'Invoice'} - {job.code}
-      </DialogTitle>
-      <DialogContent>
-        <Box ref={printRef} sx={{ p: 2 }}>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Click "Print" to open the print preview in a new window.
-          </Alert>
-
-          <Typography variant="h6" gutterBottom>
-            Preview
-          </Typography>
-          <Divider sx={{ mb: 2 }} />
-
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Customer
-            </Typography>
-            <Typography fontWeight={500}>{job.customer?.name}</Typography>
-          </Box>
-
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Vehicle
-            </Typography>
-            <Typography fontWeight={500}>
-              {job.vehicle?.year} {job.vehicle?.make} {job.vehicle?.model}
-            </Typography>
-          </Box>
-
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-            Line Items ({job.lineItems?.length || 0})
-          </Typography>
-          <Table size="small" sx={{ mb: 2 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Description</TableCell>
-                <TableCell align="right">Qty</TableCell>
-                <TableCell align="right">Price</TableCell>
-                <TableCell align="right">Total</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {job.lineItems?.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{item.description}</TableCell>
-                  <TableCell align="right">{item.quantity}</TableCell>
-                  <TableCell align="right">{formatCurrency(item.unitPrice)}</TableCell>
-                  <TableCell align="right">{formatCurrency(item.quantity * item.unitPrice)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Box sx={{ width: 250 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography>Subtotal</Typography>
-                <Typography>{formatCurrency(subtotal)}</Typography>
-              </Box>
-              {discountTotal > 0 && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, color: 'success.main' }}>
-                  <Typography>Discount</Typography>
-                  <Typography>-{formatCurrency(discountTotal)}</Typography>
-                </Box>
-              )}
-              {job.taxRate > 0 && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography>Tax ({job.taxRate}%)</Typography>
-                  <Typography>{formatCurrency(taxTotal)}</Typography>
-                </Box>
-              )}
-              <Divider sx={{ my: 1 }} />
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography fontWeight={600}>Total</Typography>
-                <Typography fontWeight={600}>{formatCurrency(grandTotal)}</Typography>
-              </Box>
-            </Box>
-          </Box>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" startIcon={<PrintIcon />} onClick={handlePrint}>
-          Print
         </Button>
       </DialogActions>
     </Dialog>

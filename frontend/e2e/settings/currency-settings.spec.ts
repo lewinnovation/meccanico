@@ -17,6 +17,9 @@ test.describe('Currency Settings', () => {
   test('should update currency code', async ({ page }) => {
     await page.goto('/settings/currency');
     
+    // Wait for form to load
+    await expect(page.locator('[data-testid="currency-code-input"]')).toBeVisible({ timeout: 5000 });
+    
     const codeInput = page.locator('[data-testid="currency-code-input"] input');
     await codeInput.clear();
     await codeInput.fill('EUR');
@@ -26,11 +29,15 @@ test.describe('Currency Settings', () => {
     
     // Verify persistence
     await page.reload();
+    await page.waitForTimeout(500); // Wait for form to load
     await expect(codeInput).toHaveValue('EUR');
   });
 
   test('should update currency symbol', async ({ page }) => {
     await page.goto('/settings/currency');
+    
+    // Wait for form to load
+    await expect(page.locator('[data-testid="currency-symbol-input"]')).toBeVisible({ timeout: 5000 });
     
     const symbolInput = page.locator('[data-testid="currency-symbol-input"] input');
     await symbolInput.clear();
@@ -41,11 +48,15 @@ test.describe('Currency Settings', () => {
     
     // Verify persistence
     await page.reload();
+    await page.waitForTimeout(500); // Wait for form to load
     await expect(symbolInput).toHaveValue('€');
   });
 
   test('should update both currency code and symbol', async ({ page }) => {
     await page.goto('/settings/currency');
+    
+    // Wait for form to load
+    await expect(page.locator('[data-testid="currency-code-input"]')).toBeVisible({ timeout: 5000 });
     
     const codeInput = page.locator('[data-testid="currency-code-input"] input');
     await codeInput.clear();
@@ -60,6 +71,7 @@ test.describe('Currency Settings', () => {
     
     // Verify persistence
     await page.reload();
+    await page.waitForTimeout(500); // Wait for form to load
     await expect(codeInput).toHaveValue('GBP');
     await expect(symbolInput).toHaveValue('£');
   });

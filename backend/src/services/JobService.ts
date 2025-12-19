@@ -3,19 +3,22 @@ import { Job, JobStatus } from '../models/Job';
 import { LineItem, LineItemType } from '../models/LineItem';
 import { Template } from '../models/Template';
 import { Vehicle } from '../models/Vehicle';
-import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
+import { Customer } from '../models/Customer';
+import { generateJobCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
 import { PaginatedResult } from '../types/common';
 
 export interface CreateJobDto {
   customerId: string;
-  vehicleId: string;
+  vehicleId?: string;
   assignedTo?: string;
   notes?: string;
   taxRate?: number;
 }
 
 export interface UpdateJobDto {
+  customerId?: string;
+  vehicleId?: string;
   assignedTo?: string;
   notes?: string;
   internalNotes?: string;
@@ -62,7 +65,8 @@ export class JobService {
     const queryBuilder = this.repository.createQueryBuilder('job')
       .leftJoinAndSelect('job.customer', 'customer')
       .leftJoinAndSelect('job.vehicle', 'vehicle')
-      .leftJoinAndSelect('job.assignee', 'assignee');
+      .leftJoinAndSelect('job.assignee', 'assignee')
+      .leftJoinAndSelect('job.lineItems', 'lineItems');
 
     if (search) {
       queryBuilder.andWhere(
@@ -125,25 +129,27 @@ export class JobService {
   }
 
   async create(data: CreateJobDto): Promise<Job> {
-    // Verify vehicle belongs to customer
-    const vehicle = await this.vehicleRepository.findOne({
-      where: { id: data.vehicleId },
-    });
+    // Verify vehicle belongs to customer if vehicleId is provided
+    if (data.vehicleId) {
+      const vehicle = await this.vehicleRepository.findOne({
+        where: { id: data.vehicleId },
+      });
 
-    if (!vehicle) {
-      throw new NotFoundError('Vehicle not found');
+      if (!vehicle) {
+        throw new NotFoundError('Vehicle not found');
+      }
+
+      if (vehicle.customerId !== data.customerId) {
+        throw new BadRequestError('Vehicle does not belong to the specified customer');
+      }
     }
 
-    if (vehicle.customerId !== data.customerId) {
-      throw new BadRequestError('Vehicle does not belong to the specified customer');
-    }
-
-    const code = await generateCode('jobs', CODE_PREFIXES.JOB);
+    const code = await generateJobCode();
 
     const job = this.repository.create({
       code,
       customerId: data.customerId,
-      vehicleId: data.vehicleId,
+      vehicleId: data.vehicleId || null,
       assignedTo: data.assignedTo,
       notes: data.notes,
       taxRate: data.taxRate ?? 0,
@@ -162,7 +168,78 @@ export class JobService {
       throw new BadRequestError('Cannot have both discount amount and discount percent');
     }
 
-    Object.assign(job, data);
+    // Customer and vehicle can only be changed in ESTIMATE status
+    const isChangingCustomer = data.customerId && data.customerId !== job.customerId;
+    const isChangingVehicle = data.vehicleId && data.vehicleId !== job.vehicleId;
+
+    if ((isChangingCustomer || isChangingVehicle) && job.status !== JobStatus.ESTIMATE) {
+      throw new ConflictError('Customer and vehicle can only be changed when job is in ESTIMATE status');
+    }
+
+    // If changing customer, verify customer exists
+    if (isChangingCustomer) {
+      const customerRepository = AppDataSource.getRepository(Customer);
+      const customer = await customerRepository.findOne({
+        where: { id: data.customerId },
+      });
+
+      if (!customer) {
+        throw new NotFoundError('Customer not found');
+      }
+    }
+
+    // If changing vehicle, verify it exists and belongs to the (potentially new) customer
+    if (isChangingVehicle) {
+      const vehicle = await this.vehicleRepository.findOne({
+        where: { id: data.vehicleId },
+      });
+
+      if (!vehicle) {
+        throw new NotFoundError('Vehicle not found');
+      }
+
+      const targetCustomerId = data.customerId || job.customerId;
+      if (vehicle.customerId !== targetCustomerId) {
+        throw new BadRequestError('Vehicle must belong to the selected customer');
+      }
+    }
+
+    // If only changing customer (no vehicle specified), clear vehicle
+    if (isChangingCustomer && !data.vehicleId) {
+      job.vehicleId = null;
+    }
+
+    // Explicitly set customer and vehicle IDs if provided
+    if (data.customerId !== undefined) {
+      job.customerId = data.customerId;
+    }
+    if (data.vehicleId !== undefined) {
+      job.vehicleId = data.vehicleId;
+    }
+
+    // Update other fields
+    if (data.assignedTo !== undefined) {
+      job.assignedTo = data.assignedTo;
+    }
+    if (data.notes !== undefined) {
+      job.notes = data.notes || null;
+    }
+    if (data.internalNotes !== undefined) {
+      job.internalNotes = data.internalNotes || null;
+    }
+    if (data.taxRate !== undefined) {
+      job.taxRate = data.taxRate;
+    }
+    if (data.discountAmount !== undefined) {
+      job.discountAmount = data.discountAmount;
+    }
+    if (data.discountPercent !== undefined) {
+      job.discountPercent = data.discountPercent;
+    }
+    if (data.dueDate !== undefined) {
+      job.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+    }
+
     await this.repository.save(job);
     return this.findById(id);
   }
@@ -220,7 +297,7 @@ export class JobService {
 
   async duplicate(id: string): Promise<Job> {
     const original = await this.findById(id);
-    const code = await generateCode('jobs', CODE_PREFIXES.JOB);
+    const code = await generateJobCode();
 
     const newJob = this.repository.create({
       code,

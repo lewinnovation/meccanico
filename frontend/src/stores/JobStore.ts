@@ -50,6 +50,7 @@ export interface Customer {
   name: string;
   email: string | null;
   phone: string | null;
+  address: string | null;
 }
 
 export interface Vehicle {
@@ -66,7 +67,7 @@ export interface Job {
   id: string;
   code: string;
   customerId: string;
-  vehicleId: string;
+  vehicleId: string | null;
   assignedTo: string | null;
   status: JobStatus;
   notes: string | null;
@@ -89,13 +90,15 @@ export interface Job {
 
 export interface CreateJobDto {
   customerId: string;
-  vehicleId: string;
+  vehicleId?: string;
   assignedTo?: string;
   notes?: string;
   taxRate?: number;
 }
 
 export interface UpdateJobDto {
+  customerId?: string;
+  vehicleId?: string;
   assignedTo?: string;
   notes?: string;
   internalNotes?: string;
@@ -332,7 +335,8 @@ export class JobStore {
 
       runInAction(() => {
         if (this.selectedJob?.id === jobId && this.selectedJob.lineItems) {
-          this.selectedJob.lineItems.push(response.data);
+          // Create new array to trigger React re-renders
+          this.selectedJob.lineItems = [...this.selectedJob.lineItems, response.data];
         }
       });
 
@@ -351,7 +355,8 @@ export class JobStore {
 
       runInAction(() => {
         if (this.selectedJob?.id === jobId && this.selectedJob.lineItems) {
-          this.selectedJob.lineItems.push(...response.data);
+          // Create new array to trigger React re-renders
+          this.selectedJob.lineItems = [...this.selectedJob.lineItems, ...response.data];
         }
       });
 
@@ -370,10 +375,10 @@ export class JobStore {
 
       runInAction(() => {
         if (this.selectedJob?.id === jobId && this.selectedJob.lineItems) {
-          const index = this.selectedJob.lineItems.findIndex((i) => i.id === lineItemId);
-          if (index >= 0) {
-            this.selectedJob.lineItems[index] = response.data;
-          }
+          // Create new array to trigger React re-renders
+          this.selectedJob.lineItems = this.selectedJob.lineItems.map((i) =>
+            i.id === lineItemId ? response.data : i
+          );
         }
       });
 

@@ -314,7 +314,7 @@ test.describe('Job Edit Dialog', () => {
       await menuButton.click();
 
       // Click Edit Details
-      await page.click('[role="menu"] text=Edit Details');
+      await page.click('[role="menu"] li:has-text("Edit Details")');
 
       // Verify edit dialog opens
       await expect(page.locator('[role="dialog"]:has-text("Edit Job Details")')).toBeVisible();

@@ -7,7 +7,7 @@ import {
 import { Job, JobStatus } from '../../../src/models/Job';
 import { LineItem, LineItemType } from '../../../src/models/LineItem';
 import { NotFoundError, ConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
-import { generateCode, CODE_PREFIXES } from '../../../src/utils/codeGenerator';
+import { generateJobCode, CODE_PREFIXES } from '../../../src/utils/codeGenerator';
 
 // Mock dependencies
 jest.mock('../../../src/utils/codeGenerator');
@@ -18,7 +18,7 @@ jest.mock('../../../src/config/database', () => ({
   },
 }));
 
-const mockGenerateCode = generateCode as jest.Mock;
+const mockGenerateJobCode = generateJobCode as jest.Mock;
 
 describe('JobService', () => {
   let jobService: JobService;
@@ -227,7 +227,7 @@ describe('JobService', () => {
     it('should create a new job successfully', async () => {
       const mockVehicle = { id: 'vehicle-1', customerId: 'customer-1' };
       mockVehicleRepository.findOne.mockResolvedValue(mockVehicle);
-      mockGenerateCode.mockResolvedValue('J001');
+      mockGenerateJobCode.mockResolvedValue('J001');
       mockJobRepository.create.mockReturnValue(mockJob);
       mockJobRepository.save.mockResolvedValue(mockJob);
       mockJobRepository.findOne.mockResolvedValue(mockJob);
@@ -238,7 +238,7 @@ describe('JobService', () => {
       expect(mockVehicleRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'vehicle-1' },
       });
-      expect(mockGenerateCode).toHaveBeenCalledWith('jobs', CODE_PREFIXES.JOB);
+      expect(mockGenerateJobCode).toHaveBeenCalled();
     });
 
     it('should throw NotFoundError when vehicle not found', async () => {
@@ -381,7 +381,7 @@ describe('JobService', () => {
       mockJobRepository.findOne
         .mockResolvedValueOnce(originalJob)
         .mockResolvedValueOnce({ ...originalJob, id: 'job-2', code: 'J002' });
-      mockGenerateCode.mockResolvedValue('J002');
+      mockGenerateJobCode.mockResolvedValue('J002');
       mockJobRepository.create.mockReturnValue({
         ...mockJob,
         id: 'job-2',
@@ -394,7 +394,7 @@ describe('JobService', () => {
 
       const result = await jobService.duplicate('job-1');
 
-      expect(mockGenerateCode).toHaveBeenCalled();
+      expect(mockGenerateJobCode).toHaveBeenCalled();
       expect(mockJobRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           status: JobStatus.ESTIMATE,

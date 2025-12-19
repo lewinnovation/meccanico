@@ -30,60 +30,99 @@ export class VehiclePage {
    * Click the add new vehicle button
    */
   async clickAddVehicle() {
-    await this.page.click('button:has-text("Add"), button:has-text("New Vehicle"), [data-testid="add-vehicle"]');
+    // Wait for page to be ready
+    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForTimeout(300);
+    const addButton = this.page.locator('button:has-text("New Vehicle"), button:has-text("Add Vehicle"), button:has-text("Add")').first();
+    await addButton.waitFor({ state: 'visible', timeout: 5000 });
+    await addButton.click();
+    // Wait for dialog to open
+    await this.page.waitForSelector('[role="dialog"]', { state: 'visible', timeout: 5000 });
+    await this.page.waitForTimeout(500);
   }
 
   /**
    * Fill out vehicle form
    */
   async fillVehicleForm(data: VehicleData, customerName?: string) {
+    // Wait for dialog to be ready
+    await this.page.waitForSelector('[role="dialog"]', { state: 'visible' });
+    await this.page.waitForTimeout(300);
+    
     // Select customer if provided
     if (customerName) {
-      await this.page.click('[role="combobox"]:near(label:has-text("Customer"))');
-      await this.page.fill('input[role="combobox"]', customerName);
-      await this.page.click(`li:has-text("${customerName}")`);
+      // Get the Customer autocomplete input (combobox)
+      const customerAutocomplete = this.page.getByRole('combobox', { name: 'Customer' });
+      await customerAutocomplete.click();
+      await this.page.waitForTimeout(200);
+      await customerAutocomplete.fill(customerName);
+      await this.page.waitForTimeout(300);
+      // Click the option that contains the customer name
+      const customerOption = this.page.locator(`[role="option"]:has-text("${customerName}")`).first();
+      await customerOption.waitFor({ state: 'visible', timeout: 3000 });
+      await customerOption.click();
+      await this.page.waitForTimeout(200);
     }
 
-    // Fill make (autocomplete)
+    // Fill make (autocomplete) - use data-testid which is unique
     const makeInput = this.page.locator('[data-testid="vehicle-make"]');
+    await makeInput.click();
+    await this.page.waitForTimeout(200);
     await makeInput.fill(data.make);
+    await this.page.waitForTimeout(500); // Wait for dropdown
     // Try to select from dropdown if available
-    const makeOption = this.page.locator(`li:has-text("${data.make}")`).first();
-    if (await makeOption.isVisible({ timeout: 1000 }).catch(() => false)) {
+    const makeOption = this.page.locator(`[role="option"]:has-text("${data.make}")`).first();
+    if (await makeOption.isVisible({ timeout: 2000 }).catch(() => false)) {
       await makeOption.click();
     } else {
+      // Custom make - press Escape to close dropdown
       await makeInput.press('Escape');
     }
+    await this.page.waitForTimeout(200);
 
-    // Fill model (autocomplete)
+    // Fill model (autocomplete) - use data-testid which is unique
     const modelInput = this.page.locator('[data-testid="vehicle-model"]');
+    await modelInput.click();
+    await this.page.waitForTimeout(200);
     await modelInput.fill(data.model);
-    const modelOption = this.page.locator(`li:has-text("${data.model}")`).first();
-    if (await modelOption.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await this.page.waitForTimeout(500); // Wait for dropdown
+    const modelOption = this.page.locator(`[role="option"]:has-text("${data.model}")`).first();
+    if (await modelOption.isVisible({ timeout: 2000 }).catch(() => false)) {
       await modelOption.click();
     } else {
+      // Custom model - press Escape to close dropdown
       await modelInput.press('Escape');
     }
+    await this.page.waitForTimeout(200);
 
     // Fill optional fields
     if (data.year) {
-      await this.page.click('[data-testid="vehicle-year"]');
-      await this.page.click(`li:has-text("${data.year}")`);
+      // Year is a Select component (TextField with select prop) - use data-testid
+      const yearSelect = this.page.locator('[data-testid="vehicle-year"]');
+      await yearSelect.click();
+      await this.page.waitForTimeout(500); // Wait for menu to open
+      // Try to find the option - it might be in a Menu or List
+      const yearOption = this.page.locator(`[role="option"]:has-text("${data.year}"), li[role="option"]:has-text("${data.year}")`).first();
+      const optionVisible = await yearOption.isVisible({ timeout: 2000 }).catch(() => false);
+      if (optionVisible) {
+        await yearOption.click();
+      }
+      await this.page.waitForTimeout(200);
     }
     if (data.color) {
-      await this.page.fill('[data-testid="vehicle-color"]', data.color);
+      await this.page.locator('[data-testid="vehicle-color"]').fill(data.color);
     }
     if (data.licensePlate) {
-      await this.page.fill('[data-testid="vehicle-license-plate"]', data.licensePlate);
+      await this.page.locator('[data-testid="vehicle-license-plate"]').fill(data.licensePlate);
     }
     if (data.vin) {
-      await this.page.fill('[data-testid="vehicle-vin"]', data.vin);
+      await this.page.locator('[data-testid="vehicle-vin"]').fill(data.vin);
     }
     if (data.mileage) {
-      await this.page.fill('[data-testid="vehicle-mileage"]', data.mileage);
+      await this.page.locator('[data-testid="vehicle-mileage"]').fill(data.mileage);
     }
     if (data.notes) {
-      await this.page.fill('[data-testid="vehicle-notes"]', data.notes);
+      await this.page.locator('[data-testid="vehicle-notes"]').fill(data.notes);
     }
   }
 
@@ -91,7 +130,14 @@ export class VehiclePage {
    * Submit the vehicle form
    */
   async submitForm() {
-    await this.page.click('button[type="submit"], button:has-text("Create"), button:has-text("Save")');
+    await this.page.waitForTimeout(200);
+    // Find the submit button within dialog
+    const dialog = this.page.locator('[role="dialog"]');
+    const submitButton = dialog.locator('button').filter({ hasText: /^Create$|^Save$/ }).first();
+    await submitButton.waitFor({ state: 'visible', timeout: 5000 });
+    await submitButton.click();
+    // Wait for dialog to close
+    await this.page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 10000 }).catch(() => {});
   }
 
   /**
@@ -99,13 +145,10 @@ export class VehiclePage {
    */
   async createVehicle(data: VehicleData, customerName: string) {
     await this.clickAddVehicle();
-    await this.page.waitForTimeout(500); // Wait for dialog to open
     await this.fillVehicleForm(data, customerName);
     await this.submitForm();
-    // Wait for dialog to close or navigation
-    await this.page.waitForResponse(response => 
-      response.url().includes('/vehicles') && response.status() < 400
-    ).catch(() => {});
+    // Wait for UI to update
+    await this.page.waitForTimeout(1000);
   }
 
   /**

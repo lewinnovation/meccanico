@@ -81,6 +81,41 @@ export async function generateCustomerCode(name: string): Promise<string> {
 }
 
 /**
+ * Generate job code with date-based format
+ * Format: J{yyMMdd}{nnn} e.g., J241216001, J241216002
+ */
+export async function generateJobCode(): Promise<string> {
+  const now = new Date();
+  const yy = now.getFullYear().toString().slice(-2);
+  const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+  const dd = now.getDate().toString().padStart(2, '0');
+  const datePrefix = `${CODE_PREFIXES.JOB}${yy}${mm}${dd}`;
+  
+  // Get the highest code number for this date
+  const result = await AppDataSource.query(`
+    SELECT code FROM jobs
+    WHERE code LIKE '${datePrefix}%'
+    ORDER BY code DESC
+    LIMIT 1
+  `);
+
+  let nextNumber = 1;
+  
+  if (result.length > 0) {
+    const lastCode = result[0].code as string;
+    // Extract the number portion (last 3 characters after the date prefix)
+    const lastNumber = parseInt(lastCode.substring(7), 10);
+    if (!isNaN(lastNumber)) {
+      nextNumber = lastNumber + 1;
+    }
+  }
+
+  // Pad to 3 digits
+  const paddedNumber = nextNumber.toString().padStart(3, '0');
+  return `${datePrefix}${paddedNumber}`;
+}
+
+/**
  * Batch generate multiple codes
  */
 export async function generateCodes(

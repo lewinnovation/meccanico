@@ -43,7 +43,11 @@ import {
   Build as LabourIcon,
   Handyman as ServiceIcon,
   ListAlt as TemplateIcon,
+  DragIndicator as DragIcon,
 } from '@mui/icons-material';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
 import type { Inventory as InventoryType, CreateInventoryDto, UpdateInventoryDto } from '../stores/InventoryStore';
@@ -77,7 +81,7 @@ const defaultPartForm: PartFormData = {
 };
 
 const PartsTab: React.FC = observer(() => {
-  const { inventoryStore } = useStore();
+  const { inventoryStore, settingsStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryType | null>(null);
   const [formData, setFormData] = useState<PartFormData>(defaultPartForm);
@@ -87,6 +91,17 @@ const PartsTab: React.FC = observer(() => {
     inventoryStore.fetchItems();
     inventoryStore.fetchCategories();
   }, [inventoryStore]);
+
+  // Listen for openAddDialog event from parent
+  useEffect(() => {
+    const handleOpenAdd = () => {
+      setEditingItem(null);
+      setFormData(defaultPartForm);
+      setDialogOpen(true);
+    };
+    window.addEventListener('openAddDialog', handleOpenAdd);
+    return () => window.removeEventListener('openAddDialog', handleOpenAdd);
+  }, []);
 
   const handleOpenDialog = (item?: InventoryType) => {
     if (item) {
@@ -213,7 +228,7 @@ const PartsTab: React.FC = observer(() => {
                   <TableCell>
                     {item.category && <Chip label={item.category} size="small" />}
                   </TableCell>
-                  <TableCell align="right">${Number(item.unitPrice).toFixed(2)}</TableCell>
+                  <TableCell align="right">{settingsStore.currencySettings.symbol || '$'}{Number(item.unitPrice).toFixed(2)}</TableCell>
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
                       {isLowStock(item) && (
@@ -283,7 +298,7 @@ const PartsTab: React.FC = observer(() => {
                 fullWidth
                 value={formData.unitPrice}
                 onChange={(e) => setFormData({ ...formData, unitPrice: e.target.value })}
-                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                InputProps={{ startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment> }}
               />
               <TextField
                 label="Cost Price"
@@ -291,7 +306,7 @@ const PartsTab: React.FC = observer(() => {
                 fullWidth
                 value={formData.costPrice}
                 onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
-                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                InputProps={{ startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment> }}
               />
             </Box>
             <Box sx={{ display: 'flex', gap: 2 }}>
@@ -373,7 +388,7 @@ const defaultLabourForm: LabourFormData = {
 };
 
 const LabourTab: React.FC = observer(() => {
-  const { labourStore } = useStore();
+  const { labourStore, settingsStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Labour | null>(null);
   const [formData, setFormData] = useState<LabourFormData>(defaultLabourForm);
@@ -383,6 +398,17 @@ const LabourTab: React.FC = observer(() => {
     labourStore.fetchItems();
     labourStore.fetchCategories();
   }, [labourStore]);
+
+  // Listen for openAddDialog event from parent
+  useEffect(() => {
+    const handleOpenAdd = () => {
+      setEditingItem(null);
+      setFormData(defaultLabourForm);
+      setDialogOpen(true);
+    };
+    window.addEventListener('openAddDialog', handleOpenAdd);
+    return () => window.removeEventListener('openAddDialog', handleOpenAdd);
+  }, []);
 
   const handleOpenDialog = (item?: Labour) => {
     if (item) {
@@ -507,7 +533,7 @@ const LabourTab: React.FC = observer(() => {
                       variant="outlined"
                     />
                   </TableCell>
-                  <TableCell align="right">${Number(item.hourlyRate).toFixed(2)}</TableCell>
+                  <TableCell align="right">{settingsStore.currencySettings.symbol || '$'}{Number(item.hourlyRate).toFixed(2)}</TableCell>
                   <TableCell align="right">{item.isFlatRate ? '-' : `${item.defaultHours}h`}</TableCell>
                   <TableCell align="right">
                     <IconButton size="small" onClick={() => handleOpenDialog(item)}>
@@ -567,7 +593,7 @@ const LabourTab: React.FC = observer(() => {
                 fullWidth
                 value={formData.hourlyRate}
                 onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                InputProps={{ startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment> }}
               />
               {!formData.isFlatRate && (
                 <TextField
@@ -623,7 +649,7 @@ const defaultServiceForm: ServiceFormData = {
 };
 
 const ServicesTab: React.FC = observer(() => {
-  const { serviceStore } = useStore();
+  const { serviceStore, settingsStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Service | null>(null);
   const [formData, setFormData] = useState<ServiceFormData>(defaultServiceForm);
@@ -633,6 +659,17 @@ const ServicesTab: React.FC = observer(() => {
     serviceStore.fetchItems();
     serviceStore.fetchCategories();
   }, [serviceStore]);
+
+  // Listen for openAddDialog event from parent
+  useEffect(() => {
+    const handleOpenAdd = () => {
+      setEditingItem(null);
+      setFormData(defaultServiceForm);
+      setDialogOpen(true);
+    };
+    window.addEventListener('openAddDialog', handleOpenAdd);
+    return () => window.removeEventListener('openAddDialog', handleOpenAdd);
+  }, []);
 
   const handleOpenDialog = (item?: Service) => {
     if (item) {
@@ -743,7 +780,7 @@ const ServicesTab: React.FC = observer(() => {
                   <TableCell>
                     {item.category && <Chip label={item.category} size="small" />}
                   </TableCell>
-                  <TableCell align="right">${Number(item.basePrice).toFixed(2)}</TableCell>
+                  <TableCell align="right">{settingsStore.currencySettings.symbol || '$'}{Number(item.basePrice).toFixed(2)}</TableCell>
                   <TableCell align="right">
                     <IconButton size="small" onClick={() => handleOpenDialog(item)}>
                       <EditIcon fontSize="small" />
@@ -787,7 +824,7 @@ const ServicesTab: React.FC = observer(() => {
                 fullWidth
                 value={formData.basePrice}
                 onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                InputProps={{ startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment> }}
               />
               <TextField
                 label="Category"
@@ -844,8 +881,170 @@ const defaultTemplateForm: TemplateFormData = {
   isGlobal: false,
 };
 
+// ==================== SORTABLE TEMPLATE ITEM ROW ====================
+interface SortableTemplateItemRowProps {
+  id: string;
+  item: CreateTemplateItemDto;
+  index: number;
+  onRemove: (index: number) => void;
+  onUpdate: (index: number, updates: Partial<CreateTemplateItemDto>) => void;
+  getItemTypeBackground: (type: LineItemType) => string;
+  formatQuantity: (qty: number | string) => string;
+  currencySymbol: string;
+}
+
+const SortableTemplateItemRow: React.FC<SortableTemplateItemRowProps> = ({
+  id,
+  item,
+  index,
+  onRemove,
+  onUpdate,
+  getItemTypeBackground,
+  formatQuantity,
+  currencySymbol,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  const [editingField, setEditingField] = useState<'description' | 'quantity' | 'unitPrice' | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    backgroundColor: getItemTypeBackground(item.itemType),
+  };
+
+  const isTextType = item.itemType === 'TEXT';
+
+  const handleStartEdit = (field: 'description' | 'quantity' | 'unitPrice') => {
+    setEditingField(field);
+    if (field === 'description') {
+      setEditValue(item.description);
+    } else if (field === 'quantity') {
+      setEditValue(item.quantity.toString());
+    } else {
+      setEditValue(item.unitPrice.toString());
+    }
+  };
+
+  const handleSaveEdit = () => {
+    if (editingField === 'description') {
+      if (editValue !== item.description) {
+        onUpdate(index, { description: editValue });
+      }
+    } else if (editingField === 'quantity') {
+      const newQty = parseFloat(editValue);
+      if (!isNaN(newQty) && newQty !== item.quantity) {
+        onUpdate(index, { quantity: newQty });
+      }
+    } else if (editingField === 'unitPrice') {
+      const newPrice = parseFloat(editValue);
+      if (!isNaN(newPrice) && newPrice !== item.unitPrice) {
+        onUpdate(index, { unitPrice: newPrice });
+      }
+    }
+    setEditingField(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      setEditingField(null);
+    }
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+      <TableCell sx={{ cursor: 'grab', width: 40 }} {...attributes} {...listeners}>
+        <DragIcon fontSize="small" color="action" />
+      </TableCell>
+      <TableCell
+        onClick={() => handleStartEdit('description')}
+        sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover', borderRadius: 1 } }}
+      >
+        {editingField === 'description' ? (
+          <TextField
+            size="small"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleSaveEdit}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            variant="standard"
+            fullWidth
+          />
+        ) : isTextType ? (
+          <Typography fontStyle="italic" color="text.secondary">
+            {item.description}
+          </Typography>
+        ) : (
+          <Typography>{item.description}</Typography>
+        )}
+      </TableCell>
+      <TableCell
+        align="right"
+        onClick={() => !isTextType && handleStartEdit('quantity')}
+        sx={!isTextType ? { cursor: 'pointer', '&:hover': { bgcolor: 'action.hover', borderRadius: 1 } } : {}}
+      >
+        {!isTextType && (
+          editingField === 'quantity' ? (
+            <TextField
+              size="small"
+              type="number"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={handleSaveEdit}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              variant="standard"
+              inputProps={{ min: 0, step: 1, style: { textAlign: 'right' } }}
+              sx={{ width: 60 }}
+            />
+          ) : (
+            <Typography>{formatQuantity(item.quantity)}</Typography>
+          )
+        )}
+      </TableCell>
+      <TableCell
+        align="right"
+        onClick={() => !isTextType && handleStartEdit('unitPrice')}
+        sx={!isTextType ? { cursor: 'pointer', '&:hover': { bgcolor: 'action.hover', borderRadius: 1 } } : {}}
+      >
+        {!isTextType && (
+          editingField === 'unitPrice' ? (
+            <TextField
+              size="small"
+              type="number"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={handleSaveEdit}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              variant="standard"
+              inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+              sx={{ width: 80 }}
+            />
+          ) : (
+            <Typography>{currencySymbol}{Number(item.unitPrice).toFixed(2)}</Typography>
+          )
+        )}
+      </TableCell>
+      <TableCell align="right">
+        {!isTextType && <Typography>{currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}</Typography>}
+      </TableCell>
+      <TableCell align="right" sx={{ width: 40 }}>
+        <IconButton size="small" color="error" onClick={() => onRemove(index)}>
+          <DeleteIcon fontSize="small" />
+        </IconButton>
+      </TableCell>
+    </TableRow>
+  );
+};
+
 const TemplatesTab: React.FC = observer(() => {
-  const { templateStore, inventoryStore, labourStore, serviceStore } = useStore();
+  const { templateStore, inventoryStore, labourStore, serviceStore, settingsStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Template | null>(null);
   const [formData, setFormData] = useState<TemplateFormData>(defaultTemplateForm);
@@ -854,10 +1053,9 @@ const TemplatesTab: React.FC = observer(() => {
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   
   // Item selection state
-  const [itemType, setItemType] = useState<LineItemType>('INVENTORY');
+  const [itemType, setItemType] = useState<LineItemType>('TEXT');
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
   const [textDescription, setTextDescription] = useState('');
-  const [textPrice, setTextPrice] = useState('0');
   const [quantity, setQuantity] = useState('1');
 
   useEffect(() => {
@@ -866,6 +1064,18 @@ const TemplatesTab: React.FC = observer(() => {
     labourStore.fetchItems();
     serviceStore.fetchItems();
   }, [templateStore, inventoryStore, labourStore, serviceStore]);
+
+  // Listen for openAddDialog event from parent
+  useEffect(() => {
+    const handleOpenAdd = () => {
+      setEditingItem(null);
+      setFormData(defaultTemplateForm);
+      setTemplateItems([]);
+      setDialogOpen(true);
+    };
+    window.addEventListener('openAddDialog', handleOpenAdd);
+    return () => window.removeEventListener('openAddDialog', handleOpenAdd);
+  }, []);
 
   // Build options for autocomplete based on type
   const getAutocompleteOptions = (): SelectedItem[] => {
@@ -962,10 +1172,9 @@ const TemplatesTab: React.FC = observer(() => {
   };
 
   const handleAddItem = () => {
-    setItemType('INVENTORY');
+    setItemType('TEXT');
     setSelectedItem(null);
     setTextDescription('');
-    setTextPrice('0');
     setQuantity('1');
     setItemDialogOpen(true);
   };
@@ -977,8 +1186,8 @@ const TemplatesTab: React.FC = observer(() => {
       newItem = {
         itemType: 'TEXT',
         description: textDescription,
-        quantity: parseFloat(quantity) || 1,
-        unitPrice: parseFloat(textPrice) || 0,
+        quantity: 0, // TEXT items don't have quantity
+        unitPrice: 0, // TEXT items don't have price
         sortOrder: templateItems.length,
       };
     } else if (selectedItem) {
@@ -1017,10 +1226,55 @@ const TemplatesTab: React.FC = observer(() => {
     }
   };
 
+  const getItemTypeBackground = (type: LineItemType) => {
+    switch (type) {
+      case 'INVENTORY':
+        return 'rgba(33, 150, 243, 0.04)'; // Light blue
+      case 'LABOUR':
+        return 'rgba(76, 175, 80, 0.04)'; // Light green
+      case 'SERVICE':
+        return 'rgba(156, 39, 176, 0.04)'; // Light purple
+      case 'TEXT':
+        return 'rgba(158, 158, 158, 0.04)'; // Light grey
+      default:
+        return 'transparent';
+    }
+  };
+
+  const formatQuantity = (qty: number | string) => {
+    const num = typeof qty === 'string' ? parseFloat(qty) : qty;
+    return Number.isInteger(num) ? num.toString() : num.toFixed(2);
+  };
+
   const calculateTemplateTotal = (items: CreateTemplateItemDto[]) =>
     items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   
   const canAddItem = itemType === 'TEXT' ? textDescription.trim() !== '' : selectedItem !== null;
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = templateItems.findIndex((_, i) => `item-${i}` === active.id);
+      const newIndex = templateItems.findIndex((_, i) => `item-${i}` === over.id);
+      const newItems = arrayMove(templateItems, oldIndex, newIndex).map((item, idx) => ({
+        ...item,
+        sortOrder: idx,
+      }));
+      setTemplateItems(newItems);
+    }
+  };
+
+  const handleUpdateItem = (index: number, updates: Partial<CreateTemplateItemDto>) => {
+    setTemplateItems(templateItems.map((item, i) => (i === index ? { ...item, ...updates } : item)));
+  };
 
   return (
     <Box>
@@ -1088,7 +1342,7 @@ const TemplatesTab: React.FC = observer(() => {
                     />
                   </TableCell>
                   <TableCell align="right">
-                    ${calculateTemplateTotal(
+                    {settingsStore.currencySettings.symbol || '$'}{calculateTemplateTotal(
                       item.items?.map((i) => ({
                         itemType: i.itemType,
                         description: i.description,
@@ -1158,45 +1412,46 @@ const TemplatesTab: React.FC = observer(() => {
                   No items added yet. Click "Add Item" to add parts, labour, services, or text.
                 </Typography>
               ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Type</TableCell>
-                      <TableCell>Description</TableCell>
-                      <TableCell align="right">Qty</TableCell>
-                      <TableCell align="right">Price</TableCell>
-                      <TableCell align="right">Total</TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {templateItems.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <Chip label={getItemTypeLabel(item.itemType)} size="small" />
-                        </TableCell>
-                        <TableCell>{item.description}</TableCell>
-                        <TableCell align="right">{item.quantity}</TableCell>
-                        <TableCell align="right">${Number(item.unitPrice).toFixed(2)}</TableCell>
-                        <TableCell align="right">${(item.quantity * item.unitPrice).toFixed(2)}</TableCell>
-                        <TableCell align="right">
-                          <IconButton size="small" color="error" onClick={() => handleRemoveItem(index)}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell width={40}></TableCell>
+                        <TableCell>Description</TableCell>
+                        <TableCell align="right">Qty</TableCell>
+                        <TableCell align="right">Price</TableCell>
+                        <TableCell align="right">Total</TableCell>
+                        <TableCell width={40}></TableCell>
                       </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell colSpan={4} align="right">
-                        <Typography fontWeight={600}>Total:</Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography fontWeight={600}>${calculateTemplateTotal(templateItems).toFixed(2)}</Typography>
-                      </TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
+                    </TableHead>
+                    <TableBody>
+                      <SortableContext items={templateItems.map((_, i) => `item-${i}`)} strategy={verticalListSortingStrategy}>
+                        {templateItems.map((item, index) => (
+                          <SortableTemplateItemRow
+                            key={`item-${index}`}
+                            id={`item-${index}`}
+                            item={item}
+                            index={index}
+                            onRemove={handleRemoveItem}
+                            onUpdate={handleUpdateItem}
+                            getItemTypeBackground={getItemTypeBackground}
+                            formatQuantity={formatQuantity}
+                            currencySymbol={settingsStore.currencySettings.symbol || '$'}
+                          />
+                        ))}
+                      </SortableContext>
+                      <TableRow>
+                        <TableCell colSpan={4} align="right">
+                          <Typography fontWeight={600}>Total:</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography fontWeight={600}>{settingsStore.currencySettings.symbol || '$'}{calculateTemplateTotal(templateItems).toFixed(2)}</Typography>
+                        </TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </DndContext>
               )}
             </Box>
           </Box>
@@ -1224,43 +1479,27 @@ const TemplatesTab: React.FC = observer(() => {
                   setSelectedItem(null);
                 }}
               >
+                <MenuItem value="TEXT">Text (note/description)</MenuItem>
                 <MenuItem value="INVENTORY">Part (from inventory)</MenuItem>
                 <MenuItem value="LABOUR">Labour</MenuItem>
                 <MenuItem value="SERVICE">Service</MenuItem>
-                <MenuItem value="TEXT">Text (custom description)</MenuItem>
               </Select>
             </FormControl>
 
             {itemType === 'TEXT' ? (
-              // Custom text entry
+              // Custom text entry - no quantity or price needed
               <>
                 <TextField
-                  label="Description"
+                  label="Text / Note"
                   required
                   fullWidth
+                  multiline
+                  rows={2}
                   value={textDescription}
                   onChange={(e) => setTextDescription(e.target.value)}
-                  placeholder="Enter custom line item description"
+                  placeholder="Enter text that will appear on the invoice (e.g., 'Customer requested extra inspection')"
+                  helperText="This text will appear on the invoice without price"
                 />
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <TextField
-                    label="Quantity"
-                    type="number"
-                    fullWidth
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    inputProps={{ min: 0, step: 0.01 }}
-                  />
-                  <TextField
-                    label="Unit Price"
-                    type="number"
-                    fullWidth
-                    value={textPrice}
-                    onChange={(e) => setTextPrice(e.target.value)}
-                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                    inputProps={{ min: 0, step: 0.01 }}
-                  />
-                </Box>
               </>
             ) : (
               // Autocomplete for existing items
@@ -1286,7 +1525,7 @@ const TemplatesTab: React.FC = observer(() => {
                           <Typography variant="caption" color="text.secondary">{option.code}</Typography>
                         </Box>
                         <Typography variant="body2" color="primary">
-                          ${Number(option.unitPrice).toFixed(2)}
+                          {settingsStore.currencySettings.symbol || '$'}{Number(option.unitPrice).toFixed(2)}
                         </Typography>
                       </Box>
                     </li>
@@ -1307,21 +1546,21 @@ const TemplatesTab: React.FC = observer(() => {
                     fullWidth
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    inputProps={{ min: 0, step: 0.01 }}
+                    inputProps={{ min: 0, step: 1 }}
                   />
                   <TextField
                     label="Unit Price"
                     type="number"
                     fullWidth
                     value={selectedItem ? selectedItem.unitPrice.toString() : '0'}
-                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                    InputProps={{ startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment> }}
                     disabled
                     helperText="Price from selected item"
                   />
                 </Box>
                 {selectedItem && (
                   <Alert severity="info" sx={{ py: 0.5 }}>
-                    Total: ${(parseFloat(quantity) * selectedItem.unitPrice).toFixed(2)}
+                    Total: {settingsStore.currencySettings.symbol || '$'}{(parseFloat(quantity) * selectedItem.unitPrice).toFixed(2)}
                   </Alert>
                 )}
               </>

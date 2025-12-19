@@ -1,21 +1,18 @@
 import { test, expect } from '@playwright/test';
+import { loginAsAdmin } from '../fixtures/job.fixture';
 
 test.describe('Templates Management', () => {
   test.beforeEach(async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('input[type="email"]', 'admin@meccanico.dev');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button[type="submit"]');
-    await expect(page.locator('text=Dashboard')).toBeVisible();
+    await loginAsAdmin(page);
     
     // Navigate to Inventory
-    await page.click('button:has-text("Inventory")');
-    await expect(page.locator('h4:has-text("Inventory")')).toBeVisible();
+    await page.goto('/inventory');
+    await expect(page.locator('h4:has-text("Inventory")')).toBeVisible({ timeout: 10000 });
     
     // Click Templates tab
     await page.click('button[role="tab"]:has-text("Templates")');
-    await expect(page.locator('input[placeholder="Search templates..."]')).toBeVisible();
+    // Wait for Templates tab content to load
+    await expect(page.locator('button:has-text("Add Template")')).toBeVisible({ timeout: 5000 });
   });
 
   test('should display templates tab', async ({ page }) => {
@@ -25,6 +22,9 @@ test.describe('Templates Management', () => {
   test('should create a new template without items', async ({ page }) => {
     // Click Add Template button
     await page.click('button:has-text("Add Template")');
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     
     // Fill the form
     await page.fill('input[aria-label="Name"]', 'Empty Template');
@@ -40,6 +40,9 @@ test.describe('Templates Management', () => {
   test('should create a global template', async ({ page }) => {
     // Click Add Template button
     await page.click('button:has-text("Add Template")');
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     
     // Fill the form
     await page.fill('input[aria-label="Name"]', 'Global Template');
@@ -58,6 +61,9 @@ test.describe('Templates Management', () => {
     // Click Add Template button
     await page.click('button:has-text("Add Template")');
     
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    
     // Fill the name
     await page.fill('input[aria-label="Name"]', 'Test Template');
     
@@ -67,17 +73,20 @@ test.describe('Templates Management', () => {
     // Verify type selector shows with correct options
     await expect(page.locator('div[role="dialog"]:visible label:has-text("Type")')).toBeVisible();
     
-    // Click the select and verify options
+    // Click the select and verify options - Text is first now
     await page.click('div[role="dialog"]:visible div[role="combobox"]');
+    await expect(page.locator('li:has-text("Text (note/description)")')).toBeVisible();
     await expect(page.locator('li:has-text("Part (from inventory)")')).toBeVisible();
     await expect(page.locator('li:has-text("Labour")')).toBeVisible();
     await expect(page.locator('li:has-text("Service")')).toBeVisible();
-    await expect(page.locator('li:has-text("Text (custom description)")')).toBeVisible();
   });
 
   test('should add text item to template', async ({ page }) => {
     // Click Add Template button
     await page.click('button:has-text("Add Template")');
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     
     // Fill the name
     await page.fill('input[aria-label="Name"]', 'Text Item Template');
@@ -85,19 +94,13 @@ test.describe('Templates Management', () => {
     // Click Add Item
     await page.click('button:has-text("Add Item")');
     
-    // Select Text type
-    await page.click('div[role="dialog"]:visible div[role="combobox"]');
-    await page.click('li:has-text("Text (custom description)")');
-    
-    // Fill text item details
-    await page.fill('input[aria-label="Description"]', 'Custom text line');
-    await page.fill('input[aria-label="Quantity"]', '2');
-    await page.fill('input[aria-label="Unit Price"]', '50.00');
+    // TEXT is now the default type, just fill the description (no qty/price for text)
+    await page.fill('textarea[aria-label="Text / Note"]', 'Custom text line');
     
     // Add item
     await page.locator('div[role="dialog"]:visible button:has-text("Add"):not([disabled])').last().click();
     
-    // Verify item was added
+    // Verify item was added (shown in italic for text items)
     await expect(page.locator('td:has-text("Custom text line")')).toBeVisible();
     
     // Submit the template
@@ -107,9 +110,57 @@ test.describe('Templates Management', () => {
     await expect(page.locator('tr:has-text("Text Item Template") td:has-text("1 items")')).toBeVisible();
   });
 
+  test('should add part item to template from autocomplete', async ({ page }) => {
+    // Click Add Template button
+    await page.click('button:has-text("Add Template")');
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    
+    // Fill the name
+    await page.fill('input[aria-label="Name"]', 'Part Template');
+    
+    // Click Add Item
+    await page.click('button:has-text("Add Item")');
+    
+    // Change type to Part (from inventory)
+    await page.click('div[role="dialog"]:visible div[role="combobox"]');
+    await page.click('li:has-text("Part (from inventory)")');
+    
+    // The autocomplete should now be visible for selecting parts
+    await expect(page.locator('input[placeholder*="Search"]')).toBeVisible();
+  });
+
+  test('should support drag and drop reordering of items', async ({ page }) => {
+    // Click Add Template button
+    await page.click('button:has-text("Add Template")');
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    
+    // Fill the name
+    await page.fill('input[aria-label="Name"]', 'Drag Test Template');
+    
+    // Add first text item
+    await page.click('button:has-text("Add Item")');
+    await page.fill('textarea[aria-label="Text / Note"]', 'First item');
+    await page.locator('div[role="dialog"]:visible button:has-text("Add"):not([disabled])').last().click();
+    
+    // Add second text item
+    await page.click('button:has-text("Add Item")');
+    await page.fill('textarea[aria-label="Text / Note"]', 'Second item');
+    await page.locator('div[role="dialog"]:visible button:has-text("Add"):not([disabled])').last().click();
+    
+    // Verify both items are visible with drag handles
+    await expect(page.locator('td:has-text("First item")')).toBeVisible();
+    await expect(page.locator('td:has-text("Second item")')).toBeVisible();
+    await expect(page.locator('svg[data-testid="DragIndicatorIcon"]')).toHaveCount(2);
+  });
+
   test('should edit an existing template', async ({ page }) => {
     // First create a template
     await page.click('button:has-text("Add Template")');
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     await page.fill('input[aria-label="Name"]', 'Test Template');
     await page.click('button:has-text("Add"):not([disabled])');
     await expect(page.locator('td:has-text("Test Template")')).toBeVisible();
@@ -128,6 +179,7 @@ test.describe('Templates Management', () => {
   test('should delete a template', async ({ page }) => {
     // First create a template to delete
     await page.click('button:has-text("Add Template")');
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     await page.fill('input[aria-label="Name"]', 'Template To Delete');
     await page.click('button:has-text("Add"):not([disabled])');
     await expect(page.locator('td:has-text("Template To Delete")')).toBeVisible();
@@ -145,6 +197,7 @@ test.describe('Templates Management', () => {
   test('should search templates', async ({ page }) => {
     // Create a template
     await page.click('button:has-text("Add Template")');
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     await page.fill('input[aria-label="Name"]', 'Searchable Template');
     await page.click('button:has-text("Add"):not([disabled])');
     await expect(page.locator('td:has-text("Searchable Template")')).toBeVisible();

@@ -2,7 +2,19 @@ import { AppDataSource } from '../config/database';
 import { VehicleMake } from '../models/VehicleMake';
 import { VehicleModel } from '../models/VehicleModel';
 import { User, UserRole } from '../models/User';
+import { Customer } from '../models/Customer';
+import { Vehicle } from '../models/Vehicle';
+import { Inventory } from '../models/Inventory';
+import { Labour } from '../models/Labour';
+import { Service } from '../models/Service';
+import { ServiceItem, ServiceItemType } from '../models/ServiceItem';
+import { Template } from '../models/Template';
+import { TemplateItem } from '../models/TemplateItem';
+import { Job, JobStatus } from '../models/Job';
+import { LineItem, LineItemType } from '../models/LineItem';
+import { Settings } from '../models/Settings';
 import * as bcrypt from 'bcryptjs';
+import { generateCustomerCode, generateCode, CODE_PREFIXES } from './codeGenerator';
 
 /**
  * Vehicle makes with their common models
@@ -371,18 +383,42 @@ export const vehicleMakesWithModels = [
 ];
 
 /**
- * Seed the database with initial data
+ * Seed the database with comprehensive initial data
  */
 export async function seedDatabase(): Promise<void> {
-  console.log('🌱 Starting database seeding...');
+  console.log('🌱 Starting comprehensive database seeding...');
 
   // Seed vehicle makes and models
   await seedVehicleMakesAndModels();
 
-  // Seed default admin user
+  // Seed default users
   await seedDefaultUsers();
 
-  console.log('✅ Database seeding completed');
+  // Seed settings
+  await seedSettings();
+
+  // Seed customers
+  const customers = await seedCustomers();
+
+  // Seed vehicles
+  const vehicles = await seedVehicles(customers);
+
+  // Seed inventory
+  const inventoryItems = await seedInventory();
+
+  // Seed labour
+  const labourItems = await seedLabour();
+
+  // Seed services
+  const services = await seedServices(inventoryItems, labourItems);
+
+  // Seed templates
+  await seedTemplates(inventoryItems, labourItems, services);
+
+  // Seed jobs
+  await seedJobs(customers, vehicles, inventoryItems, labourItems, services);
+
+  console.log('✅ Comprehensive database seeding completed');
 }
 
 /**
@@ -436,7 +472,7 @@ async function seedDefaultUsers(): Promise<void> {
   });
 
   if (existingAdmin) {
-    console.log('  Default admin user already exists, skipping...');
+    console.log('  Default users already exist, skipping...');
     return;
   }
 
@@ -479,6 +515,830 @@ async function seedDefaultUsers(): Promise<void> {
 }
 
 /**
+ * Seed settings
+ */
+async function seedSettings(): Promise<void> {
+  const settingsRepository = AppDataSource.getRepository(Settings);
+
+  console.log('  Seeding settings...');
+
+  const defaultSettings = [
+    {
+      key: 'shop_info',
+      value: {
+        name: 'Meccanico Auto Repair',
+        address: '123 Main Street',
+        city: 'Sydney',
+        state: 'NSW',
+        postcode: '2000',
+        country: 'Australia',
+        phone: '+61 2 1234 5678',
+        email: 'info@meccanico.dev',
+        abn: '12 345 678 901',
+        website: 'https://meccanico.dev',
+      },
+    },
+    {
+      key: 'tax_settings',
+      value: {
+        name: 'GST',
+        defaultRate: 10.0,
+        enabled: true,
+      },
+    },
+    {
+      key: 'currency_settings',
+      value: {
+        code: 'AUD',
+        symbol: '$',
+        position: 'before',
+      },
+    },
+    {
+      key: 'invoice_settings',
+      value: {
+        prefix: 'INV',
+        nextNumber: 1,
+        footer: 'Thank you for your business!',
+        terms: 'Payment due within 30 days.',
+      },
+    },
+    {
+      key: 'vehicle_lexicon',
+      value: {
+        makes: [],
+        models: [],
+      },
+    },
+  ];
+
+  for (const setting of defaultSettings) {
+    const existing = await settingsRepository.findOne({
+      where: { key: setting.key },
+    });
+
+    if (!existing) {
+      const settingEntity = settingsRepository.create({
+        key: setting.key,
+        value: setting.value,
+      });
+      await settingsRepository.save(settingEntity);
+    }
+  }
+
+  console.log('  ✓ Seeded default settings');
+}
+
+/**
+ * Seed customers
+ */
+async function seedCustomers(): Promise<Customer[]> {
+  const customerRepository = AppDataSource.getRepository(Customer);
+
+  // Check if customers already exist
+  const existingCount = await customerRepository.count();
+  if (existingCount > 0) {
+    console.log('  Customers already seeded, skipping...');
+    return await customerRepository.find();
+  }
+
+  console.log('  Seeding customers...');
+
+  const customerData = [
+    {
+      name: 'John Smith',
+      email: 'john.smith@example.com',
+      phone: '+61 400 111 222',
+      address: '45 Oak Street, Melbourne VIC 3000',
+      notes: 'Regular customer, prefers morning appointments',
+    },
+    {
+      name: 'Sarah Johnson',
+      email: 'sarah.j@example.com',
+      phone: '+61 400 222 333',
+      address: '12 Elm Avenue, Brisbane QLD 4000',
+      notes: 'Fleet customer - 3 vehicles',
+    },
+    {
+      name: 'Michael Brown',
+      email: 'm.brown@example.com',
+      phone: '+61 400 333 444',
+      address: '78 Pine Road, Perth WA 6000',
+      notes: null,
+    },
+    {
+      name: 'Emma Wilson',
+      email: 'emma.wilson@example.com',
+      phone: '+61 400 444 555',
+      address: '23 Maple Drive, Adelaide SA 5000',
+      notes: 'VIP customer - 10% discount',
+    },
+    {
+      name: 'David Lee',
+      email: 'david.lee@example.com',
+      phone: '+61 400 555 666',
+      address: '56 Cedar Lane, Canberra ACT 2600',
+      notes: null,
+    },
+    {
+      name: 'Lisa Anderson',
+      email: 'lisa.a@example.com',
+      phone: '+61 400 666 777',
+      address: '89 Birch Street, Hobart TAS 7000',
+      notes: 'Corporate account',
+    },
+    {
+      name: 'Robert Taylor',
+      email: 'r.taylor@example.com',
+      phone: '+61 400 777 888',
+      address: '34 Willow Way, Darwin NT 0800',
+      notes: null,
+    },
+    {
+      name: 'Jennifer Martinez',
+      email: 'j.martinez@example.com',
+      phone: '+61 400 888 999',
+      address: '67 Ash Court, Gold Coast QLD 4217',
+      notes: 'New customer',
+    },
+  ];
+
+  const customers: Customer[] = [];
+
+  for (const data of customerData) {
+    const code = await generateCustomerCode(data.name);
+    const customer = customerRepository.create({
+      code,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      notes: data.notes,
+    });
+    const saved = await customerRepository.save(customer);
+    customers.push(saved);
+  }
+
+  console.log(`  ✓ Seeded ${customers.length} customers`);
+  return customers;
+}
+
+/**
+ * Seed vehicles
+ */
+async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
+  const vehicleRepository = AppDataSource.getRepository(Vehicle);
+
+  // Check if vehicles already exist
+  const existingCount = await vehicleRepository.count();
+  if (existingCount > 0) {
+    console.log('  Vehicles already seeded, skipping...');
+    return await vehicleRepository.find();
+  }
+
+  console.log('  Seeding vehicles...');
+
+  const vehicleData = [
+    { customerIndex: 0, make: 'Toyota', model: 'Camry', year: 2020, licensePlate: 'ABC123', color: 'Silver', mileage: 45000 },
+    { customerIndex: 0, make: 'Honda', model: 'Civic', year: 2018, licensePlate: 'XYZ789', color: 'Blue', mileage: 62000 },
+    { customerIndex: 1, make: 'Ford', model: 'Ranger', year: 2021, licensePlate: 'DEF456', color: 'White', mileage: 28000 },
+    { customerIndex: 1, make: 'Mazda', model: 'CX-5', year: 2019, licensePlate: 'GHI789', color: 'Red', mileage: 55000 },
+    { customerIndex: 1, make: 'Hyundai', model: 'Tucson', year: 2022, licensePlate: 'JKL012', color: 'Black', mileage: 15000 },
+    { customerIndex: 2, make: 'Volkswagen', model: 'Golf', year: 2017, licensePlate: 'MNO345', color: 'Grey', mileage: 78000 },
+    { customerIndex: 3, make: 'BMW', model: '3 Series', year: 2023, licensePlate: 'PQR678', color: 'Black', mileage: 8000 },
+    { customerIndex: 4, make: 'Nissan', model: 'X-Trail', year: 2020, licensePlate: 'STU901', color: 'White', mileage: 42000 },
+    { customerIndex: 5, make: 'Subaru', model: 'Outback', year: 2019, licensePlate: 'VWX234', color: 'Green', mileage: 60000 },
+    { customerIndex: 6, make: 'Toyota', model: 'RAV4', year: 2021, licensePlate: 'YZA567', color: 'Blue', mileage: 35000 },
+    { customerIndex: 7, make: 'Kia', model: 'Sportage', year: 2022, licensePlate: 'BCD890', color: 'Silver', mileage: 20000 },
+  ];
+
+  const vehicles: Vehicle[] = [];
+
+  for (const data of vehicleData) {
+    const code = await generateCode('vehicles', CODE_PREFIXES.VEHICLE);
+    const vehicle = vehicleRepository.create({
+      code,
+      customerId: customers[data.customerIndex].id,
+      make: data.make,
+      model: data.model,
+      year: data.year,
+      licensePlate: data.licensePlate,
+      color: data.color,
+      mileage: data.mileage,
+    });
+    const saved = await vehicleRepository.save(vehicle);
+    vehicles.push(saved);
+  }
+
+  console.log(`  ✓ Seeded ${vehicles.length} vehicles`);
+  return vehicles;
+}
+
+/**
+ * Seed inventory items
+ */
+async function seedInventory(): Promise<Inventory[]> {
+  const inventoryRepository = AppDataSource.getRepository(Inventory);
+
+  // Check if inventory already exists
+  const existingCount = await inventoryRepository.count();
+  if (existingCount > 0) {
+    console.log('  Inventory already seeded, skipping...');
+    return await inventoryRepository.find();
+  }
+
+  console.log('  Seeding inventory items...');
+
+  const inventoryData = [
+    { name: 'Oil Filter', description: 'Standard oil filter', sku: 'OF-001', unitPrice: 12.99, costPrice: 8.50, quantityInStock: 50, minimumStock: 10, category: 'Filters', unit: 'each' },
+    { name: 'Air Filter', description: 'High-quality air filter', sku: 'AF-001', unitPrice: 25.50, costPrice: 15.00, quantityInStock: 30, minimumStock: 5, category: 'Filters', unit: 'each' },
+    { name: 'Brake Pads - Front', description: 'Ceramic brake pads front', sku: 'BP-F-001', unitPrice: 89.99, costPrice: 55.00, quantityInStock: 20, minimumStock: 4, category: 'Brakes', unit: 'set' },
+    { name: 'Brake Pads - Rear', description: 'Ceramic brake pads rear', sku: 'BP-R-001', unitPrice: 79.99, costPrice: 50.00, quantityInStock: 18, minimumStock: 4, category: 'Brakes', unit: 'set' },
+    { name: 'Brake Fluid', description: 'DOT 4 brake fluid', sku: 'BF-001', unitPrice: 15.99, costPrice: 8.00, quantityInStock: 25, minimumStock: 5, category: 'Fluids', unit: 'bottle' },
+    { name: 'Engine Oil 5W-30', description: 'Synthetic engine oil 5L', sku: 'EO-530', unitPrice: 45.99, costPrice: 28.00, quantityInStock: 40, minimumStock: 10, category: 'Fluids', unit: 'bottle' },
+    { name: 'Spark Plugs', description: 'Iridium spark plugs set of 4', sku: 'SP-001', unitPrice: 65.00, costPrice: 40.00, quantityInStock: 15, minimumStock: 3, category: 'Ignition', unit: 'set' },
+    { name: 'Wiper Blades', description: 'Premium wiper blades pair', sku: 'WB-001', unitPrice: 35.00, costPrice: 20.00, quantityInStock: 12, minimumStock: 2, category: 'Accessories', unit: 'pair' },
+    { name: 'Battery', description: '12V Car battery', sku: 'BAT-001', unitPrice: 149.99, costPrice: 95.00, quantityInStock: 8, minimumStock: 2, category: 'Electrical', unit: 'each' },
+    { name: 'Timing Belt', description: 'Timing belt kit', sku: 'TB-001', unitPrice: 120.00, costPrice: 75.00, quantityInStock: 6, minimumStock: 2, category: 'Engine', unit: 'kit' },
+    { name: 'Radiator Hose', description: 'Upper radiator hose', sku: 'RH-001', unitPrice: 28.50, costPrice: 15.00, quantityInStock: 10, minimumStock: 2, category: 'Cooling', unit: 'each' },
+    { name: 'Headlight Bulb', description: 'H7 halogen headlight bulb', sku: 'HB-001', unitPrice: 18.99, costPrice: 10.00, quantityInStock: 20, minimumStock: 5, category: 'Electrical', unit: 'each' },
+    { name: 'Wheel Bearing', description: 'Front wheel bearing', sku: 'WBG-001', unitPrice: 85.00, costPrice: 50.00, quantityInStock: 5, minimumStock: 2, category: 'Suspension', unit: 'each' },
+    { name: 'Shock Absorber', description: 'Front shock absorber', sku: 'SA-001', unitPrice: 125.00, costPrice: 80.00, quantityInStock: 4, minimumStock: 1, category: 'Suspension', unit: 'each' },
+    { name: 'Transmission Fluid', description: 'ATF transmission fluid 4L', sku: 'TF-001', unitPrice: 55.99, costPrice: 35.00, quantityInStock: 15, minimumStock: 3, category: 'Fluids', unit: 'bottle' },
+  ];
+
+  const inventoryItems: Inventory[] = [];
+
+  for (const data of inventoryData) {
+    const code = await generateCode('inventory', CODE_PREFIXES.INVENTORY);
+    const item = inventoryRepository.create({
+      code,
+      name: data.name,
+      description: data.description,
+      sku: data.sku,
+      unitPrice: data.unitPrice,
+      costPrice: data.costPrice,
+      quantityInStock: data.quantityInStock,
+      minimumStock: data.minimumStock,
+      category: data.category,
+      unit: data.unit,
+      isActive: true,
+    });
+    const saved = await inventoryRepository.save(item);
+    inventoryItems.push(saved);
+  }
+
+  console.log(`  ✓ Seeded ${inventoryItems.length} inventory items`);
+  return inventoryItems;
+}
+
+/**
+ * Seed labour rates
+ */
+async function seedLabour(): Promise<Labour[]> {
+  const labourRepository = AppDataSource.getRepository(Labour);
+
+  // Check if labour already exists
+  const existingCount = await labourRepository.count();
+  if (existingCount > 0) {
+    console.log('  Labour already seeded, skipping...');
+    return await labourRepository.find();
+  }
+
+  console.log('  Seeding labour rates...');
+
+  const labourData = [
+    { name: 'General Labor', description: 'Standard mechanic labor', hourlyRate: 85.00, defaultHours: 1, isFlatRate: false, category: 'General' },
+    { name: 'Senior Mechanic', description: 'Senior mechanic labor', hourlyRate: 120.00, defaultHours: 1, isFlatRate: false, category: 'General' },
+    { name: 'Diagnostic', description: 'Vehicle diagnostic service', hourlyRate: 150.00, defaultHours: 1, isFlatRate: false, category: 'Diagnostic' },
+    { name: 'Oil Change Service', description: 'Complete oil change service', hourlyRate: 0, defaultHours: 0.5, isFlatRate: true, category: 'Service', unitPrice: 45.00 },
+    { name: 'Brake Service', description: 'Complete brake service', hourlyRate: 0, defaultHours: 2, isFlatRate: true, category: 'Service', unitPrice: 180.00 },
+    { name: 'Tire Rotation', description: 'Tire rotation service', hourlyRate: 0, defaultHours: 0.5, isFlatRate: true, category: 'Service', unitPrice: 35.00 },
+    { name: 'Battery Replacement', description: 'Battery replacement service', hourlyRate: 0, defaultHours: 0.5, isFlatRate: true, category: 'Service', unitPrice: 25.00 },
+    { name: 'AC Service', description: 'Air conditioning service', hourlyRate: 100.00, defaultHours: 1.5, isFlatRate: false, category: 'HVAC' },
+  ];
+
+  const labourItems: Labour[] = [];
+
+  for (const data of labourData) {
+    const code = await generateCode('labour', CODE_PREFIXES.LABOUR);
+    const labour = labourRepository.create({
+      code,
+      name: data.name,
+      description: data.description,
+      hourlyRate: data.isFlatRate ? (data as any).unitPrice : data.hourlyRate,
+      defaultHours: data.defaultHours,
+      isFlatRate: data.isFlatRate,
+      category: data.category,
+      isActive: true,
+    });
+    const saved = await labourRepository.save(labour);
+    labourItems.push(saved);
+  }
+
+  console.log(`  ✓ Seeded ${labourItems.length} labour rates`);
+  return labourItems;
+}
+
+/**
+ * Seed services
+ */
+async function seedServices(inventoryItems: Inventory[], labourItems: Labour[]): Promise<Service[]> {
+  const serviceRepository = AppDataSource.getRepository(Service);
+  const serviceItemRepository = AppDataSource.getRepository(ServiceItem);
+
+  // Check if services already exist
+  const existingCount = await serviceRepository.count();
+  if (existingCount > 0) {
+    console.log('  Services already seeded, skipping...');
+    return await serviceRepository.find({ relations: ['items'] });
+  }
+
+  console.log('  Seeding services...');
+
+  const services: Service[] = [];
+  const generalLabour = labourItems.find(l => l.name === 'General Labor')!;
+  const oilFilter = inventoryItems.find(i => i.name === 'Oil Filter')!;
+  const engineOil = inventoryItems.find(i => i.name === 'Engine Oil 5W-30')!;
+  const brakePadsFront = inventoryItems.find(i => i.name === 'Brake Pads - Front')!;
+  const brakePadsRear = inventoryItems.find(i => i.name === 'Brake Pads - Rear')!;
+  const brakeFluid = inventoryItems.find(i => i.name === 'Brake Fluid')!;
+  const brakeServiceLabour = labourItems.find(l => l.name === 'Brake Service')!;
+
+  // Service 1: Oil Change
+  const oilChangeCode = await generateCode('services', CODE_PREFIXES.SERVICE);
+  const oilChange = serviceRepository.create({
+    code: oilChangeCode,
+    name: 'Oil Change Service',
+    description: 'Complete oil and filter change',
+    basePrice: 89.99,
+    category: 'Maintenance',
+    isActive: true,
+  });
+  const savedOilChange = await serviceRepository.save(oilChange);
+  
+  await serviceItemRepository.save([
+    serviceItemRepository.create({
+      serviceId: savedOilChange.id,
+      itemType: ServiceItemType.INVENTORY,
+      itemId: oilFilter.id,
+      quantity: 1,
+    }),
+    serviceItemRepository.create({
+      serviceId: savedOilChange.id,
+      itemType: ServiceItemType.INVENTORY,
+      itemId: engineOil.id,
+      quantity: 1,
+    }),
+    serviceItemRepository.create({
+      serviceId: savedOilChange.id,
+      itemType: ServiceItemType.LABOUR,
+      itemId: generalLabour.id,
+      quantity: 0.5,
+    }),
+  ]);
+  services.push(savedOilChange);
+
+  // Service 2: Brake Service
+  const brakeServiceCode = await generateCode('services', CODE_PREFIXES.SERVICE);
+  const brakeService = serviceRepository.create({
+    code: brakeServiceCode,
+    name: 'Complete Brake Service',
+    description: 'Full brake pad replacement and fluid change',
+    basePrice: 450.00,
+    category: 'Brakes',
+    isActive: true,
+  });
+  const savedBrakeService = await serviceRepository.save(brakeService);
+  
+  await serviceItemRepository.save([
+    serviceItemRepository.create({
+      serviceId: savedBrakeService.id,
+      itemType: ServiceItemType.INVENTORY,
+      itemId: brakePadsFront.id,
+      quantity: 1,
+    }),
+    serviceItemRepository.create({
+      serviceId: savedBrakeService.id,
+      itemType: ServiceItemType.INVENTORY,
+      itemId: brakePadsRear.id,
+      quantity: 1,
+    }),
+    serviceItemRepository.create({
+      serviceId: savedBrakeService.id,
+      itemType: ServiceItemType.INVENTORY,
+      itemId: brakeFluid.id,
+      quantity: 1,
+    }),
+    serviceItemRepository.create({
+      serviceId: savedBrakeService.id,
+      itemType: ServiceItemType.LABOUR,
+      itemId: brakeServiceLabour.id,
+      quantity: 1,
+    }),
+  ]);
+  services.push(savedBrakeService);
+
+  // Service 3: Clutch Change
+  const clutchCode = await generateCode('services', CODE_PREFIXES.SERVICE);
+  const clutchService = serviceRepository.create({
+    code: clutchCode,
+    name: 'Clutch Change',
+    description: 'Complete clutch replacement service',
+    basePrice: 850.00,
+    category: 'Transmission',
+    isActive: true,
+  });
+  const savedClutch = await serviceRepository.save(clutchService);
+  services.push(savedClutch);
+
+  console.log(`  ✓ Seeded ${services.length} services`);
+  return services;
+}
+
+/**
+ * Seed templates
+ */
+async function seedTemplates(inventoryItems: Inventory[], labourItems: Labour[], services: Service[]): Promise<void> {
+  const templateRepository = AppDataSource.getRepository(Template);
+  const templateItemRepository = AppDataSource.getRepository(TemplateItem);
+  const userRepository = AppDataSource.getRepository(User);
+
+  // Check if templates already exist
+  const existingCount = await templateRepository.count();
+  if (existingCount > 0) {
+    console.log('  Templates already seeded, skipping...');
+    return;
+  }
+
+  console.log('  Seeding templates...');
+
+  const admin = await userRepository.findOne({ where: { email: 'admin@meccanico.dev' } });
+  const generalLabour = labourItems.find(l => l.name === 'General Labor')!;
+  const diagnostic = labourItems.find(l => l.name === 'Diagnostic')!;
+  const oilFilter = inventoryItems.find(i => i.name === 'Oil Filter')!;
+  const engineOil = inventoryItems.find(i => i.name === 'Engine Oil 5W-30')!;
+  const airFilter = inventoryItems.find(i => i.name === 'Air Filter')!;
+  const sparkPlugs = inventoryItems.find(i => i.name === 'Spark Plugs')!;
+  const oilChangeService = services.find(s => s.name === 'Oil Change Service')!;
+
+  // Template 1: Standard Service
+  const template1Code = await generateCode('templates', CODE_PREFIXES.TEMPLATE);
+  const template1 = templateRepository.create({
+    code: template1Code,
+    name: 'Standard Service',
+    description: 'Standard vehicle service template',
+    createdBy: admin?.id || null,
+    isGlobal: true,
+  });
+  const savedTemplate1 = await templateRepository.save(template1);
+
+  await templateItemRepository.save([
+    templateItemRepository.create({
+      templateId: savedTemplate1.id,
+      itemType: LineItemType.TEXT,
+      itemId: null,
+      description: 'Standard Service',
+      quantity: 1,
+      unitPrice: 0,
+      sortOrder: 0,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate1.id,
+      itemType: LineItemType.INVENTORY,
+      itemId: oilFilter.id,
+      description: `${oilFilter.name} (${oilFilter.code})`,
+      quantity: 1,
+      unitPrice: oilFilter.unitPrice,
+      sortOrder: 1,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate1.id,
+      itemType: LineItemType.INVENTORY,
+      itemId: engineOil.id,
+      description: `${engineOil.name} (${engineOil.code})`,
+      quantity: 1,
+      unitPrice: engineOil.unitPrice,
+      sortOrder: 2,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate1.id,
+      itemType: LineItemType.LABOUR,
+      itemId: generalLabour.id,
+      description: `${generalLabour.name} (${generalLabour.code})`,
+      quantity: 1,
+      unitPrice: generalLabour.hourlyRate,
+      sortOrder: 3,
+    }),
+  ]);
+
+  // Template 2: Major Service
+  const template2Code = await generateCode('templates', CODE_PREFIXES.TEMPLATE);
+  const template2 = templateRepository.create({
+    code: template2Code,
+    name: 'Major Service',
+    description: 'Major vehicle service template',
+    createdBy: admin?.id || null,
+    isGlobal: true,
+  });
+  const savedTemplate2 = await templateRepository.save(template2);
+
+  await templateItemRepository.save([
+    templateItemRepository.create({
+      templateId: savedTemplate2.id,
+      itemType: LineItemType.TEXT,
+      itemId: null,
+      description: 'Major Service',
+      quantity: 1,
+      unitPrice: 0,
+      sortOrder: 0,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate2.id,
+      itemType: LineItemType.INVENTORY,
+      itemId: oilFilter.id,
+      description: `${oilFilter.name} (${oilFilter.code})`,
+      quantity: 1,
+      unitPrice: oilFilter.unitPrice,
+      sortOrder: 1,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate2.id,
+      itemType: LineItemType.INVENTORY,
+      itemId: engineOil.id,
+      description: `${engineOil.name} (${engineOil.code})`,
+      quantity: 1,
+      unitPrice: engineOil.unitPrice,
+      sortOrder: 2,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate2.id,
+      itemType: LineItemType.INVENTORY,
+      itemId: airFilter.id,
+      description: `${airFilter.name} (${airFilter.code})`,
+      quantity: 1,
+      unitPrice: airFilter.unitPrice,
+      sortOrder: 3,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate2.id,
+      itemType: LineItemType.INVENTORY,
+      itemId: sparkPlugs.id,
+      description: `${sparkPlugs.name} (${sparkPlugs.code})`,
+      quantity: 1,
+      unitPrice: sparkPlugs.unitPrice,
+      sortOrder: 4,
+    }),
+    templateItemRepository.create({
+      templateId: savedTemplate2.id,
+      itemType: LineItemType.LABOUR,
+      itemId: generalLabour.id,
+      description: `${generalLabour.name} (${generalLabour.code})`,
+      quantity: 2,
+      unitPrice: generalLabour.hourlyRate,
+      sortOrder: 5,
+    }),
+  ]);
+
+  console.log('  ✓ Seeded 2 templates');
+}
+
+/**
+ * Generate job code with specific date
+ */
+function generateJobCodeForDate(date: Date, sequence: number): string {
+  const yy = date.getFullYear().toString().slice(-2);
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0');
+  const dd = date.getDate().toString().padStart(2, '0');
+  const paddedNumber = sequence.toString().padStart(3, '0');
+  return `${CODE_PREFIXES.JOB}${yy}${mm}${dd}${paddedNumber}`;
+}
+
+/**
+ * Seed jobs
+ */
+async function seedJobs(
+  customers: Customer[],
+  vehicles: Vehicle[],
+  inventoryItems: Inventory[],
+  labourItems: Labour[],
+  services: Service[]
+): Promise<void> {
+  const jobRepository = AppDataSource.getRepository(Job);
+  const lineItemRepository = AppDataSource.getRepository(LineItem);
+  const userRepository = AppDataSource.getRepository(User);
+
+  // Check if jobs already exist
+  const existingCount = await jobRepository.count();
+  if (existingCount > 0) {
+    console.log('  Jobs already seeded, skipping...');
+    return;
+  }
+
+  console.log('  Seeding jobs...');
+
+  const mechanic = await userRepository.findOne({ where: { email: 'mechanic@meccanico.dev' } });
+  const generalLabour = labourItems.find(l => l.name === 'General Labor')!;
+  const oilFilter = inventoryItems.find(i => i.name === 'Oil Filter')!;
+  const engineOil = inventoryItems.find(i => i.name === 'Engine Oil 5W-30')!;
+  const brakePadsFront = inventoryItems.find(i => i.name === 'Brake Pads - Front')!;
+  const oilChangeService = services.find(s => s.name === 'Oil Change Service')!;
+
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const lastWeek = new Date(now);
+  lastWeek.setDate(lastWeek.getDate() - 7);
+  const lastMonth = new Date(now);
+  lastMonth.setMonth(lastMonth.getMonth() - 1);
+
+  // Job 1: ESTIMATE
+  const job1Code = generateJobCodeForDate(yesterday, 1);
+  const job1 = jobRepository.create({
+    code: job1Code,
+    customerId: customers[0].id,
+    vehicleId: vehicles[0].id,
+    assignedTo: mechanic?.id || null,
+    status: JobStatus.ESTIMATE,
+    notes: 'Customer requested quote for oil change',
+    taxRate: 10.0,
+    discountAmount: 0,
+    discountPercent: 0,
+    createdAt: yesterday,
+  });
+  const savedJob1 = await jobRepository.save(job1);
+
+  await lineItemRepository.save([
+    lineItemRepository.create({
+      jobId: savedJob1.id,
+      type: LineItemType.TEXT,
+      referenceId: null,
+      description: 'Service',
+      quantity: 1,
+      unitPrice: 0,
+      sortOrder: 0,
+    }),
+    lineItemRepository.create({
+      jobId: savedJob1.id,
+      type: LineItemType.INVENTORY,
+      referenceId: oilFilter.id,
+      description: `${oilFilter.name} (${oilFilter.code})`,
+      quantity: 1,
+      unitPrice: oilFilter.unitPrice,
+      sortOrder: 1,
+    }),
+    lineItemRepository.create({
+      jobId: savedJob1.id,
+      type: LineItemType.INVENTORY,
+      referenceId: engineOil.id,
+      description: `${engineOil.name} (${engineOil.code})`,
+      quantity: 1,
+      unitPrice: engineOil.unitPrice,
+      sortOrder: 2,
+    }),
+    lineItemRepository.create({
+      jobId: savedJob1.id,
+      type: LineItemType.LABOUR,
+      referenceId: generalLabour.id,
+      description: `${generalLabour.name} (${generalLabour.code})`,
+      quantity: 0.5,
+      unitPrice: generalLabour.hourlyRate,
+      sortOrder: 3,
+    }),
+  ]);
+
+  // Job 2: IN_PROGRESS
+  const job2Code = generateJobCodeForDate(lastWeek, 1);
+  const job2 = jobRepository.create({
+    code: job2Code,
+    customerId: customers[1].id,
+    vehicleId: vehicles[2].id,
+    assignedTo: mechanic?.id || null,
+    status: JobStatus.IN_PROGRESS,
+    notes: 'Brake pad replacement in progress',
+    taxRate: 10.0,
+    discountAmount: 0,
+    discountPercent: 0,
+    startedAt: yesterday,
+    createdAt: lastWeek,
+  });
+  const savedJob2 = await jobRepository.save(job2);
+
+  await lineItemRepository.save([
+    lineItemRepository.create({
+      jobId: savedJob2.id,
+      type: LineItemType.INVENTORY,
+      referenceId: brakePadsFront.id,
+      description: `${brakePadsFront.name} (${brakePadsFront.code})`,
+      quantity: 1,
+      unitPrice: brakePadsFront.unitPrice,
+      sortOrder: 0,
+    }),
+    lineItemRepository.create({
+      jobId: savedJob2.id,
+      type: LineItemType.LABOUR,
+      referenceId: generalLabour.id,
+      description: `${generalLabour.name} (${generalLabour.code})`,
+      quantity: 2,
+      unitPrice: generalLabour.hourlyRate,
+      sortOrder: 1,
+    }),
+  ]);
+
+  // Job 3: INVOICED
+  const job3Code = generateJobCodeForDate(lastWeek, 2);
+  const job3 = jobRepository.create({
+    code: job3Code,
+    customerId: customers[2].id,
+    vehicleId: vehicles[5].id,
+    assignedTo: mechanic?.id || null,
+    status: JobStatus.INVOICED,
+    notes: 'Service completed',
+    taxRate: 10.0,
+    discountAmount: 0,
+    discountPercent: 0,
+    startedAt: lastWeek,
+    completedAt: yesterday,
+    invoicedAt: yesterday,
+    createdAt: lastMonth,
+  });
+  const savedJob3 = await jobRepository.save(job3);
+
+  await lineItemRepository.save([
+    lineItemRepository.create({
+      jobId: savedJob3.id,
+      type: LineItemType.SERVICE,
+      referenceId: oilChangeService.id,
+      description: `${oilChangeService.name} (${oilChangeService.code})`,
+      quantity: 1,
+      unitPrice: oilChangeService.basePrice,
+      sortOrder: 0,
+    }),
+  ]);
+
+  // Job 4: PAID
+  const job4Code = generateJobCodeForDate(lastMonth, 1);
+  const job4 = jobRepository.create({
+    code: job4Code,
+    customerId: customers[3].id,
+    vehicleId: vehicles[6].id,
+    assignedTo: mechanic?.id || null,
+    status: JobStatus.PAID,
+    notes: 'Payment received',
+    taxRate: 10.0,
+    discountAmount: 0,
+    discountPercent: 10.0,
+    startedAt: lastMonth,
+    completedAt: lastWeek,
+    invoicedAt: lastWeek,
+    paidAt: yesterday,
+    createdAt: lastMonth,
+  });
+  const savedJob4 = await jobRepository.save(job4);
+
+  await lineItemRepository.save([
+    lineItemRepository.create({
+      jobId: savedJob4.id,
+      type: LineItemType.TEXT,
+      referenceId: null,
+      description: 'Scanning',
+      quantity: 1,
+      unitPrice: 0,
+      sortOrder: 0,
+    }),
+    lineItemRepository.create({
+      jobId: savedJob4.id,
+      type: LineItemType.INVENTORY,
+      referenceId: oilFilter.id,
+      description: `${oilFilter.name} (${oilFilter.code})`,
+      quantity: 1,
+      unitPrice: oilFilter.unitPrice,
+      sortOrder: 1,
+    }),
+  ]);
+
+  // Job 5: ON_HOLD
+  const job5Code = generateJobCodeForDate(lastWeek, 3);
+  const job5 = jobRepository.create({
+    code: job5Code,
+    customerId: customers[4].id,
+    vehicleId: vehicles[7].id,
+    assignedTo: mechanic?.id || null,
+    status: JobStatus.ON_HOLD,
+    notes: 'Waiting for parts',
+    internalNotes: 'Customer approved, waiting for brake pads to arrive',
+    taxRate: 10.0,
+    discountAmount: 0,
+    discountPercent: 0,
+    startedAt: yesterday,
+    createdAt: lastWeek,
+  });
+  await jobRepository.save(job5);
+
+  console.log('  ✓ Seeded 5 jobs in various statuses');
+}
+
+/**
  * Run seeding if called directly
  */
 if (require.main === module) {
@@ -490,4 +1350,3 @@ if (require.main === module) {
       process.exit(1);
     });
 }
-

@@ -1,18 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { loginAsAdmin } from '../fixtures/job.fixture';
 
 test.describe('Services Management', () => {
   test.beforeEach(async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('input[type="email"]', 'admin@meccanico.dev');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button[type="submit"]');
-    await expect(page.locator('text=Dashboard')).toBeVisible();
+    await loginAsAdmin(page);
     
     // Navigate to Inventory and Services tab
-    await page.click('button:has-text("Inventory")');
-    await expect(page.locator('h4:has-text("Inventory")')).toBeVisible();
+    await page.goto('/inventory');
+    await expect(page.locator('h4:has-text("Inventory")')).toBeVisible({ timeout: 10000 });
     await page.click('button[role="tab"]:has-text("Services")');
+    // Wait for Services tab content to load
+    await expect(page.locator('button:has-text("Add Service")')).toBeVisible({ timeout: 5000 });
   });
 
   test('should display services tab', async ({ page }) => {
@@ -24,14 +22,20 @@ test.describe('Services Management', () => {
     // Click Add Service button
     await page.click('button:has-text("Add Service")');
     
+    // Wait for dialog to open
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+    
     // Fill the form
-    await page.fill('input[aria-label="Name"]', 'Full Service');
-    await page.fill('input[aria-label="Description"]', 'Complete vehicle service package');
-    await page.fill('input[aria-label="Base Price"]', '199.99');
-    await page.fill('input[aria-label="Category"]', 'Maintenance');
+    await page.getByLabel('Name').fill('Full Service');
+    await page.getByLabel('Description').fill('Complete vehicle service package');
+    await page.getByLabel('Base Price').fill('199.99');
+    await page.getByLabel('Category').fill('Maintenance');
     
     // Submit
-    await page.click('button:has-text("Add"):not([disabled])');
+    await dialog.locator('button:has-text("Add")').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
     
     // Verify the service was created
     await expect(page.locator('td:has-text("Full Service")')).toBeVisible();
@@ -41,17 +45,24 @@ test.describe('Services Management', () => {
   test('should edit an existing service', async ({ page }) => {
     // First create a service
     await page.click('button:has-text("Add Service")');
-    await page.fill('input[aria-label="Name"]', 'Test Service');
-    await page.fill('input[aria-label="Base Price"]', '100.00');
-    await page.click('button:has-text("Add"):not([disabled])');
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.getByLabel('Name').fill('Test Service');
+    await page.getByLabel('Base Price').fill('100.00');
+    await dialog.locator('button:has-text("Add")').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
     await expect(page.locator('td:has-text("Test Service")')).toBeVisible();
     
     // Click edit button
     await page.locator('tr:has-text("Test Service") button').first().click();
     
     // Update the price
-    await page.fill('input[aria-label="Base Price"]', '150.00');
-    await page.click('button:has-text("Save")');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.getByLabel('Base Price').fill('150.00');
+    await dialog.locator('button:has-text("Save")').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
     
     // Verify the update
     await expect(page.locator('td:has-text("$150.00")')).toBeVisible();
@@ -60,16 +71,21 @@ test.describe('Services Management', () => {
   test('should delete a service', async ({ page }) => {
     // First create a service to delete
     await page.click('button:has-text("Add Service")');
-    await page.fill('input[aria-label="Name"]', 'Service To Delete');
-    await page.fill('input[aria-label="Base Price"]', '50.00');
-    await page.click('button:has-text("Add"):not([disabled])');
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.getByLabel('Name').fill('Service To Delete');
+    await page.getByLabel('Base Price').fill('50.00');
+    await dialog.locator('button:has-text("Add")').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
     await expect(page.locator('td:has-text("Service To Delete")')).toBeVisible();
     
     // Click delete button
     await page.locator('tr:has-text("Service To Delete") button').last().click();
     
     // Confirm deletion
-    await page.click('button:has-text("Delete")');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await dialog.locator('button:has-text("Delete")').click();
     
     // Verify the service was deleted
     await expect(page.locator('td:has-text("Service To Delete")')).not.toBeVisible();
@@ -78,9 +94,13 @@ test.describe('Services Management', () => {
   test('should search services', async ({ page }) => {
     // Create a service
     await page.click('button:has-text("Add Service")');
-    await page.fill('input[aria-label="Name"]', 'Searchable Service');
-    await page.fill('input[aria-label="Base Price"]', '75.00');
-    await page.click('button:has-text("Add"):not([disabled])');
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.getByLabel('Name').fill('Searchable Service');
+    await page.getByLabel('Base Price').fill('75.00');
+    await dialog.locator('button:has-text("Add")').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
     await expect(page.locator('td:has-text("Searchable Service")')).toBeVisible();
     
     // Search for it
@@ -92,4 +112,3 @@ test.describe('Services Management', () => {
     await expect(page.locator('td:has-text("Searchable Service")')).not.toBeVisible();
   });
 });
-

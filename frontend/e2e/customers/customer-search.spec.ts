@@ -21,8 +21,8 @@ test.describe('Customer Search', () => {
     await customerPage.goto();
     await customerPage.search(uniqueName);
 
-    // Should find the customer
-    await expect(page.locator(`text=${uniqueName}`)).toBeVisible({ timeout: 10000 });
+    // Should find the customer (use first() to handle multiple matches)
+    await expect(page.locator(`text=${uniqueName}`).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should filter customers by email', async ({ page }) => {
@@ -130,9 +130,9 @@ test.describe('Customer Search', () => {
     await customerPage.search('');
     await page.waitForTimeout(500);
 
-    // Both customers should be visible
-    const customer1Visible = await page.locator(`text=${testData1.name}`).isVisible();
-    const customer2Visible = await page.locator(`text=${testData2.name}`).isVisible();
+    // Both customers should be visible (use first() to handle multiple matches)
+    const customer1Visible = await page.locator(`text=${testData1.name}`).first().isVisible().catch(() => false);
+    const customer2Visible = await page.locator(`text=${testData2.name}`).first().isVisible().catch(() => false);
     
     expect(customer1Visible || customer2Visible).toBe(true);
   });
@@ -151,8 +151,8 @@ test.describe('Customer Search', () => {
     await customerPage.goto();
     await customerPage.search('PartialSearch');
 
-    // Should find the customer
-    await expect(page.locator(`text=${fullName}`)).toBeVisible({ timeout: 10000 });
+    // Should find the customer (use first() to handle multiple matches)
+    await expect(page.locator(`text=${fullName}`).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should be case-insensitive', async ({ page }) => {
@@ -169,8 +169,8 @@ test.describe('Customer Search', () => {
     await customerPage.goto();
     await customerPage.search(name.toLowerCase());
 
-    // Should find the customer
-    await expect(page.locator(`text=${name}`)).toBeVisible({ timeout: 10000 });
+    // Should find the customer (use first() to handle multiple matches)
+    await expect(page.locator(`text=${name}`).first()).toBeVisible({ timeout: 10000 });
   });
 });
 

@@ -19,8 +19,9 @@ export const loginAsAdmin = async (page: Page): Promise<void> => {
 };
 
 export const navigateToJobs = async (page: Page): Promise<void> => {
-  await page.click('button:has-text("Jobs")');
-  await expect(page.locator('h4:has-text("Jobs")')).toBeVisible();
+  // Navigate directly to jobs page - more reliable than clicking sidebar
+  await page.goto('/jobs');
+  await expect(page.locator('h4:has-text("Jobs")')).toBeVisible({ timeout: 10000 });
 };
 
 export const createCustomerWithVehicle = async (

@@ -34,20 +34,15 @@ test.describe('Customer Add Vehicle', () => {
     await customerPage.goto();
     await customerPage.clickCustomer(testCustomerName);
 
-    // Click add vehicle
-    await page.click(
-      'button:has-text("Add Vehicle"), ' +
-      'button:has-text("New Vehicle"), ' +
-      '[data-testid="add-vehicle"]'
-    );
-
-    // Should see vehicle form
-    const vehicleForm = page.locator(
-      '[role="dialog"]:has-text("Vehicle"), ' +
-      'form:has(input[name="make"]), ' +
-      'text=/add.*vehicle|new.*vehicle/i'
-    );
-    await expect(vehicleForm.first()).toBeVisible({ timeout: 5000 });
+    // Click add vehicle - try multiple selectors
+    const addVehicleButton = page.locator('button:has-text("Add Vehicle")').or(page.locator('button:has-text("New Vehicle")')).or(page.locator('[data-testid="add-vehicle"]'));
+    await addVehicleButton.first().click({ timeout: 5000 });
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    
+    // Should see vehicle form fields
+    await expect(page.locator('input[name="make"], [data-testid="vehicle-make"]')).toBeVisible({ timeout: 5000 });
   });
 
   test('should add vehicle to customer', async ({ page }) => {
@@ -63,16 +58,28 @@ test.describe('Customer Add Vehicle', () => {
     await customerPage.clickCustomer(testCustomerName);
 
     // Click add vehicle
-    await page.click(
-      'button:has-text("Add Vehicle"), ' +
-      '[data-testid="add-vehicle"]'
-    );
+    const addVehicleButton = page.locator('button:has-text("Add Vehicle")').or(page.locator('[data-testid="add-vehicle"]'));
+    await addVehicleButton.first().click({ timeout: 5000 });
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
 
     // Fill vehicle form
-    await page.fill('input[name="make"], [data-testid="vehicle-make"]', vehicleData.make);
-    await page.fill('input[name="model"], [data-testid="vehicle-model"]', vehicleData.model);
-    await page.fill('input[name="year"], [data-testid="vehicle-year"]', vehicleData.year);
-    await page.fill('input[name="licensePlate"], [data-testid="vehicle-license"]', vehicleData.licensePlate);
+    const makeInput = page.locator('input[name="make"]').or(page.locator('[data-testid="vehicle-make"]'));
+    await makeInput.first().fill(vehicleData.make);
+    const modelInput = page.locator('input[name="model"]').or(page.locator('[data-testid="vehicle-model"]'));
+    await modelInput.first().fill(vehicleData.model);
+    
+    // Year is a Select, handle it differently
+    if (vehicleData.year) {
+      const yearSelect = page.locator('[data-testid="vehicle-year"]').locator('..').locator('div[role="combobox"]').first();
+      await yearSelect.click({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      await page.click(`li:has-text("${vehicleData.year}")`);
+    }
+    
+    const licenseInput = page.locator('input[name="licensePlate"]').or(page.locator('[data-testid="vehicle-license-plate"]'));
+    await licenseInput.first().fill(vehicleData.licensePlate);
 
     // Submit
     await page.click('button[type="submit"], button:has-text("Save")');
@@ -89,14 +96,17 @@ test.describe('Customer Add Vehicle', () => {
     await customerPage.clickCustomer(testCustomerName);
 
     // Click add vehicle
-    await page.click(
-      'button:has-text("Add Vehicle"), ' +
-      '[data-testid="add-vehicle"]'
-    );
+    const addVehicleButton2 = page.locator('button:has-text("Add Vehicle")').or(page.locator('[data-testid="add-vehicle"]'));
+    await addVehicleButton2.first().click({ timeout: 5000 });
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
 
     // Fill minimal vehicle form
-    await page.fill('input[name="make"], [data-testid="vehicle-make"]', 'Honda');
-    await page.fill('input[name="model"], [data-testid="vehicle-model"]', 'Civic');
+    const makeInput2 = page.locator('input[name="make"]').or(page.locator('[data-testid="vehicle-make"]'));
+    await makeInput2.first().fill('Honda');
+    const modelInput2 = page.locator('input[name="model"]').or(page.locator('[data-testid="vehicle-model"]'));
+    await modelInput2.first().fill('Civic');
 
     // Submit
     await page.click('button[type="submit"], button:has-text("Save")');
@@ -119,13 +129,16 @@ test.describe('Customer Add Vehicle', () => {
     await customerPage.goto();
     await customerPage.clickCustomer(testCustomerName);
 
-    await page.click(
-      'button:has-text("Add Vehicle"), ' +
-      '[data-testid="add-vehicle"]'
-    );
+    const addVehicleButton3 = page.locator('button:has-text("Add Vehicle")').or(page.locator('[data-testid="add-vehicle"]'));
+    await addVehicleButton3.first().click({ timeout: 5000 });
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
 
-    await page.fill('input[name="make"], [data-testid="vehicle-make"]', 'Ford');
-    await page.fill('input[name="model"], [data-testid="vehicle-model"]', 'F-150');
+    const makeInput3 = page.locator('input[name="make"]').or(page.locator('[data-testid="vehicle-make"]'));
+    await makeInput3.first().fill('Ford');
+    const modelInput3 = page.locator('input[name="model"]').or(page.locator('[data-testid="vehicle-model"]'));
+    await modelInput3.first().fill('F-150');
     await page.click('button[type="submit"], button:has-text("Save")');
 
     // Wait for save
@@ -147,13 +160,16 @@ test.describe('Customer Add Vehicle', () => {
     await customerPage.clickCustomer(testCustomerName);
 
     // Add vehicle
-    await page.click(
-      'button:has-text("Add Vehicle"), ' +
-      '[data-testid="add-vehicle"]'
-    );
+    const addVehicleButton4 = page.locator('button:has-text("Add Vehicle")').or(page.locator('[data-testid="add-vehicle"]'));
+    await addVehicleButton4.first().click({ timeout: 5000 });
+    
+    // Wait for dialog to open
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
 
-    await page.fill('input[name="make"], [data-testid="vehicle-make"]', 'BMW');
-    await page.fill('input[name="model"], [data-testid="vehicle-model"]', 'X5');
+    const makeInput4 = page.locator('input[name="make"]').or(page.locator('[data-testid="vehicle-make"]'));
+    await makeInput4.first().fill('BMW');
+    const modelInput4 = page.locator('input[name="model"]').or(page.locator('[data-testid="vehicle-model"]'));
+    await modelInput4.first().fill('X5');
     await page.click('button[type="submit"], button:has-text("Save")');
 
     // Wait for save
