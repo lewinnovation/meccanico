@@ -28,6 +28,7 @@
       { "name": "Services", "description": "Service packages management" },
       { "name": "Templates", "description": "Job templates management" },
       { "name": "Settings", "description": "System settings" },
+      { "name": "Audit Logs", "description": "Audit log management" },
       { "name": "Reports", "description": "Reporting and exports" }
     ]
   },

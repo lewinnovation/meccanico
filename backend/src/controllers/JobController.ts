@@ -11,6 +11,7 @@ import {
   Tags,
   Security,
   SuccessResponse,
+  Request,
 } from 'tsoa';
 import {
   JobService,
@@ -22,6 +23,7 @@ import {
 } from '../services/JobService';
 import { Job, JobStatus } from '../models/Job';
 import { LineItem } from '../models/LineItem';
+import { User } from '../models/User';
 
 @Route('api/jobs')
 @Tags('Jobs')
@@ -82,9 +84,12 @@ export class JobController extends Controller {
    */
   @Post('/')
   @SuccessResponse(201, 'Created')
-  public async createJob(@Body() body: CreateJobDto): Promise<Job> {
+  public async createJob(
+    @Body() body: CreateJobDto,
+    @Request() request: { user: User }
+  ): Promise<Job> {
     this.setStatus(201);
-    return this.jobService.create(body);
+    return this.jobService.create(body, request.user?.id);
   }
 
   /**
@@ -93,11 +98,12 @@ export class JobController extends Controller {
   @Patch('/{id}')
   public async updateJob(
     @Path() id: string,
-    @Body() body: UpdateJobDto
+    @Body() body: UpdateJobDto,
+    @Request() request: { user: User }
   ): Promise<Job> {
     console.log('DEBUG: updateJob called with id:', id);
     console.log('DEBUG: updateJob body:', JSON.stringify(body, null, 2));
-    return this.jobService.update(id, body);
+    return this.jobService.update(id, body, request.user?.id);
   }
 
   /**
@@ -106,9 +112,10 @@ export class JobController extends Controller {
   @Post('/{id}/status')
   public async updateJobStatus(
     @Path() id: string,
-    @Body() body: { status: JobStatus }
+    @Body() body: { status: JobStatus },
+    @Request() request: { user: User }
   ): Promise<Job> {
-    return this.jobService.updateStatus(id, body.status);
+    return this.jobService.updateStatus(id, body.status, request.user?.id);
   }
 
   /**
@@ -160,10 +167,11 @@ export class JobController extends Controller {
   @SuccessResponse(201, 'Created')
   public async addLineItem(
     @Path() id: string,
-    @Body() body: CreateLineItemDto
+    @Body() body: CreateLineItemDto,
+    @Request() request: { user: User }
   ): Promise<LineItem> {
     this.setStatus(201);
-    return this.jobService.addLineItem(id, body);
+    return this.jobService.addLineItem(id, body, request.user?.id);
   }
 
   /**
@@ -173,10 +181,11 @@ export class JobController extends Controller {
   @SuccessResponse(201, 'Created')
   public async addLineItemsBulk(
     @Path() id: string,
-    @Body() body: { items: CreateLineItemDto[] }
+    @Body() body: { items: CreateLineItemDto[] },
+    @Request() request: { user: User }
   ): Promise<LineItem[]> {
     this.setStatus(201);
-    return this.jobService.addLineItemsBulk(id, body.items);
+    return this.jobService.addLineItemsBulk(id, body.items, request.user?.id);
   }
 
   /**
@@ -186,9 +195,10 @@ export class JobController extends Controller {
   public async updateLineItem(
     @Path() id: string,
     @Path() lineItemId: string,
-    @Body() body: UpdateLineItemDto
+    @Body() body: UpdateLineItemDto,
+    @Request() request: { user: User }
   ): Promise<LineItem> {
-    return this.jobService.updateLineItem(id, lineItemId, body);
+    return this.jobService.updateLineItem(id, lineItemId, body, request.user?.id);
   }
 
   /**
@@ -198,10 +208,11 @@ export class JobController extends Controller {
   @SuccessResponse(204, 'Deleted')
   public async deleteLineItem(
     @Path() id: string,
-    @Path() lineItemId: string
+    @Path() lineItemId: string,
+    @Request() request: { user: User }
   ): Promise<void> {
     this.setStatus(204);
-    return this.jobService.deleteLineItem(id, lineItemId);
+    return this.jobService.deleteLineItem(id, lineItemId, request.user?.id);
   }
 
   /**

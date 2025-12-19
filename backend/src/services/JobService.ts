@@ -7,6 +7,8 @@ import { Customer } from '../models/Customer';
 import { generateJobCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
 import { PaginatedResult } from '../types/common';
+import { createAuditLog } from '../utils/auditLogger';
+import { AuditAction } from '../models/AuditLog';
 
 export interface CreateJobDto {
   customerId: string;
@@ -163,7 +165,7 @@ export class JobService {
     return job;
   }
 
-  async create(data: CreateJobDto): Promise<Job> {
+  async create(data: CreateJobDto, userId?: string | null): Promise<Job> {
     // Verify vehicle belongs to customer if vehicleId is provided
     if (data.vehicleId) {
       const vehicle = await this.vehicleRepository.findOne({
@@ -192,11 +194,41 @@ export class JobService {
     });
 
     const savedJob = await this.repository.save(job);
+    
+    // Create audit log
+    await createAuditLog(
+      userId || null,
+      AuditAction.CREATE,
+      'Job',
+      savedJob.id,
+      null,
+      {
+        code: savedJob.code,
+        customerId: savedJob.customerId,
+        vehicleId: savedJob.vehicleId,
+        status: savedJob.status,
+      }
+    );
+    
     return this.findById(savedJob.id);
   }
 
-  async update(id: string, data: UpdateJobDto): Promise<Job> {
+  async update(id: string, data: UpdateJobDto, userId?: string | null): Promise<Job> {
     const job = await this.findById(id);
+    
+    // Store old values for audit log
+    const oldValue = {
+      customerId: job.customerId,
+      vehicleId: job.vehicleId,
+      assignedTo: job.assignedTo,
+      notes: job.notes,
+      internalNotes: job.internalNotes,
+      taxRate: job.taxRate,
+      discountAmount: job.discountAmount,
+      discountPercent: job.discountPercent,
+      dueDate: job.dueDate,
+      status: job.status,
+    };
 
     // Check if both discount types are provided
     if (data.discountAmount && data.discountPercent) {
@@ -276,11 +308,37 @@ export class JobService {
     }
 
     await this.repository.save(job);
+    
+    // Create audit log
+    const newValue = {
+      customerId: job.customerId,
+      vehicleId: job.vehicleId,
+      assignedTo: job.assignedTo,
+      notes: job.notes,
+      internalNotes: job.internalNotes,
+      taxRate: job.taxRate,
+      discountAmount: job.discountAmount,
+      discountPercent: job.discountPercent,
+      dueDate: job.dueDate,
+      status: job.status,
+    };
+    
+    await createAuditLog(
+      userId || null,
+      AuditAction.UPDATE,
+      'Job',
+      id,
+      oldValue,
+      newValue
+    );
+    
     return this.findById(id);
   }
 
-  async updateStatus(id: string, newStatus: JobStatus): Promise<Job> {
+  async updateStatus(id: string, newStatus: JobStatus, userId?: string | null): Promise<Job> {
     const job = await this.findById(id);
+    
+    const oldStatus = job.status;
 
     // Flexible transitions - allow any status to transition to any other status
     // Set timestamps based on transition
@@ -294,6 +352,17 @@ export class JobService {
 
     job.status = newStatus;
     await this.repository.save(job);
+    
+    // Create audit log for status change
+    await createAuditLog(
+      userId || null,
+      AuditAction.UPDATE,
+      'Job',
+      id,
+      { status: oldStatus },
+      { status: newStatus }
+    );
+    
     return this.findById(id);
   }
 
@@ -344,7 +413,7 @@ export class JobService {
   }
 
   // Line Item Methods
-  async addLineItem(jobId: string, data: CreateLineItemDto): Promise<LineItem> {
+  async addLineItem(jobId: string, data: CreateLineItemDto, userId?: string | null): Promise<LineItem> {
     const job = await this.findById(jobId);
 
     // Allow adding items to jobs that are not yet completed
@@ -369,13 +438,32 @@ export class JobService {
       sortOrder: data.sortOrder ?? maxSortOrder + 1,
     });
 
-    return this.lineItemRepository.save(lineItem);
+    const savedItem = await this.lineItemRepository.save(lineItem);
+    
+    // Create audit log
+    await createAuditLog(
+      userId || null,
+      AuditAction.CREATE,
+      'LineItem',
+      savedItem.id,
+      null,
+      {
+        jobId: savedItem.jobId,
+        type: savedItem.type,
+        description: savedItem.description,
+        quantity: savedItem.quantity,
+        unitPrice: savedItem.unitPrice,
+      }
+    );
+    
+    return savedItem;
   }
 
   async updateLineItem(
     jobId: string,
     lineItemId: string,
-    data: UpdateLineItemDto
+    data: UpdateLineItemDto,
+    userId?: string | null
   ): Promise<LineItem> {
     const job = await this.findById(jobId);
 
@@ -392,16 +480,66 @@ export class JobService {
       throw new NotFoundError('Line item not found');
     }
 
+    // Store old values for audit log
+    const oldValue = {
+      jobId: lineItem.jobId,
+      type: lineItem.type,
+      description: lineItem.description,
+      quantity: lineItem.quantity,
+      unitPrice: lineItem.unitPrice,
+    };
+
     Object.assign(lineItem, data);
-    return this.lineItemRepository.save(lineItem);
+    const savedItem = await this.lineItemRepository.save(lineItem);
+    
+    // Create audit log
+    await createAuditLog(
+      userId || null,
+      AuditAction.UPDATE,
+      'LineItem',
+      lineItemId,
+      oldValue,
+      {
+        jobId: savedItem.jobId,
+        type: savedItem.type,
+        description: savedItem.description,
+        quantity: savedItem.quantity,
+        unitPrice: savedItem.unitPrice,
+      }
+    );
+    
+    return savedItem;
   }
 
-  async deleteLineItem(jobId: string, lineItemId: string): Promise<void> {
+  async deleteLineItem(jobId: string, lineItemId: string, userId?: string | null): Promise<void> {
     const job = await this.findById(jobId);
 
     // Allow deleting items from jobs that are not yet completed
     if (job.status === JobStatus.COMPLETED) {
       throw new ConflictError('Cannot delete items from completed jobs');
+    }
+
+    // Get line item before deletion for audit log
+    const lineItem = await this.lineItemRepository.findOne({
+      where: { id: lineItemId, jobId },
+    });
+
+    if (lineItem) {
+      // Create audit log before deletion
+      await createAuditLog(
+        userId || null,
+        AuditAction.DELETE,
+        'LineItem',
+        lineItemId,
+        {
+          jobId: lineItem.jobId,
+          type: lineItem.type,
+          description: lineItem.description,
+          quantity: lineItem.quantity,
+          unitPrice: lineItem.unitPrice,
+        },
+        null
+      );
     }
 
     await this.lineItemRepository.delete({ id: lineItemId, jobId });
@@ -468,7 +606,8 @@ export class JobService {
 
   async addLineItemsBulk(
     jobId: string,
-    items: CreateLineItemDto[]
+    items: CreateLineItemDto[],
+    userId?: string | null
   ): Promise<LineItem[]> {
     const job = await this.findById(jobId);
 
@@ -495,7 +634,27 @@ export class JobService {
       })
     );
 
-    return this.lineItemRepository.save(lineItems);
+    const savedItems = await this.lineItemRepository.save(lineItems);
+    
+    // Create audit logs for each item
+    for (const savedItem of savedItems) {
+      await createAuditLog(
+        userId || null,
+        AuditAction.CREATE,
+        'LineItem',
+        savedItem.id,
+        null,
+        {
+          jobId: savedItem.jobId,
+          type: savedItem.type,
+          description: savedItem.description,
+          quantity: savedItem.quantity,
+          unitPrice: savedItem.unitPrice,
+        }
+      );
+    }
+    
+    return savedItems;
   }
 }
 

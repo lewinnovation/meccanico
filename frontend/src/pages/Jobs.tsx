@@ -52,7 +52,6 @@ import {
   Receipt as InvoiceIcon,
   Work as JobIcon,
   Print as PrintIcon,
-  Description as EstimateIcon,
   DragIndicator as DragIcon,
   DirectionsCar as VehicleIcon,
   OpenInNew as OpenIcon,
@@ -64,6 +63,7 @@ import {
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
+import { api } from '../utils/api';
 import type { JobStatus, LineItemType, CreateLineItemDto, LineItem, Job } from '../stores/JobStore';
 import type { Template } from '../stores/TemplateStore';
 import type { Customer as CustomerType } from '../stores/CustomerStore';
@@ -1900,7 +1900,7 @@ interface SelectedLineItem {
 
 const JobDetail: React.FC = observer(() => {
   const { id } = useParams<{ id: string }>();
-  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore } = useStore();
+  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore } = useStore();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
@@ -1910,6 +1910,8 @@ const JobDetail: React.FC = observer(() => {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [vehicleDialogOpen, setVehicleDialogOpen] = useState(false);
+  const [vehicleJobs, setVehicleJobs] = useState<Job[]>([]);
+  const [loadingVehicleJobs, setLoadingVehicleJobs] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentNote, setPaymentNote] = useState('');
   
@@ -1936,13 +1938,45 @@ const JobDetail: React.FC = observer(() => {
       labourStore.fetchItems();
       serviceStore.fetchItems();
       settingsStore.fetchSettings();
+      auditLogStore.fetchByJob(id);
     }
 
     return () => {
       jobStore.clearSelectedJob();
       invoiceStore.clearSelectedInvoice();
+      auditLogStore.clearAuditLogs();
     };
-  }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore]);
+  }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore]);
+
+  const job = jobStore.selectedJob;
+
+  // Fetch vehicle jobs when vehicle dialog opens
+  useEffect(() => {
+    const fetchVehicleJobs = async () => {
+      if (vehicleDialogOpen && job?.vehicleId) {
+        setLoadingVehicleJobs(true);
+        try {
+          // Fetch jobs for this vehicle
+          const params = new URLSearchParams({
+            page: '1',
+            limit: '10',
+            vehicleId: job.vehicleId,
+          });
+          const response = await api.get(`/api/jobs?${params}`);
+          // Filter out current job and sort by created date descending
+          const jobs = (response.data.data || []).filter((j: Job) => j.id !== job.id);
+          jobs.sort((a: Job, b: Job) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setVehicleJobs(jobs.slice(0, 5)); // Show last 5 jobs
+        } catch (error) {
+          console.error('Failed to fetch vehicle jobs:', error);
+          setVehicleJobs([]);
+        } finally {
+          setLoadingVehicleJobs(false);
+        }
+      }
+    };
+    fetchVehicleJobs();
+  }, [vehicleDialogOpen, job?.vehicleId, job?.id]);
 
   // Build options for line item autocomplete
   const getLineItemOptions = (): SelectedLineItem[] => {
@@ -1975,8 +2009,6 @@ const JobDetail: React.FC = observer(() => {
         return [];
     }
   };
-
-  const job = jobStore.selectedJob;
 
   // Fetch invoice when job changes
   useEffect(() => {
@@ -2014,6 +2046,10 @@ const JobDetail: React.FC = observer(() => {
   const handleStatusChange = async (newStatus: JobStatus) => {
     if (job) {
       await jobStore.updateJobStatus(job.id, newStatus);
+      // Refetch audit logs after status change
+      if (id) {
+        await auditLogStore.fetchByJob(id);
+      }
     }
     setAnchorEl(null);
   };
@@ -2085,6 +2121,10 @@ const JobDetail: React.FC = observer(() => {
     }
 
     await jobStore.addLineItem(job.id, itemData);
+    // Refetch audit logs after adding line item
+    if (id) {
+      await auditLogStore.fetchByJob(id);
+    }
     setItemDialogOpen(false);
     // Reset form
     setLineItemType('TEXT');
@@ -2108,6 +2148,10 @@ const JobDetail: React.FC = observer(() => {
   const handleApplyTemplate = async () => {
     if (job && selectedTemplate) {
       await jobStore.applyTemplate(job.id, selectedTemplate.id);
+      // Refetch audit logs after applying template (which adds line items)
+      if (id) {
+        await auditLogStore.fetchByJob(id);
+      }
       setTemplateDialogOpen(false);
       setSelectedTemplate(null);
     }
@@ -2116,6 +2160,10 @@ const JobDetail: React.FC = observer(() => {
   const handleDeleteItem = async (itemId: string) => {
     if (job) {
       await jobStore.deleteLineItem(job.id, itemId);
+      // Refetch audit logs after deleting line item
+      if (id) {
+        await auditLogStore.fetchByJob(id);
+      }
       setDeleteItemConfirm(null);
     }
   };
@@ -2123,6 +2171,10 @@ const JobDetail: React.FC = observer(() => {
   const handleUpdateLineItem = async (itemId: string, data: { description?: string; quantity?: number; unitPrice?: number }) => {
     if (job) {
       await jobStore.updateLineItem(job.id, itemId, data);
+      // Refetch audit logs after updating line item
+      if (id) {
+        await auditLogStore.fetchByJob(id);
+      }
     }
   };
 
@@ -2136,8 +2188,13 @@ const JobDetail: React.FC = observer(() => {
   };
   const formatDate = (date: string | null) => (date ? new Date(date).toLocaleDateString() : '-');
 
-  const handlePrint = (type: 'estimate' | 'invoice') => {
+  const handlePrint = async (type: 'estimate' | 'invoice') => {
     if (!job) return;
+
+    // Fetch invoice if printing invoice
+    if (type === 'invoice' && job.invoiceId && !invoiceStore.selectedInvoice) {
+      await invoiceStore.fetchByJobId(job.id);
+    }
 
     const shopName = settingsStore.shopSettings.name || 'Meccanico';
     const shopAddress = settingsStore.shopSettings.address || '';
@@ -2153,6 +2210,7 @@ const JobDetail: React.FC = observer(() => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    printWindow.document.open();
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -2294,12 +2352,13 @@ const JobDetail: React.FC = observer(() => {
           ` : ''}
 
           <script>
-            window.onload = function() { window.print(); }
+            window.onload = function() { 
+              setTimeout(function() { window.print(); }, 250);
+            }
           </script>
         </body>
       </html>
     `);
-
     printWindow.document.close();
   };
 
@@ -2338,24 +2397,46 @@ const JobDetail: React.FC = observer(() => {
           </Typography>
         </Box>
         
-        {/* Print Buttons - Status aware */}
+        {/* Print and Next Step Buttons */}
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {job.status !== 'COMPLETED' && (
-            <Button
-              variant="outlined"
-              startIcon={<EstimateIcon />}
-              onClick={() => handlePrint('estimate')}
-            >
-              Print Estimate
-            </Button>
-          )}
-          {job.status === 'COMPLETED' && job.invoiceId && (
+          {/* Print Button */}
+          {(job.status !== 'COMPLETED' || (job.status === 'COMPLETED' && job.invoiceId)) && (
             <Button
               variant="outlined"
               startIcon={<PrintIcon />}
-              onClick={() => handlePrint('invoice')}
+              onClick={() => handlePrint(job.status === 'COMPLETED' && job.invoiceId ? 'invoice' : 'estimate')}
             >
-              Print Invoice
+              Print
+            </Button>
+          )}
+          
+          {/* Next Natural Step Button */}
+          {job.status === 'BOOKED' && (
+            <Button
+              variant="contained"
+              startIcon={<StartIcon />}
+              onClick={() => handleStatusChange('IN_PROGRESS')}
+            >
+              Start Work
+            </Button>
+          )}
+          {job.status === 'IN_PROGRESS' && (
+            <Button
+              variant="contained"
+              startIcon={<ApproveIcon />}
+              onClick={() => handleStatusChange('COMPLETED')}
+            >
+              Mark Complete
+            </Button>
+          )}
+          {job.status === 'COMPLETED' && !job.invoiceId && (
+            <Button
+              variant="contained"
+              startIcon={<InvoiceIcon />}
+              onClick={handleConvertToInvoice}
+              disabled={invoiceStore.isLoading}
+            >
+              Convert to Invoice
             </Button>
           )}
         </Box>
@@ -2511,6 +2592,63 @@ const JobDetail: React.FC = observer(() => {
               </Box>
             </CardContent>
           </Card>
+          
+          {/* Audit Trail - Outside the card with grey background */}
+          <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.100', borderRadius: 1 }}>
+            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Audit Trail
+            </Typography>
+            {auditLogStore.isLoading ? (
+              <Typography variant="caption" color="text.secondary">
+                Loading...
+              </Typography>
+            ) : auditLogStore.auditLogs.length === 0 ? (
+              <Typography variant="caption" color="text.secondary">
+                No audit history available
+              </Typography>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {auditLogStore.auditLogs.map((log) => {
+                  let changeDescription = '';
+                  
+                  if (log.entityType === 'Job') {
+                    if (log.action === 'CREATE') {
+                      changeDescription = 'Job created';
+                    } else if (log.action === 'UPDATE' && log.oldValue && log.newValue) {
+                      const oldVal = log.oldValue as Record<string, unknown>;
+                      const newVal = log.newValue as Record<string, unknown>;
+                      if (oldVal.status !== newVal.status) {
+                        changeDescription = `Status changed from ${oldVal.status} to ${newVal.status}`;
+                      } else {
+                        changeDescription = 'Job updated';
+                      }
+                    } else if (log.action === 'DELETE') {
+                      changeDescription = 'Job deleted';
+                    }
+                  } else if (log.entityType === 'LineItem') {
+                    if (log.action === 'CREATE') {
+                      const newVal = log.newValue as Record<string, unknown>;
+                      changeDescription = `Line item added: ${(newVal.description as string) || 'Item'}`;
+                    } else if (log.action === 'UPDATE') {
+                      const newVal = log.newValue as Record<string, unknown>;
+                      changeDescription = `Line item updated: ${(newVal.description as string) || 'Item'}`;
+                    } else if (log.action === 'DELETE') {
+                      const oldVal = log.oldValue as Record<string, unknown>;
+                      changeDescription = `Line item removed: ${(oldVal.description as string) || 'Item'}`;
+                    }
+                  } else {
+                    changeDescription = `${log.action} ${log.entityType}`;
+                  }
+                  
+                  return (
+                    <Typography key={log.id} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      {changeDescription} {log.user ? `by ${log.user.name}` : ''} on {formatDate(log.createdAt)}
+                    </Typography>
+                  );
+                })}
+              </Box>
+            )}
+          </Box>
         </Box>
 
         {/* Right Column - Details */}
@@ -2588,38 +2726,6 @@ const JobDetail: React.FC = observer(() => {
                   sx={{ fontFamily: 'monospace', mt: 1 }}
                 />
               )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                Dates
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Created
-                  </Typography>
-                  <Typography variant="body2">{formatDate(job.createdAt)}</Typography>
-                </Box>
-                {job.startedAt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Started
-                    </Typography>
-                    <Typography variant="body2">{formatDate(job.startedAt)}</Typography>
-                  </Box>
-                )}
-                {job.completedAt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Completed
-                    </Typography>
-                    <Typography variant="body2">{formatDate(job.completedAt)}</Typography>
-                  </Box>
-                )}
-              </Box>
             </CardContent>
           </Card>
 
@@ -2977,6 +3083,72 @@ const JobDetail: React.FC = observer(() => {
                 )}
               </Box>
               
+              <Divider sx={{ my: 2 }} />
+              
+              {/* Recent Jobs for this Vehicle */}
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                  Recent Jobs
+                </Typography>
+                {loadingVehicleJobs ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                ) : vehicleJobs.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No other jobs for this vehicle
+                  </Typography>
+                ) : (
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Code</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {vehicleJobs.map((vehicleJob) => (
+                        <TableRow key={vehicleJob.id} hover>
+                          <TableCell>
+                            <Typography fontFamily="monospace" fontWeight={500}>
+                              {vehicleJob.code}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {statusConfig[vehicleJob.status] ? (
+                              <Chip
+                                label={statusConfig[vehicleJob.status].label}
+                                color={statusConfig[vehicleJob.status].color}
+                                size="small"
+                              />
+                            ) : (
+                              <Chip label={vehicleJob.status} color="default" size="small" />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {formatDate(vehicleJob.createdAt)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                window.open(`/jobs/${vehicleJob.id}`, '_blank');
+                              }}
+                            >
+                              <OpenIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </Box>
+              
               <Box sx={{ mt: 2 }}>
                 <Button
                   variant="outlined"
@@ -3081,7 +3253,7 @@ interface EditVehicle {
 }
 
 const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, job }) => {
-  const { jobStore, settingsStore, customerStore, vehicleStore } = useStore();
+  const { jobStore, settingsStore, customerStore, vehicleStore, auditLogStore } = useStore();
   const [formData, setFormData] = useState({
     notes: '',
     internalNotes: '',
@@ -3247,6 +3419,8 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
       await jobStore.updateJob(job.id, updateData);
       // Force refresh to ensure we have the latest data with relations
       await jobStore.fetchJobById(job.id);
+      // Refetch audit logs after updating job
+      await auditLogStore.fetchByJob(job.id);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update job');
