@@ -717,8 +717,17 @@ const NewJob: React.FC = observer(() => {
             const vehicleBelongsToCustomer = vehicleOptions.some(v => v.id === currentVehicle.id);
             if (!vehicleBelongsToCustomer) {
               setSelectedVehicle(null);
+              // If customer only has one vehicle, auto-select it
+              if (vehicleOptions.length === 1) {
+                setSelectedVehicle(vehicleOptions[0]);
+              }
             }
             // If it does belong, keep it (don't clear)
+          } else {
+            // No vehicle currently selected - auto-select if customer has exactly one vehicle
+            if (vehicleOptions.length === 1) {
+              setSelectedVehicle(vehicleOptions[0]);
+            }
           }
         })
         .catch(() => {
