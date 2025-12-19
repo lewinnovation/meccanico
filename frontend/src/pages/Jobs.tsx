@@ -288,6 +288,7 @@ const JobList: React.FC = observer(() => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [invoicePaidFilter, setInvoicePaidFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+  const [invoicedFilter, setInvoicedFilter] = useState<'all' | 'invoiced' | 'not-invoiced'>('all');
 
   // Initial fetch and when filters change
   useEffect(() => {
@@ -306,6 +307,10 @@ const JobList: React.FC = observer(() => {
       jobStore.setStatusFilter(null);
       const paid = invoicePaidFilter === 'all' ? null : invoicePaidFilter === 'paid';
       jobStore.setInvoiceFilter(true, paid);
+    } else if (selectedTab === 'COMPLETED') {
+      jobStore.setStatusFilter('COMPLETED');
+      const hasInvoice = invoicedFilter === 'all' ? null : invoicedFilter === 'invoiced';
+      jobStore.setInvoiceFilter(hasInvoice, null);
     } else {
       jobStore.setStatusFilter(selectedTab as JobStatus | null);
       jobStore.setInvoiceFilter(null, null);
@@ -313,11 +318,12 @@ const JobList: React.FC = observer(() => {
     
     jobStore.setDateRange(startDate || null, endDate || null);
     jobStore.fetchJobs();
-  }, [tab, invoicePaidFilter, startDate, endDate, jobStore]);
+  }, [tab, invoicePaidFilter, invoicedFilter, startDate, endDate, jobStore]);
 
   const handleTabChange = (_: unknown, newValue: number) => {
     setTab(newValue);
     setInvoicePaidFilter('all'); // Reset invoice filter when changing tabs
+    setInvoicedFilter('all'); // Reset invoiced filter when changing tabs
   };
 
   const handleSearch = (value: string) => {
@@ -415,6 +421,22 @@ const JobList: React.FC = observer(() => {
             InputLabelProps={{ shrink: true }}
           />
         </Grid>
+        {tab === 5 && (
+          <Grid item xs={12} md={2}>
+            <FormControl fullWidth>
+              <InputLabel>Invoiced Status</InputLabel>
+              <Select
+                value={invoicedFilter}
+                label="Invoiced Status"
+                onChange={(e) => setInvoicedFilter(e.target.value as 'all' | 'invoiced' | 'not-invoiced')}
+              >
+                <MenuItem value="all">All</MenuItem>
+                <MenuItem value="invoiced">Invoiced</MenuItem>
+                <MenuItem value="not-invoiced">Not Invoiced</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
         {tab === 6 && (
           <Grid item xs={12} md={2}>
             <FormControl fullWidth>
@@ -468,6 +490,7 @@ const JobList: React.FC = observer(() => {
                 <TableCell>Customer</TableCell>
                 <TableCell>Vehicle</TableCell>
                 <TableCell>Status</TableCell>
+                {tab === 5 && <TableCell align="center">Invoiced</TableCell>}
                 {tab === 6 && <TableCell align="center">Paid</TableCell>}
                 <TableCell align="right">Excl. GST</TableCell>
                 <TableCell align="right">GST</TableCell>
@@ -521,6 +544,15 @@ const JobList: React.FC = observer(() => {
                       />
                     )}
                   </TableCell>
+                  {tab === 5 && (
+                    <TableCell align="center">
+                      {job.invoiceId ? (
+                        <CheckIcon color="success" />
+                      ) : (
+                        <CancelIcon color="disabled" />
+                      )}
+                    </TableCell>
+                  )}
                   {tab === 6 && (
                     <TableCell align="center">
                       {job.invoiceId && job.invoice ? (
