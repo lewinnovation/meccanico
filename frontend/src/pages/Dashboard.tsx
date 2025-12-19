@@ -89,6 +89,7 @@ const statusConfig: Record<JobStatus, { label: string; color: 'default' | 'prima
   PENDING: { label: 'Pending', color: 'warning' },
   AWAITING_PICKUP: { label: 'Awaiting Pickup', color: 'info' },
   COMPLETED: { label: 'Completed', color: 'success' },
+  CANCELLED: { label: 'Cancelled', color: 'error' },
 };
 
 export const Dashboard: React.FC = observer(() => {

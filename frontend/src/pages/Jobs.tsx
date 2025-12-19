@@ -93,6 +93,7 @@ const statusConfig: Record<JobStatus, { label: string; color: 'default' | 'prima
   PENDING: { label: 'Pending', color: 'warning' },
   AWAITING_PICKUP: { label: 'Awaiting Pick Up', color: 'info' },
   COMPLETED: { label: 'Completed', color: 'success' },
+  CANCELLED: { label: 'Cancelled', color: 'error' },
 };
 
 // Line item type colors (faint backgrounds)
@@ -104,7 +105,7 @@ const lineItemTypeColors: Record<LineItemType, string> = {
 };
 
 // All possible statuses for flexible transitions
-const allStatuses: JobStatus[] = ['BOOKED', 'IN_PROGRESS', 'PENDING', 'AWAITING_PICKUP', 'COMPLETED'];
+const allStatuses: JobStatus[] = ['BOOKED', 'IN_PROGRESS', 'PENDING', 'AWAITING_PICKUP', 'COMPLETED', 'CANCELLED'];
 
 // ==================== SORTABLE LINE ITEM ROW ====================
 interface SortableLineItemRowProps {
@@ -2462,6 +2463,7 @@ const JobDetail: React.FC = observer(() => {
               {status === 'PENDING' && <PauseIcon fontSize="small" />}
               {status === 'AWAITING_PICKUP' && <VehicleIcon fontSize="small" />}
               {status === 'COMPLETED' && <ApproveIcon fontSize="small" />}
+              {status === 'CANCELLED' && <CancelIcon fontSize="small" />}
             </ListItemIcon>
             <ListItemText>{statusConfig[status]?.label || status}</ListItemText>
           </MenuItem>

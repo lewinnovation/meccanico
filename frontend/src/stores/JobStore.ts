@@ -7,7 +7,8 @@ export type JobStatus =
   | 'IN_PROGRESS'
   | 'PENDING'
   | 'AWAITING_PICKUP'
-  | 'COMPLETED';
+  | 'COMPLETED'
+  | 'CANCELLED';
 
 export type LineItemType = 'INVENTORY' | 'LABOUR' | 'SERVICE' | 'TEXT';
 

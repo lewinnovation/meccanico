@@ -21,6 +21,7 @@ export enum JobStatus {
   PENDING = 'PENDING',
   AWAITING_PICKUP = 'AWAITING_PICKUP',
   COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
 }
 
 @Entity('jobs')
