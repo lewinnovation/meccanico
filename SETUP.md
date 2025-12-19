@@ -207,6 +207,4 @@ docker volume rm meccanico_postgres_data
 
 # Start fresh
 ./setup.sh
-```
-
-
+``
