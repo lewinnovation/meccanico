@@ -9,6 +9,7 @@ import { LabourStore } from './LabourStore';
 import { ServiceStore } from './ServiceStore';
 import { TemplateStore } from './TemplateStore';
 import { VehicleStore } from './VehicleStore';
+import { InvoiceStore } from './InvoiceStore';
 
 class RootStore {
   authStore: AuthStore;
@@ -21,6 +22,7 @@ class RootStore {
   serviceStore: ServiceStore;
   templateStore: TemplateStore;
   vehicleStore: VehicleStore;
+  invoiceStore: InvoiceStore;
 
   constructor() {
     this.authStore = new AuthStore(this);
@@ -33,6 +35,7 @@ class RootStore {
     this.serviceStore = new ServiceStore(this);
     this.templateStore = new TemplateStore(this);
     this.vehicleStore = new VehicleStore(this);
+    this.invoiceStore = new InvoiceStore(this);
   }
 }
 

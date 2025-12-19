@@ -12,9 +12,11 @@ test.describe('Jobs Management', () => {
     
     // Check tabs are present
     await expect(page.locator('button[role="tab"]:has-text("All")')).toBeVisible();
-    await expect(page.locator('button[role="tab"]:has-text("Estimates")')).toBeVisible();
+    await expect(page.locator('button[role="tab"]:has-text("Booked")')).toBeVisible();
     await expect(page.locator('button[role="tab"]:has-text("In Progress")')).toBeVisible();
-    await expect(page.locator('button[role="tab"]:has-text("Paid")')).toBeVisible();
+    await expect(page.locator('button[role="tab"]:has-text("Pending")')).toBeVisible();
+    await expect(page.locator('button[role="tab"]:has-text("Awaiting Pick Up")')).toBeVisible();
+    await expect(page.locator('button[role="tab"]:has-text("Completed")')).toBeVisible();
   });
 
   test('should display totals columns in jobs list', async ({ page }) => {
@@ -76,13 +78,17 @@ test.describe('Jobs Management', () => {
     // Navigate to Jobs
     await navigateToJobs(page);
     
-    // Click Estimates tab
-    await page.click('button[role="tab"]:has-text("Estimates")');
-    await expect(page.locator('button[role="tab"]:has-text("Estimates")')).toHaveAttribute('aria-selected', 'true');
+    // Click Booked tab
+    await page.click('button[role="tab"]:has-text("Booked")');
+    await expect(page.locator('button[role="tab"]:has-text("Booked")')).toHaveAttribute('aria-selected', 'true');
     
     // Click In Progress tab
     await page.click('button[role="tab"]:has-text("In Progress")');
     await expect(page.locator('button[role="tab"]:has-text("In Progress")')).toHaveAttribute('aria-selected', 'true');
+    
+    // Click Completed tab
+    await page.click('button[role="tab"]:has-text("Completed")');
+    await expect(page.locator('button[role="tab"]:has-text("Completed")')).toHaveAttribute('aria-selected', 'true');
   });
 
   test('should search jobs', async ({ page }) => {

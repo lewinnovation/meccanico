@@ -13,14 +13,16 @@ The job lifecycle represents the core workflow of the shop management system. A 
 ## 🔄 Status Flow
 
 ```
-ESTIMATE → APPROVED → IN_PROGRESS → INVOICED → PAID
-    ↓          ↓           ↓            ↓
-CANCELLED  DECLINED    ON_HOLD     DISPUTED
+BOOKED → IN_PROGRESS → AWAITING_PICKUP → COMPLETED → Invoice
+    ↓           ↓
+ PENDING    (can return to IN_PROGRESS)
 ```
+
+**Note:** Status transitions are flexible - any status can transition to any other status based on shop workflow needs.
 
 ---
 
-## 📝 Step 1: Create Estimate
+## 📝 Step 1: Create Job
 
 ### Trigger
 - Click "New Job" button
@@ -39,8 +41,8 @@ CANCELLED  DECLINED    ON_HOLD     DISPUTED
    ├─ Or create new inline
    └─ Vehicle selected ✓
 
-3. Job Created (ESTIMATE status)
-   ├─ Unique code assigned (J001)
+3. Job Created (BOOKED status)
+   ├─ Unique code assigned (J241216001)
    ├─ Default tax rate applied
    └─ Ready for line items
 ```
@@ -48,7 +50,7 @@ CANCELLED  DECLINED    ON_HOLD     DISPUTED
 ### UI State
 - Job detail view opens
 - Line items section empty
-- Status: ESTIMATE (yellow badge)
+- Status: BOOKED (default badge)
 - Full editing enabled
 
 ---
@@ -87,83 +89,77 @@ CANCELLED  DECLINED    ON_HOLD     DISPUTED
 
 ---
 
-## ✅ Step 3: Approve Estimate
+## ✅ Step 3: Start Work
 
 ### Prerequisites
 - At least one line item
-- Customer contact info (optional warning)
+- Job in BOOKED status (or any status)
 
 ### Flow
 ```
-1. Click "Send Estimate" or status badge
-2. Options:
-   ├─ Print estimate
-   ├─ Email estimate
-   └─ Mark as sent
-3. Status → APPROVED (or stays ESTIMATE)
-4. Customer approves (external)
-5. Click "Customer Approved"
-6. Status → APPROVED
+1. Click status badge or menu
+2. Select "In Progress" status
+3. Status → IN_PROGRESS
+4. started_at timestamp set
+5. Line items become editable (until COMPLETED)
 ```
 
-### Alternative: Decline
+### Alternative: Place on Hold
 ```
-1. Customer declines
-2. Click "Customer Declined"
-3. Status → DECLINED
-4. Optional: Add decline reason
+1. Click status badge or menu
+2. Select "Pending" status
+3. Status → PENDING
+4. Add internal notes (optional)
+5. Resume later → IN_PROGRESS
 ```
 
 ---
 
-## 🔧 Step 4: Begin Work
+## 🔧 Step 4: Complete Work
 
 ### Trigger
-- Click "Start Work" button
-- Status badge → IN_PROGRESS
+- Click status badge or menu
+- Select "Awaiting Pick Up" or "Completed"
 
 ### Flow
 ```
-1. Click "Start Work"
-2. Confirmation dialog
-3. Status → IN_PROGRESS
-4. started_at timestamp set
-5. Line items become locked*
+1. Work is finished
+2. Click status badge or menu
+3. Select "Awaiting Pick Up" or "Completed"
+4. Status → AWAITING_PICKUP or COMPLETED
+5. completed_at timestamp set (if COMPLETED)
 ```
-
-*Admin can unlock for corrections
 
 ### During Work
 - Update internal notes
-- Cannot add/remove line items (locked)
-- Can place ON_HOLD if needed
+- Can add/remove line items (until COMPLETED)
+- Can transition between statuses as needed
 
 ---
 
-## 📄 Step 5: Complete & Invoice
+## 📄 Step 5: Convert to Invoice
 
 ### Prerequisites
-- Status: IN_PROGRESS
+- Status: COMPLETED
 - Work completed
 
 ### Flow
 ```
-1. Click "Complete & Invoice"
-2. Review totals
-   ├─ Subtotal
-   ├─ Discount (if any)
-   ├─ Tax
-   └─ Total
-3. Confirm
-4. Status → INVOICED
-5. invoiced_at timestamp set
-6. Invoice number assigned
+1. Job status is COMPLETED
+2. Click "Convert to Invoice" button
+3. System creates invoice:
+   ├─ Invoice number assigned (INV-241216-001)
+   ├─ Invoice date = today
+   ├─ Due date = today + payment terms days
+   ├─ Status = UNPAID
+   └─ Job's invoiceId updated
+4. Invoice section appears on job detail page
 ```
 
 ### Invoice Actions
 - Print invoice
-- Email invoice
-- Download PDF
+- View invoice details
+- Mark as paid
 
 ---
 
@@ -171,44 +167,44 @@ CANCELLED  DECLINED    ON_HOLD     DISPUTED
 
 ### Flow
 ```
-1. Customer pays (external)
-2. Click "Mark as Paid"
-3. Payment confirmation
-   ├─ Payment method (optional)
-   ├─ Payment reference (optional)
-   └─ Payment date
-4. Confirm
-5. Status → PAID
+1. Invoice exists (status = UNPAID)
+2. Customer pays (external)
+3. Click "Mark as Paid" button
+4. Payment dialog opens
+   ├─ Payment note input (optional)
+   ├─ Examples: "Paid via credit card", "Check #1234"
+   └─ Confirm button
+5. Invoice status → PAID
 6. paid_at timestamp set
+7. Payment note saved
 ```
 
-### Alternative: Dispute
-```
-1. Payment issue occurs
-2. Click "Mark Disputed"
-3. Add dispute notes
-4. Status → DISPUTED
-5. Resolve later → PAID
-```
+### Payment Tracking
+- Invoice maintains payment history
+- Payment note provides audit trail
+- Invoice can be printed for records
 
 ---
 
-## ⏸️ Side Flow: On Hold
+## ⏸️ Side Flow: Pending Status
 
-### From IN_PROGRESS
+### From Any Status
 ```
 1. Issue arises (parts needed, customer unreachable)
-2. Click "Place on Hold"
-3. Add hold reason
-4. Status → ON_HOLD
-5. Work paused
+2. Click status badge or menu
+3. Select "Pending" status
+4. Add internal notes (optional)
+5. Status → PENDING
+6. Work paused
 ```
 
 ### Resume
 ```
 1. Issue resolved
-2. Click "Resume Work"
-3. Status → IN_PROGRESS
+2. Click status badge or menu
+3. Select "In Progress" status
+4. Status → IN_PROGRESS
+5. Work resumes
 ```
 
 ---
@@ -218,30 +214,30 @@ CANCELLED  DECLINED    ON_HOLD     DISPUTED
 Each job maintains a timeline of events:
 
 ```
-J001 - 2024 Honda Civic
+J241216001 - 2024 Honda Civic
 ─────────────────────────────────────
-● Created                    Dec 15, 9:00 AM
-│ Estimate created by John
+● Created                    Dec 16, 9:00 AM
+│ Job created by John
+│ Status: BOOKED
 │
-● Line items added           Dec 15, 9:15 AM
+● Line items added           Dec 16, 9:15 AM
 │ 4 items totaling $450.00
 │
-● Sent to customer           Dec 15, 9:20 AM
-│ Email sent to customer@email.com
-│
-● Customer approved          Dec 15, 2:30 PM
-│ Status: ESTIMATE → APPROVED
-│
-● Work started               Dec 16, 8:00 AM
-│ Status: APPROVED → IN_PROGRESS
+● Work started               Dec 16, 10:00 AM
+│ Status: BOOKED → IN_PROGRESS
 │ Assigned to: Mike
 │
 ● Completed                  Dec 16, 4:00 PM
-│ Status: IN_PROGRESS → INVOICED
+│ Status: IN_PROGRESS → COMPLETED
 │
-● Payment received           Dec 17, 10:00 AM
-│ Status: INVOICED → PAID
-│ Method: Credit Card
+● Invoice created            Dec 16, 4:05 PM
+│ Invoice: INV-241216-001
+│ Due Date: Dec 30, 2024
+│ Status: UNPAID
+│
+● Payment received           Dec 18, 10:00 AM
+│ Invoice status: UNPAID → PAID
+│ Payment Note: "Paid via credit card ending in 1234"
 ─────────────────────────────────────
 ```
 

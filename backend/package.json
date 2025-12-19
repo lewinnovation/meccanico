@@ -14,7 +14,7 @@
     "migration:revert": "npm run typeorm -- migration:revert -d src/config/database.ts",
     "db:reset": "ts-node src/utils/resetDatabase.ts",
     "db:seed": "ts-node src/utils/seedData.ts",
-    "db:setup": "npm run db:reset && npm run db:seed",
+    "db:setup": "ts-node src/utils/resetAndSeed.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

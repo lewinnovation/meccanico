@@ -20,6 +20,7 @@
     "tags": [
       { "name": "Auth", "description": "Authentication endpoints" },
       { "name": "Jobs", "description": "Job management" },
+      { "name": "Invoices", "description": "Invoice management" },
       { "name": "Customers", "description": "Customer management" },
       { "name": "Vehicles", "description": "Vehicle management" },
       { "name": "Inventory", "description": "Inventory management" },

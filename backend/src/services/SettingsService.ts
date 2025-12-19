@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   'invoice.prefix': 'INV-',
   'invoice.terms': 'Payment due within 30 days',
   'invoice.footer': 'Thank you for your business!',
+  'invoice.payment_terms_days': 14,
 };
 
 export class SettingsService {

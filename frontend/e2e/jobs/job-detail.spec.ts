@@ -63,21 +63,25 @@ test.describe('Job Line Items', () => {
     await expect(page.locator('text=Dashboard')).toBeVisible();
   });
 
-  test('should show add item button for estimate jobs', async ({ page }) => {
+  test('should show add item button for booked jobs', async ({ page }) => {
     // Navigate to Jobs
     await navigateToJobs(page);
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
     
-    // Look for jobs with ESTIMATE status - try multiple selectors
-    const estimateJobRow = page.locator('table tbody tr').filter({ hasText: /ESTIMATE|Estimate/i }).first();
-    const hasEstimateJob = await estimateJobRow.isVisible({ timeout: 3000 }).catch(() => false);
+    // Filter to Booked jobs
+    await page.click('button[role="tab"]:has-text("Booked")');
+    await page.waitForTimeout(500);
     
-    if (hasEstimateJob) {
-      await estimateJobRow.click();
+    // Look for jobs with BOOKED status
+    const bookedJobRow = page.locator('table tbody tr').filter({ hasText: /BOOKED|Booked/i }).first();
+    const hasBookedJob = await bookedJobRow.isVisible({ timeout: 3000 }).catch(() => false);
+    
+    if (hasBookedJob) {
+      await bookedJobRow.click();
       await page.waitForTimeout(500);
       
-      // Verify Add Item button is visible for estimate
+      // Verify Add Item button is visible for booked jobs
       await expect(page.locator('button:has-text("Add Item")')).toBeVisible({ timeout: 5000 });
     }
   });
@@ -120,16 +124,23 @@ test.describe('Job Templates', () => {
     await loginAsAdmin(page);
   });
 
-  test('should show apply template button for estimate jobs', async ({ page }) => {
+  test('should show apply template button for booked jobs', async ({ page }) => {
     // Navigate to Jobs
     await navigateToJobs(page);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
     
-    // If we have an estimate job, verify the Apply Template button
-    const jobRow = page.locator('table tbody tr:has(.MuiChip-root:has-text("Estimate"))').first();
-    const hasEstimateJob = await jobRow.isVisible().catch(() => false);
+    // Filter to Booked jobs
+    await page.click('button[role="tab"]:has-text("Booked")');
+    await page.waitForTimeout(500);
     
-    if (hasEstimateJob) {
+    // If we have a booked job, verify the Apply Template button
+    const jobRow = page.locator('table tbody tr:has(.MuiChip-root:has-text("Booked"))').first();
+    const hasBookedJob = await jobRow.isVisible().catch(() => false);
+    
+    if (hasBookedJob) {
       await jobRow.click();
+      await page.waitForLoadState('networkidle');
       
       // Verify Apply Template button is visible
       await expect(page.locator('button:has-text("Apply Template")')).toBeVisible();

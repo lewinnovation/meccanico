@@ -32,7 +32,7 @@ describe('JobService', () => {
     code: 'J001',
     customerId: 'customer-1',
     vehicleId: 'vehicle-1',
-    status: JobStatus.ESTIMATE,
+    status: JobStatus.BOOKED,
     notes: 'Test notes',
     taxRate: 10,
     discountAmount: 0,
@@ -130,10 +130,10 @@ describe('JobService', () => {
       };
       mockJobRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
-      await jobService.findAll(1, 50, undefined, JobStatus.ESTIMATE);
+      await jobService.findAll(1, 50, undefined, JobStatus.BOOKED);
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('job.status = :status', {
-        status: JobStatus.ESTIMATE,
+        status: JobStatus.BOOKED,
       });
     });
 
@@ -184,7 +184,7 @@ describe('JobService', () => {
       expect(result).toEqual(mockJob);
       expect(mockJobRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'job-1' },
-        relations: ['customer', 'vehicle', 'assignee', 'lineItems'],
+        relations: ['customer', 'vehicle', 'assignee', 'lineItems', 'invoice'],
         order: { lineItems: { sortOrder: 'ASC' } },
       });
     });
@@ -205,7 +205,7 @@ describe('JobService', () => {
       expect(result).toEqual(mockJob);
       expect(mockJobRepository.findOne).toHaveBeenCalledWith({
         where: { code: 'J001' },
-        relations: ['customer', 'vehicle', 'assignee', 'lineItems'],
+        relations: ['customer', 'vehicle', 'assignee', 'lineItems', 'invoice'],
         order: { lineItems: { sortOrder: 'ASC' } },
       });
     });
@@ -275,23 +275,24 @@ describe('JobService', () => {
   });
 
   describe('updateStatus', () => {
-    it('should transition from ESTIMATE to APPROVED', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE };
+    it('should allow flexible transitions between any statuses', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
       mockJobRepository.findOne
-        .mockResolvedValueOnce(estimateJob)
-        .mockResolvedValueOnce({ ...estimateJob, status: JobStatus.APPROVED });
-      mockJobRepository.save.mockResolvedValue({ ...estimateJob, status: JobStatus.APPROVED });
+        .mockResolvedValueOnce(bookedJob)
+        .mockResolvedValueOnce({ ...bookedJob, status: JobStatus.IN_PROGRESS });
+      mockJobRepository.save.mockResolvedValue({ ...bookedJob, status: JobStatus.IN_PROGRESS });
 
-      const result = await jobService.updateStatus('job-1', JobStatus.APPROVED);
+      const result = await jobService.updateStatus('job-1', JobStatus.IN_PROGRESS);
 
       expect(mockJobRepository.save).toHaveBeenCalled();
+      expect(result.status).toBe(JobStatus.IN_PROGRESS);
     });
 
-    it('should transition from APPROVED to IN_PROGRESS and set startedAt', async () => {
-      const approvedJob = { ...mockJob, status: JobStatus.APPROVED, startedAt: null };
+    it('should set startedAt when transitioning to IN_PROGRESS', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED, startedAt: null };
       mockJobRepository.findOne
-        .mockResolvedValueOnce(approvedJob)
-        .mockResolvedValueOnce({ ...approvedJob, status: JobStatus.IN_PROGRESS });
+        .mockResolvedValueOnce(bookedJob)
+        .mockResolvedValueOnce({ ...bookedJob, status: JobStatus.IN_PROGRESS });
       mockJobRepository.save.mockImplementation((job: any) => {
         expect(job.startedAt).toBeDefined();
         return Promise.resolve(job);
@@ -300,80 +301,61 @@ describe('JobService', () => {
       await jobService.updateStatus('job-1', JobStatus.IN_PROGRESS);
     });
 
-    it('should transition from IN_PROGRESS to INVOICED and set timestamps', async () => {
-      const inProgressJob = { ...mockJob, status: JobStatus.IN_PROGRESS };
+    it('should set completedAt when transitioning to COMPLETED', async () => {
+      const inProgressJob = { ...mockJob, status: JobStatus.IN_PROGRESS, completedAt: null };
       mockJobRepository.findOne
         .mockResolvedValueOnce(inProgressJob)
-        .mockResolvedValueOnce({ ...inProgressJob, status: JobStatus.INVOICED });
+        .mockResolvedValueOnce({ ...inProgressJob, status: JobStatus.COMPLETED });
       mockJobRepository.save.mockImplementation((job: any) => {
         expect(job.completedAt).toBeDefined();
-        expect(job.invoicedAt).toBeDefined();
         return Promise.resolve(job);
       });
 
-      await jobService.updateStatus('job-1', JobStatus.INVOICED);
+      await jobService.updateStatus('job-1', JobStatus.COMPLETED);
     });
 
-    it('should transition from INVOICED to PAID and set paidAt', async () => {
-      const invoicedJob = { ...mockJob, status: JobStatus.INVOICED };
+    it('should allow transition from any status to any other status', async () => {
+      const pendingJob = { ...mockJob, status: JobStatus.PENDING };
       mockJobRepository.findOne
-        .mockResolvedValueOnce(invoicedJob)
-        .mockResolvedValueOnce({ ...invoicedJob, status: JobStatus.PAID });
-      mockJobRepository.save.mockImplementation((job: any) => {
-        expect(job.paidAt).toBeDefined();
-        return Promise.resolve(job);
-      });
+        .mockResolvedValueOnce(pendingJob)
+        .mockResolvedValueOnce({ ...pendingJob, status: JobStatus.AWAITING_PICKUP });
+      mockJobRepository.save.mockResolvedValue({ ...pendingJob, status: JobStatus.AWAITING_PICKUP });
 
-      await jobService.updateStatus('job-1', JobStatus.PAID);
-    });
+      const result = await jobService.updateStatus('job-1', JobStatus.AWAITING_PICKUP);
 
-    it('should throw BadRequestError for invalid transition', async () => {
-      const paidJob = { ...mockJob, status: JobStatus.PAID };
-      mockJobRepository.findOne.mockResolvedValue(paidJob);
-
-      await expect(jobService.updateStatus('job-1', JobStatus.ESTIMATE)).rejects.toThrow(
-        BadRequestError
-      );
-    });
-
-    it('should throw BadRequestError when transitioning PAID to any status', async () => {
-      const paidJob = { ...mockJob, status: JobStatus.PAID };
-      mockJobRepository.findOne.mockResolvedValue(paidJob);
-
-      await expect(jobService.updateStatus('job-1', JobStatus.APPROVED)).rejects.toThrow(
-        BadRequestError
-      );
+      expect(mockJobRepository.save).toHaveBeenCalled();
+      expect(result.status).toBe(JobStatus.AWAITING_PICKUP);
     });
   });
 
   describe('delete', () => {
-    it('should delete job in ESTIMATE status', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE };
-      mockJobRepository.findOne.mockResolvedValue(estimateJob);
+    it('should delete job in BOOKED status', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
       mockJobRepository.remove.mockResolvedValue(undefined);
 
       await jobService.delete('job-1');
 
-      expect(mockJobRepository.remove).toHaveBeenCalledWith(estimateJob);
+      expect(mockJobRepository.remove).toHaveBeenCalledWith(bookedJob);
     });
 
-    it('should throw ConflictError when deleting job not in ESTIMATE status', async () => {
-      const approvedJob = { ...mockJob, status: JobStatus.APPROVED };
-      mockJobRepository.findOne.mockResolvedValue(approvedJob);
+    it('should throw ConflictError when deleting job not in BOOKED status', async () => {
+      const inProgressJob = { ...mockJob, status: JobStatus.IN_PROGRESS };
+      mockJobRepository.findOne.mockResolvedValue(inProgressJob);
 
       await expect(jobService.delete('job-1')).rejects.toThrow(ConflictError);
     });
 
-    it('should throw ConflictError when deleting IN_PROGRESS job', async () => {
-      const inProgressJob = { ...mockJob, status: JobStatus.IN_PROGRESS };
-      mockJobRepository.findOne.mockResolvedValue(inProgressJob);
+    it('should throw ConflictError when deleting COMPLETED job', async () => {
+      const completedJob = { ...mockJob, status: JobStatus.COMPLETED };
+      mockJobRepository.findOne.mockResolvedValue(completedJob);
 
       await expect(jobService.delete('job-1')).rejects.toThrow(ConflictError);
     });
   });
 
   describe('duplicate', () => {
-    it('should create a new ESTIMATE job from existing job', async () => {
+    it('should create a new BOOKED job from existing job', async () => {
       const originalJob = {
         ...mockJob,
         lineItems: [mockLineItem],
@@ -386,7 +368,7 @@ describe('JobService', () => {
         ...mockJob,
         id: 'job-2',
         code: 'J002',
-        status: JobStatus.ESTIMATE,
+        status: JobStatus.BOOKED,
       });
       mockJobRepository.save.mockResolvedValue({ id: 'job-2' });
       mockLineItemRepository.create.mockReturnValue(mockLineItem);
@@ -397,7 +379,7 @@ describe('JobService', () => {
       expect(mockGenerateJobCode).toHaveBeenCalled();
       expect(mockJobRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: JobStatus.ESTIMATE,
+          status: JobStatus.BOOKED,
         })
       );
     });
@@ -411,9 +393,9 @@ describe('JobService', () => {
       unitPrice: 25,
     };
 
-    it('should add line item to job in ESTIMATE status', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE, lineItems: [] };
-      mockJobRepository.findOne.mockResolvedValue(estimateJob);
+    it('should add line item to job not in COMPLETED status', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED, lineItems: [] };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
       mockLineItemRepository.create.mockReturnValue({ ...lineItemDto, id: 'new-item' });
       mockLineItemRepository.save.mockResolvedValue({ ...lineItemDto, id: 'new-item' });
 
@@ -428,9 +410,9 @@ describe('JobService', () => {
       );
     });
 
-    it('should throw ConflictError when adding to non-ESTIMATE job', async () => {
-      const approvedJob = { ...mockJob, status: JobStatus.APPROVED };
-      mockJobRepository.findOne.mockResolvedValue(approvedJob);
+    it('should throw ConflictError when adding to COMPLETED job', async () => {
+      const completedJob = { ...mockJob, status: JobStatus.COMPLETED };
+      mockJobRepository.findOne.mockResolvedValue(completedJob);
 
       await expect(jobService.addLineItem('job-1', lineItemDto)).rejects.toThrow(ConflictError);
     });
@@ -438,7 +420,7 @@ describe('JobService', () => {
     it('should set correct sortOrder for new items', async () => {
       const jobWithItems = {
         ...mockJob,
-        status: JobStatus.ESTIMATE,
+        status: JobStatus.BOOKED,
         lineItems: [{ ...mockLineItem, sortOrder: 5 }],
       };
       mockJobRepository.findOne.mockResolvedValue(jobWithItems);
@@ -453,9 +435,9 @@ describe('JobService', () => {
   });
 
   describe('updateLineItem', () => {
-    it('should update line item on ESTIMATE job', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE };
-      mockJobRepository.findOne.mockResolvedValue(estimateJob);
+    it('should update line item on non-COMPLETED job', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
       mockLineItemRepository.findOne.mockResolvedValue(mockLineItem);
       mockLineItemRepository.save.mockResolvedValue({ ...mockLineItem, quantity: 5 });
 
@@ -464,9 +446,9 @@ describe('JobService', () => {
       expect(mockLineItemRepository.save).toHaveBeenCalled();
     });
 
-    it('should throw ConflictError when updating item on non-ESTIMATE job', async () => {
-      const inProgressJob = { ...mockJob, status: JobStatus.IN_PROGRESS };
-      mockJobRepository.findOne.mockResolvedValue(inProgressJob);
+    it('should throw ConflictError when updating item on COMPLETED job', async () => {
+      const completedJob = { ...mockJob, status: JobStatus.COMPLETED };
+      mockJobRepository.findOne.mockResolvedValue(completedJob);
 
       await expect(
         jobService.updateLineItem('job-1', 'item-1', { quantity: 5 })
@@ -474,8 +456,8 @@ describe('JobService', () => {
     });
 
     it('should throw NotFoundError when line item not found', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE };
-      mockJobRepository.findOne.mockResolvedValue(estimateJob);
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
       mockLineItemRepository.findOne.mockResolvedValue(null);
 
       await expect(
@@ -485,9 +467,9 @@ describe('JobService', () => {
   });
 
   describe('deleteLineItem', () => {
-    it('should delete line item from ESTIMATE job', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE };
-      mockJobRepository.findOne.mockResolvedValue(estimateJob);
+    it('should delete line item from non-COMPLETED job', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
       mockLineItemRepository.delete.mockResolvedValue({ affected: 1 });
 
       await jobService.deleteLineItem('job-1', 'item-1');
@@ -498,9 +480,9 @@ describe('JobService', () => {
       });
     });
 
-    it('should throw ConflictError when deleting from non-ESTIMATE job', async () => {
-      const invoicedJob = { ...mockJob, status: JobStatus.INVOICED };
-      mockJobRepository.findOne.mockResolvedValue(invoicedJob);
+    it('should throw ConflictError when deleting from COMPLETED job', async () => {
+      const completedJob = { ...mockJob, status: JobStatus.COMPLETED };
+      mockJobRepository.findOne.mockResolvedValue(completedJob);
 
       await expect(jobService.deleteLineItem('job-1', 'item-1')).rejects.toThrow(ConflictError);
     });
@@ -529,8 +511,8 @@ describe('JobService', () => {
   });
 
   describe('applyTemplate', () => {
-    it('should apply template to ESTIMATE job', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE, lineItems: [] };
+    it('should apply template to non-COMPLETED job', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED, lineItems: [] };
       const mockTemplate = {
         id: 'template-1',
         items: [
@@ -539,8 +521,8 @@ describe('JobService', () => {
       };
 
       mockJobRepository.findOne
-        .mockResolvedValueOnce(estimateJob)
-        .mockResolvedValueOnce(estimateJob);
+        .mockResolvedValueOnce(bookedJob)
+        .mockResolvedValueOnce(bookedJob);
       mockTemplateRepository.findOne.mockResolvedValue(mockTemplate);
       mockLineItemRepository.create.mockReturnValue({});
       mockLineItemRepository.save.mockResolvedValue([]);
@@ -553,16 +535,16 @@ describe('JobService', () => {
       });
     });
 
-    it('should throw ConflictError when applying template to non-ESTIMATE job', async () => {
-      const approvedJob = { ...mockJob, status: JobStatus.APPROVED };
-      mockJobRepository.findOne.mockResolvedValue(approvedJob);
+    it('should throw ConflictError when applying template to COMPLETED job', async () => {
+      const completedJob = { ...mockJob, status: JobStatus.COMPLETED };
+      mockJobRepository.findOne.mockResolvedValue(completedJob);
 
       await expect(jobService.applyTemplate('job-1', 'template-1')).rejects.toThrow(ConflictError);
     });
 
     it('should throw NotFoundError when template not found', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE };
-      mockJobRepository.findOne.mockResolvedValue(estimateJob);
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
       mockTemplateRepository.findOne.mockResolvedValue(null);
 
       await expect(jobService.applyTemplate('job-1', 'nonexistent')).rejects.toThrow(NotFoundError);
@@ -571,8 +553,8 @@ describe('JobService', () => {
 
   describe('addLineItemsBulk', () => {
     it('should add multiple line items at once', async () => {
-      const estimateJob = { ...mockJob, status: JobStatus.ESTIMATE, lineItems: [] };
-      mockJobRepository.findOne.mockResolvedValue(estimateJob);
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED, lineItems: [] };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
       mockLineItemRepository.create.mockImplementation((data: any) => data);
       mockLineItemRepository.save.mockResolvedValue([]);
 
@@ -586,9 +568,9 @@ describe('JobService', () => {
       expect(mockLineItemRepository.save).toHaveBeenCalled();
     });
 
-    it('should throw ConflictError when adding to non-ESTIMATE job', async () => {
-      const inProgressJob = { ...mockJob, status: JobStatus.IN_PROGRESS };
-      mockJobRepository.findOne.mockResolvedValue(inProgressJob);
+    it('should throw ConflictError when adding to COMPLETED job', async () => {
+      const completedJob = { ...mockJob, status: JobStatus.COMPLETED };
+      mockJobRepository.findOne.mockResolvedValue(completedJob);
 
       await expect(
         jobService.addLineItemsBulk('job-1', [

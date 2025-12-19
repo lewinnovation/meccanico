@@ -40,7 +40,11 @@ export class JobController extends Controller {
     @Query() status?: JobStatus,
     @Query() customerId?: string,
     @Query() vehicleId?: string,
-    @Query() assignedTo?: string
+    @Query() assignedTo?: string,
+    @Query() startDate?: string,
+    @Query() endDate?: string,
+    @Query() hasInvoice?: boolean,
+    @Query() invoicePaid?: boolean
   ): Promise<PaginatedResult<Job>> {
     return this.jobService.findAll(
       page,
@@ -49,7 +53,11 @@ export class JobController extends Controller {
       status,
       customerId,
       vehicleId,
-      assignedTo
+      assignedTo,
+      startDate,
+      endDate,
+      hasInvoice,
+      invoicePaid
     );
   }
 

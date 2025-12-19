@@ -6,23 +6,21 @@ import {
   UpdateDateColumn,
   ManyToOne,
   OneToMany,
+  OneToOne,
   JoinColumn,
 } from 'typeorm';
 import { Customer } from './Customer';
 import { Vehicle } from './Vehicle';
 import { User } from './User';
 import { LineItem } from './LineItem';
+import { Invoice } from './Invoice';
 
 export enum JobStatus {
-  ESTIMATE = 'ESTIMATE',
-  APPROVED = 'APPROVED',
+  BOOKED = 'BOOKED',
   IN_PROGRESS = 'IN_PROGRESS',
-  ON_HOLD = 'ON_HOLD',
-  INVOICED = 'INVOICED',
-  PAID = 'PAID',
-  CANCELLED = 'CANCELLED',
-  DECLINED = 'DECLINED',
-  DISPUTED = 'DISPUTED',
+  PENDING = 'PENDING',
+  AWAITING_PICKUP = 'AWAITING_PICKUP',
+  COMPLETED = 'COMPLETED',
 }
 
 @Entity('jobs')
@@ -45,7 +43,7 @@ export class Job {
   @Column({
     type: 'varchar',
     length: 20,
-    default: JobStatus.ESTIMATE,
+    default: JobStatus.BOOKED,
   })
   status: JobStatus;
 
@@ -73,11 +71,8 @@ export class Job {
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt: Date | null;
 
-  @Column({ name: 'invoiced_at', type: 'timestamptz', nullable: true })
-  invoicedAt: Date | null;
-
-  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
-  paidAt: Date | null;
+  @Column({ name: 'invoice_id', type: 'uuid', nullable: true })
+  invoiceId: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -99,5 +94,9 @@ export class Job {
 
   @OneToMany(() => LineItem, (lineItem) => lineItem.job, { cascade: true })
   lineItems: LineItem[];
+
+  @OneToOne(() => Invoice, (invoice) => invoice.job, { nullable: true })
+  @JoinColumn({ name: 'invoice_id' })
+  invoice: Invoice | null;
 }
 

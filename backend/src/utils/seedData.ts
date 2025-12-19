@@ -12,7 +12,9 @@ import { Template } from '../models/Template';
 import { TemplateItem } from '../models/TemplateItem';
 import { Job, JobStatus } from '../models/Job';
 import { LineItem, LineItemType } from '../models/LineItem';
+import { Invoice, InvoiceStatus } from '../models/Invoice';
 import { Settings } from '../models/Settings';
+import { InvoiceService } from '../services/InvoiceService';
 import * as bcrypt from 'bcryptjs';
 import { generateCustomerCode, generateCode, CODE_PREFIXES } from './codeGenerator';
 
@@ -555,13 +557,20 @@ async function seedSettings(): Promise<void> {
       },
     },
     {
-      key: 'invoice_settings',
-      value: {
-        prefix: 'INV',
-        nextNumber: 1,
-        footer: 'Thank you for your business!',
-        terms: 'Payment due within 30 days.',
-      },
+      key: 'invoice.prefix',
+      value: 'INV-',
+    },
+    {
+      key: 'invoice.terms',
+      value: 'Payment due within 30 days.',
+    },
+    {
+      key: 'invoice.footer',
+      value: 'Thank you for your business!',
+    },
+    {
+      key: 'invoice.payment_terms_days',
+      value: 14,
     },
     {
       key: 'vehicle_lexicon',
@@ -1152,14 +1161,14 @@ async function seedJobs(
   const lastMonth = new Date(now);
   lastMonth.setMonth(lastMonth.getMonth() - 1);
 
-  // Job 1: ESTIMATE
+  // Job 1: BOOKED
   const job1Code = generateJobCodeForDate(yesterday, 1);
   const job1 = jobRepository.create({
     code: job1Code,
     customerId: customers[0].id,
     vehicleId: vehicles[0].id,
     assignedTo: mechanic?.id || null,
-    status: JobStatus.ESTIMATE,
+    status: JobStatus.BOOKED,
     notes: 'Customer requested quote for oil change',
     taxRate: 10.0,
     discountAmount: 0,
@@ -1245,21 +1254,20 @@ async function seedJobs(
     }),
   ]);
 
-  // Job 3: INVOICED
+  // Job 3: COMPLETED (will have invoice)
   const job3Code = generateJobCodeForDate(lastWeek, 2);
   const job3 = jobRepository.create({
     code: job3Code,
     customerId: customers[2].id,
     vehicleId: vehicles[5].id,
     assignedTo: mechanic?.id || null,
-    status: JobStatus.INVOICED,
+    status: JobStatus.COMPLETED,
     notes: 'Service completed',
     taxRate: 10.0,
     discountAmount: 0,
     discountPercent: 0,
     startedAt: lastWeek,
     completedAt: yesterday,
-    invoicedAt: yesterday,
     createdAt: lastMonth,
   });
   const savedJob3 = await jobRepository.save(job3);
@@ -1276,22 +1284,20 @@ async function seedJobs(
     }),
   ]);
 
-  // Job 4: PAID
+  // Job 4: COMPLETED (will have paid invoice)
   const job4Code = generateJobCodeForDate(lastMonth, 1);
   const job4 = jobRepository.create({
     code: job4Code,
     customerId: customers[3].id,
     vehicleId: vehicles[6].id,
     assignedTo: mechanic?.id || null,
-    status: JobStatus.PAID,
+    status: JobStatus.COMPLETED,
     notes: 'Payment received',
     taxRate: 10.0,
     discountAmount: 0,
     discountPercent: 10.0,
     startedAt: lastMonth,
     completedAt: lastWeek,
-    invoicedAt: lastWeek,
-    paidAt: yesterday,
     createdAt: lastMonth,
   });
   const savedJob4 = await jobRepository.save(job4);
@@ -1317,14 +1323,14 @@ async function seedJobs(
     }),
   ]);
 
-  // Job 5: ON_HOLD
+  // Job 5: PENDING
   const job5Code = generateJobCodeForDate(lastWeek, 3);
   const job5 = jobRepository.create({
     code: job5Code,
     customerId: customers[4].id,
     vehicleId: vehicles[7].id,
     assignedTo: mechanic?.id || null,
-    status: JobStatus.ON_HOLD,
+    status: JobStatus.PENDING,
     notes: 'Waiting for parts',
     internalNotes: 'Customer approved, waiting for brake pads to arrive',
     taxRate: 10.0,
@@ -1335,7 +1341,30 @@ async function seedJobs(
   });
   await jobRepository.save(job5);
 
+  // Create invoices for completed jobs
+  const invoiceService = new InvoiceService();
+  const invoiceRepository = AppDataSource.getRepository(Invoice);
+
+  // Create invoice for job3 (unpaid)
+  try {
+    const invoice3 = await invoiceService.createFromJob(savedJob3.id);
+    console.log(`  ✓ Created invoice ${invoice3.invoiceNumber} for job ${savedJob3.code}`);
+  } catch (error) {
+    console.error(`  ✗ Failed to create invoice for job ${savedJob3.code}:`, error);
+  }
+
+  // Create invoice for job4 (paid)
+  try {
+    const invoice4 = await invoiceService.createFromJob(savedJob4.id);
+    // Mark as paid
+    await invoiceService.markAsPaid(invoice4.id, { paymentNote: 'Payment received via credit card' });
+    console.log(`  ✓ Created and marked as paid invoice ${invoice4.invoiceNumber} for job ${savedJob4.code}`);
+  } catch (error) {
+    console.error(`  ✗ Failed to create invoice for job ${savedJob4.code}:`, error);
+  }
+
   console.log('  ✓ Seeded 5 jobs in various statuses');
+  console.log('  ✓ Created invoices for completed jobs');
 }
 
 /**

@@ -81,20 +81,16 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, onClick,
 
 // Status colors
 const statusConfig: Record<JobStatus, { label: string; color: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' }> = {
-  ESTIMATE: { label: 'Estimate', color: 'default' },
-  APPROVED: { label: 'Approved', color: 'info' },
+  BOOKED: { label: 'Booked', color: 'default' },
   IN_PROGRESS: { label: 'In Progress', color: 'primary' },
-  ON_HOLD: { label: 'On Hold', color: 'warning' },
-  INVOICED: { label: 'Invoiced', color: 'secondary' },
-  PAID: { label: 'Paid', color: 'success' },
-  CANCELLED: { label: 'Cancelled', color: 'error' },
-  DECLINED: { label: 'Declined', color: 'error' },
-  DISPUTED: { label: 'Disputed', color: 'warning' },
+  PENDING: { label: 'Pending', color: 'warning' },
+  AWAITING_PICKUP: { label: 'Awaiting Pickup', color: 'info' },
+  COMPLETED: { label: 'Completed', color: 'success' },
 };
 
 export const Dashboard: React.FC = observer(() => {
   const navigate = useNavigate();
-  const { authStore, jobStore, customerStore, vehicleStore } = useStore();
+  const { authStore, jobStore, customerStore } = useStore();
   const [loading, setLoading] = useState(true);
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
   const [vehiclesInService, setVehiclesInService] = useState<Job[]>([]);
@@ -116,19 +112,20 @@ export const Dashboard: React.FC = observer(() => {
         await customerStore.fetchCustomers();
         
         // Calculate stats from fetched data
-        const jobs = jobStore.jobs;
+        const jobs = jobStore.jobs || [];
         const activeJobs = jobs.filter((j) => 
-          ['ESTIMATE', 'APPROVED', 'IN_PROGRESS', 'ON_HOLD'].includes(j.status)
+          ['BOOKED', 'IN_PROGRESS', 'PENDING', 'AWAITING_PICKUP'].includes(j.status)
         ).length;
         
-        const awaitingPayment = jobs.filter((j) => j.status === 'INVOICED').length;
+        // Awaiting payment = completed jobs with invoices (they can be unpaid)
+        const awaitingPayment = jobs.filter((j) => j.status === 'COMPLETED' && j.invoiceId).length;
         
         const inProgressJobs = jobs.filter((j) => j.status === 'IN_PROGRESS');
         
         setStats({
           activeJobs,
           awaitingPayment,
-          totalCustomers: customerStore.total,
+          totalCustomers: customerStore.total || 0,
           inProgressVehicles: inProgressJobs.length,
         });
         
@@ -139,13 +136,22 @@ export const Dashboard: React.FC = observer(() => {
         setVehiclesInService(inProgressJobs.slice(0, 5));
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
+        // Set defaults on error
+        setStats({
+          activeJobs: 0,
+          awaitingPayment: 0,
+          totalCustomers: 0,
+          inProgressVehicles: 0,
+        });
+        setRecentJobs([]);
+        setVehiclesInService([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchDashboardData();
-  }, [jobStore, customerStore, vehicleStore]);
+  }, [jobStore, customerStore]);
 
   const formatDate = (date: string) => new Date(date).toLocaleDateString();
 
@@ -154,7 +160,7 @@ export const Dashboard: React.FC = observer(() => {
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" fontWeight={600} gutterBottom>
-          Welcome back, {authStore.user?.name?.split(' ')[0]}
+          Welcome back, {authStore.user?.name?.split(' ')[0] || 'User'}
         </Typography>
         <Typography color="text.secondary">
           Here's what's happening in your shop today
@@ -200,7 +206,8 @@ export const Dashboard: React.FC = observer(() => {
             icon={<TrendingUp />}
             color="#9C27B0"
             onClick={() => {
-              jobStore.setStatusFilter('INVOICED');
+              // Navigate to jobs and filter for completed jobs (which have invoices)
+              jobStore.setStatusFilter('COMPLETED');
               navigate('/jobs');
             }}
             loading={loading}
@@ -293,11 +300,19 @@ export const Dashboard: React.FC = observer(() => {
                           {job.vehicle ? `${job.vehicle.make} ${job.vehicle.model}` : '-'}
                         </TableCell>
                         <TableCell>
-                          <Chip
-                            label={statusConfig[job.status].label}
-                            color={statusConfig[job.status].color}
-                            size="small"
-                          />
+                          {statusConfig[job.status] ? (
+                            <Chip
+                              label={statusConfig[job.status].label}
+                              color={statusConfig[job.status].color}
+                              size="small"
+                            />
+                          ) : (
+                            <Chip
+                              label={job.status}
+                              color="default"
+                              size="small"
+                            />
+                          )}
                         </TableCell>
                         <TableCell>{formatDate(job.createdAt)}</TableCell>
                       </TableRow>

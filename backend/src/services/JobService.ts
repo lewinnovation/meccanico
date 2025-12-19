@@ -60,13 +60,18 @@ export class JobService {
     status?: JobStatus,
     customerId?: string,
     vehicleId?: string,
-    assignedTo?: string
+    assignedTo?: string,
+    startDate?: string,
+    endDate?: string,
+    hasInvoice?: boolean,
+    invoicePaid?: boolean
   ): Promise<PaginatedResult<Job>> {
     const queryBuilder = this.repository.createQueryBuilder('job')
       .leftJoinAndSelect('job.customer', 'customer')
       .leftJoinAndSelect('job.vehicle', 'vehicle')
       .leftJoinAndSelect('job.assignee', 'assignee')
-      .leftJoinAndSelect('job.lineItems', 'lineItems');
+      .leftJoinAndSelect('job.lineItems', 'lineItems')
+      .leftJoinAndSelect('job.invoice', 'invoice');
 
     if (search) {
       queryBuilder.andWhere(
@@ -91,6 +96,36 @@ export class JobService {
       queryBuilder.andWhere('job.assignedTo = :assignedTo', { assignedTo });
     }
 
+    // Date range filtering
+    if (startDate) {
+      queryBuilder.andWhere('job.createdAt >= :startDate', { startDate });
+    }
+
+    if (endDate) {
+      // Add one day to endDate to include the entire end date
+      const endDateObj = new Date(endDate);
+      endDateObj.setDate(endDateObj.getDate() + 1);
+      queryBuilder.andWhere('job.createdAt < :endDate', { endDate: endDateObj });
+    }
+
+    // Invoice filtering
+    if (hasInvoice !== undefined) {
+      if (hasInvoice) {
+        queryBuilder.andWhere('job.invoiceId IS NOT NULL');
+      } else {
+        queryBuilder.andWhere('job.invoiceId IS NULL');
+      }
+    }
+
+    // Invoice paid status filtering
+    if (invoicePaid !== undefined) {
+      if (invoicePaid) {
+        queryBuilder.andWhere('invoice.status = :paidStatus', { paidStatus: 'PAID' });
+      } else {
+        queryBuilder.andWhere('(invoice.status IS NULL OR invoice.status != :paidStatus)', { paidStatus: 'PAID' });
+      }
+    }
+
     const [data, total] = await queryBuilder
       .orderBy('job.createdAt', 'DESC')
       .skip((page - 1) * limit)
@@ -103,7 +138,7 @@ export class JobService {
   async findById(id: string): Promise<Job> {
     const job = await this.repository.findOne({
       where: { id },
-      relations: ['customer', 'vehicle', 'assignee', 'lineItems'],
+      relations: ['customer', 'vehicle', 'assignee', 'lineItems', 'invoice'],
       order: { lineItems: { sortOrder: 'ASC' } },
     });
 
@@ -117,7 +152,7 @@ export class JobService {
   async findByCode(code: string): Promise<Job> {
     const job = await this.repository.findOne({
       where: { code },
-      relations: ['customer', 'vehicle', 'assignee', 'lineItems'],
+      relations: ['customer', 'vehicle', 'assignee', 'lineItems', 'invoice'],
       order: { lineItems: { sortOrder: 'ASC' } },
     });
 
@@ -153,7 +188,7 @@ export class JobService {
       assignedTo: data.assignedTo,
       notes: data.notes,
       taxRate: data.taxRate ?? 0,
-      status: JobStatus.ESTIMATE,
+      status: JobStatus.BOOKED,
     });
 
     const savedJob = await this.repository.save(job);
@@ -168,12 +203,12 @@ export class JobService {
       throw new BadRequestError('Cannot have both discount amount and discount percent');
     }
 
-    // Customer and vehicle can only be changed in ESTIMATE status
+    // Customer and vehicle can only be changed in BOOKED status
     const isChangingCustomer = data.customerId && data.customerId !== job.customerId;
     const isChangingVehicle = data.vehicleId && data.vehicleId !== job.vehicleId;
 
-    if ((isChangingCustomer || isChangingVehicle) && job.status !== JobStatus.ESTIMATE) {
-      throw new ConflictError('Customer and vehicle can only be changed when job is in ESTIMATE status');
+    if ((isChangingCustomer || isChangingVehicle) && job.status !== JobStatus.BOOKED) {
+      throw new ConflictError('Customer and vehicle can only be changed when job is in BOOKED status');
     }
 
     // If changing customer, verify customer exists
@@ -246,38 +281,15 @@ export class JobService {
 
   async updateStatus(id: string, newStatus: JobStatus): Promise<Job> {
     const job = await this.findById(id);
-    const currentStatus = job.status;
 
-    // Validate status transition
-    const validTransitions: Record<JobStatus, JobStatus[]> = {
-      [JobStatus.ESTIMATE]: [JobStatus.APPROVED, JobStatus.CANCELLED],
-      [JobStatus.APPROVED]: [JobStatus.IN_PROGRESS, JobStatus.DECLINED],
-      [JobStatus.IN_PROGRESS]: [JobStatus.ON_HOLD, JobStatus.INVOICED],
-      [JobStatus.ON_HOLD]: [JobStatus.IN_PROGRESS],
-      [JobStatus.INVOICED]: [JobStatus.PAID, JobStatus.DISPUTED],
-      [JobStatus.PAID]: [],
-      [JobStatus.CANCELLED]: [],
-      [JobStatus.DECLINED]: [],
-      [JobStatus.DISPUTED]: [JobStatus.PAID],
-    };
-
-    if (!validTransitions[currentStatus].includes(newStatus)) {
-      throw new BadRequestError(
-        `Cannot transition from ${currentStatus} to ${newStatus}`
-      );
-    }
-
+    // Flexible transitions - allow any status to transition to any other status
     // Set timestamps based on transition
     const now = new Date();
     if (newStatus === JobStatus.IN_PROGRESS && !job.startedAt) {
       job.startedAt = now;
     }
-    if (newStatus === JobStatus.INVOICED) {
+    if (newStatus === JobStatus.COMPLETED && !job.completedAt) {
       job.completedAt = now;
-      job.invoicedAt = now;
-    }
-    if (newStatus === JobStatus.PAID) {
-      job.paidAt = now;
     }
 
     job.status = newStatus;
@@ -288,8 +300,8 @@ export class JobService {
   async delete(id: string): Promise<void> {
     const job = await this.findById(id);
 
-    if (job.status !== JobStatus.ESTIMATE) {
-      throw new ConflictError('Can only delete jobs in ESTIMATE status');
+    if (job.status !== JobStatus.BOOKED) {
+      throw new ConflictError('Can only delete jobs in BOOKED status');
     }
 
     await this.repository.remove(job);
@@ -306,7 +318,7 @@ export class JobService {
       assignedTo: original.assignedTo,
       notes: original.notes,
       taxRate: original.taxRate,
-      status: JobStatus.ESTIMATE,
+      status: JobStatus.BOOKED,
     });
 
     const savedJob = await this.repository.save(newJob);
@@ -335,8 +347,9 @@ export class JobService {
   async addLineItem(jobId: string, data: CreateLineItemDto): Promise<LineItem> {
     const job = await this.findById(jobId);
 
-    if (job.status !== JobStatus.ESTIMATE) {
-      throw new ConflictError('Can only add items to jobs in ESTIMATE status');
+    // Allow adding items to jobs that are not yet completed
+    if (job.status === JobStatus.COMPLETED) {
+      throw new ConflictError('Cannot add items to completed jobs');
     }
 
     // Get max sort order
@@ -366,8 +379,9 @@ export class JobService {
   ): Promise<LineItem> {
     const job = await this.findById(jobId);
 
-    if (job.status !== JobStatus.ESTIMATE) {
-      throw new ConflictError('Can only update items on jobs in ESTIMATE status');
+    // Allow updating items on jobs that are not yet completed
+    if (job.status === JobStatus.COMPLETED) {
+      throw new ConflictError('Cannot update items on completed jobs');
     }
 
     const lineItem = await this.lineItemRepository.findOne({
@@ -385,8 +399,9 @@ export class JobService {
   async deleteLineItem(jobId: string, lineItemId: string): Promise<void> {
     const job = await this.findById(jobId);
 
-    if (job.status !== JobStatus.ESTIMATE) {
-      throw new ConflictError('Can only delete items from jobs in ESTIMATE status');
+    // Allow deleting items from jobs that are not yet completed
+    if (job.status === JobStatus.COMPLETED) {
+      throw new ConflictError('Cannot delete items from completed jobs');
     }
 
     await this.lineItemRepository.delete({ id: lineItemId, jobId });
@@ -412,8 +427,9 @@ export class JobService {
   async applyTemplate(jobId: string, templateId: string): Promise<Job> {
     const job = await this.findById(jobId);
 
-    if (job.status !== JobStatus.ESTIMATE) {
-      throw new ConflictError('Can only apply templates to jobs in ESTIMATE status');
+    // Allow applying templates to jobs that are not yet completed
+    if (job.status === JobStatus.COMPLETED) {
+      throw new ConflictError('Cannot apply templates to completed jobs');
     }
 
     const template = await this.templateRepository.findOne({
@@ -456,8 +472,9 @@ export class JobService {
   ): Promise<LineItem[]> {
     const job = await this.findById(jobId);
 
-    if (job.status !== JobStatus.ESTIMATE) {
-      throw new ConflictError('Can only add items to jobs in ESTIMATE status');
+    // Allow adding items to jobs that are not yet completed
+    if (job.status === JobStatus.COMPLETED) {
+      throw new ConflictError('Cannot add items to completed jobs');
     }
 
     const maxSortOrder = job.lineItems?.reduce(

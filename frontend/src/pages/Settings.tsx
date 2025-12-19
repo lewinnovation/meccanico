@@ -348,6 +348,7 @@ const InvoiceSettings: React.FC = observer(() => {
     prefix: '',
     terms: '',
     footer: '',
+    paymentTermsDays: 14,
   });
 
   useEffect(() => {
@@ -360,11 +361,13 @@ const InvoiceSettings: React.FC = observer(() => {
       prefix: invoice.prefix,
       terms: invoice.terms,
       footer: invoice.footer,
+      paymentTermsDays: invoice.paymentTermsDays,
     });
   }, [settingsStore.invoiceSettings]);
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [field]: e.target.value });
+    const value = field === 'paymentTermsDays' ? parseFloat(e.target.value) || 0 : e.target.value;
+    setFormData({ ...formData, [field]: value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -400,6 +403,22 @@ const InvoiceSettings: React.FC = observer(() => {
                   data-testid="invoice-prefix-input"
                 />
               </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Payment Terms (days)"
+                  type="number"
+                  value={formData.paymentTermsDays}
+                  onChange={handleChange('paymentTermsDays')}
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">days</InputAdornment>,
+                  }}
+                  inputProps={{ min: 1, step: 1 }}
+                  disabled={isReadOnly}
+                  data-testid="invoice-payment-terms-days-input"
+                  helperText="Number of days until payment is due"
+                />
+              </Grid>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -410,6 +429,7 @@ const InvoiceSettings: React.FC = observer(() => {
                   rows={3}
                   disabled={isReadOnly}
                   data-testid="invoice-terms-input"
+                  helperText="Text description of payment terms (e.g., 'Payment due within 30 days')"
                 />
               </Grid>
               <Grid item xs={12}>

@@ -11,11 +11,9 @@ test.describe('Job Full Workflow', () => {
 
     // Verify tabs are present
     await expect(page.locator('button[role="tab"]:has-text("All")')).toBeVisible();
-    await expect(page.locator('button[role="tab"]:has-text("Estimates")')).toBeVisible();
-    await expect(page.locator('button[role="tab"]:has-text("Approved")')).toBeVisible();
+    await expect(page.locator('button[role="tab"]:has-text("Booked")')).toBeVisible();
     await expect(page.locator('button[role="tab"]:has-text("In Progress")')).toBeVisible();
-    await expect(page.locator('button[role="tab"]:has-text("Invoiced")')).toBeVisible();
-    await expect(page.locator('button[role="tab"]:has-text("Paid")')).toBeVisible();
+    await expect(page.locator('button[role="tab"]:has-text("Completed")')).toBeVisible();
 
     // Verify search input
     await expect(page.locator('input[placeholder="Search jobs by code, customer, or vehicle..."]')).toBeVisible();
@@ -27,17 +25,17 @@ test.describe('Job Full Workflow', () => {
   test('should filter jobs by status tab', async ({ page }) => {
     await navigateToJobs(page);
 
-    // Click Estimates tab
-    await page.click('button[role="tab"]:has-text("Estimates")');
-    await expect(page.locator('button[role="tab"]:has-text("Estimates")')).toHaveAttribute('aria-selected', 'true');
+    // Click Booked tab
+    await page.click('button[role="tab"]:has-text("Booked")');
+    await expect(page.locator('button[role="tab"]:has-text("Booked")')).toHaveAttribute('aria-selected', 'true');
 
     // Click In Progress tab
     await page.click('button[role="tab"]:has-text("In Progress")');
     await expect(page.locator('button[role="tab"]:has-text("In Progress")')).toHaveAttribute('aria-selected', 'true');
 
-    // Click Paid tab
-    await page.click('button[role="tab"]:has-text("Paid")');
-    await expect(page.locator('button[role="tab"]:has-text("Paid")')).toHaveAttribute('aria-selected', 'true');
+    // Click Completed tab
+    await page.click('button[role="tab"]:has-text("Completed")');
+    await expect(page.locator('button[role="tab"]:has-text("Completed")')).toHaveAttribute('aria-selected', 'true');
 
     // Back to All
     await page.click('button[role="tab"]:has-text("All")');
@@ -242,33 +240,33 @@ test.describe('Job Status Transitions', () => {
     await navigateToJobs(page);
   });
 
-  test('should show appropriate status transitions for ESTIMATE job', async ({ page }) => {
-    // Filter to Estimates
-    await page.click('button[role="tab"]:has-text("Estimates")');
+  test('should show appropriate status transitions for BOOKED job', async ({ page }) => {
+    // Filter to Booked
+    await page.click('button[role="tab"]:has-text("Booked")');
     await page.waitForTimeout(500);
 
     const jobRow = page.locator('table tbody tr').first();
-    const hasEstimateJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
+    const hasBookedJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
 
-    if (hasEstimateJobs) {
+    if (hasBookedJobs) {
       await jobRow.click();
       await page.waitForLoadState('networkidle');
 
-      // Verify status chip shows Estimate
-      await expect(page.locator('.MuiChip-root:has-text("Estimate")')).toBeVisible();
+      // Verify status chip shows Booked
+      await expect(page.locator('.MuiChip-root:has-text("Booked")')).toBeVisible();
 
       // Open actions menu
       const menuButton = page.locator('button:has([data-testid="MoreVertIcon"])');
       await menuButton.click();
 
-      // Should show valid transitions for ESTIMATE
-      await expect(page.locator('[role="menu"] text=Approve')).toBeVisible();
+      // Should show valid transitions for BOOKED
+      await expect(page.locator('[role="menu"] text=Start Work')).toBeVisible();
       await expect(page.locator('[role="menu"] text=Cancel')).toBeVisible();
 
       // Should also show Edit Details for editable jobs
       await expect(page.locator('[role="menu"] text=Edit Details')).toBeVisible();
 
-      // Should also show Delete for ESTIMATE jobs
+      // Should also show Delete for BOOKED jobs
       await expect(page.locator('[role="menu"] text=Delete')).toBeVisible();
     }
   });
@@ -297,15 +295,15 @@ test.describe('Job Edit Dialog', () => {
     await navigateToJobs(page);
   });
 
-  test('should open edit dialog for ESTIMATE job', async ({ page }) => {
-    // Filter to Estimates
-    await page.click('button[role="tab"]:has-text("Estimates")');
+  test('should open edit dialog for BOOKED job', async ({ page }) => {
+    // Filter to Booked
+    await page.click('button[role="tab"]:has-text("Booked")');
     await page.waitForTimeout(500);
 
     const jobRow = page.locator('table tbody tr').first();
-    const hasEstimateJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
+    const hasBookedJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
 
-    if (hasEstimateJobs) {
+    if (hasBookedJobs) {
       await jobRow.click();
       await page.waitForLoadState('networkidle');
 
@@ -341,15 +339,15 @@ test.describe('Job Line Items for Estimate', () => {
     await navigateToJobs(page);
   });
 
-  test('should show Add Item and Apply Template buttons for ESTIMATE job', async ({ page }) => {
-    // Filter to Estimates
-    await page.click('button[role="tab"]:has-text("Estimates")');
+  test('should show Add Item and Apply Template buttons for BOOKED job', async ({ page }) => {
+    // Filter to Booked
+    await page.click('button[role="tab"]:has-text("Booked")');
     await page.waitForTimeout(500);
 
     const jobRow = page.locator('table tbody tr').first();
-    const hasEstimateJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
+    const hasBookedJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
 
-    if (hasEstimateJobs) {
+    if (hasBookedJobs) {
       await jobRow.click();
       await page.waitForLoadState('networkidle');
 
@@ -362,14 +360,14 @@ test.describe('Job Line Items for Estimate', () => {
   });
 
   test('should open add line item dialog', async ({ page }) => {
-    // Filter to Estimates
-    await page.click('button[role="tab"]:has-text("Estimates")');
+    // Filter to Booked
+    await page.click('button[role="tab"]:has-text("Booked")');
     await page.waitForTimeout(500);
 
     const jobRow = page.locator('table tbody tr').first();
-    const hasEstimateJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
+    const hasBookedJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
 
-    if (hasEstimateJobs) {
+    if (hasBookedJobs) {
       await jobRow.click();
       await page.waitForLoadState('networkidle');
 
@@ -388,14 +386,14 @@ test.describe('Job Line Items for Estimate', () => {
   });
 
   test('should open apply template dialog', async ({ page }) => {
-    // Filter to Estimates
-    await page.click('button[role="tab"]:has-text("Estimates")');
+    // Filter to Booked
+    await page.click('button[role="tab"]:has-text("Booked")');
     await page.waitForTimeout(500);
 
     const jobRow = page.locator('table tbody tr').first();
-    const hasEstimateJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
+    const hasBookedJobs = await jobRow.isVisible({ timeout: 3000 }).catch(() => false);
 
-    if (hasEstimateJobs) {
+    if (hasBookedJobs) {
       await jobRow.click();
       await page.waitForLoadState('networkidle');
 

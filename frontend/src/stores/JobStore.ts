@@ -3,15 +3,11 @@ import type { RootStore } from './RootStore';
 import { api } from '../utils/api';
 
 export type JobStatus =
-  | 'ESTIMATE'
-  | 'APPROVED'
+  | 'BOOKED'
   | 'IN_PROGRESS'
-  | 'ON_HOLD'
-  | 'INVOICED'
-  | 'PAID'
-  | 'CANCELLED'
-  | 'DECLINED'
-  | 'DISPUTED';
+  | 'PENDING'
+  | 'AWAITING_PICKUP'
+  | 'COMPLETED';
 
 export type LineItemType = 'INVENTORY' | 'LABOUR' | 'SERVICE' | 'TEXT';
 
@@ -78,14 +74,21 @@ export interface Job {
   dueDate: string | null;
   startedAt: string | null;
   completedAt: string | null;
-  invoicedAt: string | null;
-  paidAt: string | null;
+  invoiceId: string | null;
   createdAt: string;
   updatedAt: string;
   customer?: Customer;
   vehicle?: Vehicle;
   assignee?: { id: string; name: string };
   lineItems?: LineItem[];
+  invoice?: {
+    id: string;
+    invoiceNumber: string;
+    status: 'UNPAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+    invoiceDate: string;
+    dueDate: string;
+    paidAt: string | null;
+  };
 }
 
 export interface CreateJobDto {
@@ -119,6 +122,10 @@ export class JobStore {
   limit = 50;
   search = '';
   statusFilter: JobStatus | null = null;
+  startDate: string | null = null;
+  endDate: string | null = null;
+  hasInvoice: boolean | null = null;
+  invoicePaid: boolean | null = null;
 
   constructor(rootStore: RootStore) {
     this.rootStore = rootStore;
@@ -144,6 +151,23 @@ export class JobStore {
     this.page = page;
   }
 
+  setLimit(limit: number): void {
+    this.limit = limit;
+    this.page = 1; // Reset to first page when changing limit
+  }
+
+  setDateRange(startDate: string | null, endDate: string | null): void {
+    this.startDate = startDate;
+    this.endDate = endDate;
+    this.page = 1; // Reset to first page when changing date range
+  }
+
+  setInvoiceFilter(hasInvoice: boolean | null, invoicePaid: boolean | null): void {
+    this.hasInvoice = hasInvoice;
+    this.invoicePaid = invoicePaid;
+    this.page = 1; // Reset to first page when changing invoice filter
+  }
+
   async fetchJobs(): Promise<void> {
     this.isLoading = true;
     this.error = null;
@@ -155,6 +179,10 @@ export class JobStore {
       });
       if (this.statusFilter) params.append('status', this.statusFilter);
       if (this.search) params.append('search', this.search);
+      if (this.startDate) params.append('startDate', this.startDate);
+      if (this.endDate) params.append('endDate', this.endDate);
+      if (this.hasInvoice !== null) params.append('hasInvoice', this.hasInvoice.toString());
+      if (this.invoicePaid !== null) params.append('invoicePaid', this.invoicePaid.toString());
 
       const response = await api.get(`/api/jobs?${params}`);
 

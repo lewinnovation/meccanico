@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
@@ -34,6 +34,8 @@ import {
   ListItemText,
   Autocomplete,
   Tooltip,
+  Grid,
+  TablePagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -48,9 +50,6 @@ import {
   PlayArrow as StartIcon,
   Pause as PauseIcon,
   Receipt as InvoiceIcon,
-  Paid as PaidIcon,
-  Cancel as CancelIcon,
-  ThumbDown as DeclineIcon,
   Work as JobIcon,
   Print as PrintIcon,
   Description as EstimateIcon,
@@ -60,6 +59,8 @@ import {
   Phone as PhoneIcon,
   Email as EmailIcon,
   LocationOn as LocationIcon,
+  CheckCircle as CheckIcon,
+  Cancel as CancelIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
@@ -87,15 +88,11 @@ import { CSS } from '@dnd-kit/utilities';
 
 // Status colors and labels
 const statusConfig: Record<JobStatus, { label: string; color: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' }> = {
-  ESTIMATE: { label: 'Estimate', color: 'default' },
-  APPROVED: { label: 'Approved', color: 'info' },
+  BOOKED: { label: 'Booked', color: 'default' },
   IN_PROGRESS: { label: 'In Progress', color: 'primary' },
-  ON_HOLD: { label: 'On Hold', color: 'warning' },
-  INVOICED: { label: 'Invoiced', color: 'secondary' },
-  PAID: { label: 'Paid', color: 'success' },
-  CANCELLED: { label: 'Cancelled', color: 'error' },
-  DECLINED: { label: 'Declined', color: 'error' },
-  DISPUTED: { label: 'Disputed', color: 'warning' },
+  PENDING: { label: 'Pending', color: 'warning' },
+  AWAITING_PICKUP: { label: 'Awaiting Pick Up', color: 'info' },
+  COMPLETED: { label: 'Completed', color: 'success' },
 };
 
 // Line item type colors (faint backgrounds)
@@ -106,18 +103,8 @@ const lineItemTypeColors: Record<LineItemType, string> = {
   TEXT: 'transparent',                    // No background for text
 };
 
-// Valid status transitions
-const statusTransitions: Record<JobStatus, JobStatus[]> = {
-  ESTIMATE: ['APPROVED', 'CANCELLED'],
-  APPROVED: ['IN_PROGRESS', 'DECLINED'],
-  IN_PROGRESS: ['ON_HOLD', 'INVOICED'],
-  ON_HOLD: ['IN_PROGRESS'],
-  INVOICED: ['PAID', 'DISPUTED'],
-  PAID: [],
-  CANCELLED: [],
-  DECLINED: [],
-  DISPUTED: ['PAID'],
-};
+// All possible statuses for flexible transitions
+const allStatuses: JobStatus[] = ['BOOKED', 'IN_PROGRESS', 'PENDING', 'AWAITING_PICKUP', 'COMPLETED'];
 
 // ==================== SORTABLE LINE ITEM ROW ====================
 interface SortableLineItemRowProps {
@@ -298,21 +285,54 @@ const JobList: React.FC = observer(() => {
   const navigate = useNavigate();
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [invoicePaidFilter, setInvoicePaidFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
 
+  // Initial fetch and when filters change
   useEffect(() => {
+    const statusMap: (JobStatus | null | 'INVOICED')[] = [
+      null,
+      'BOOKED',
+      'IN_PROGRESS',
+      'PENDING',
+      'AWAITING_PICKUP',
+      'COMPLETED',
+      'INVOICED',
+    ];
+    const selectedTab = statusMap[tab];
+
+    if (selectedTab === 'INVOICED') {
+      jobStore.setStatusFilter(null);
+      const paid = invoicePaidFilter === 'all' ? null : invoicePaidFilter === 'paid';
+      jobStore.setInvoiceFilter(true, paid);
+    } else {
+      jobStore.setStatusFilter(selectedTab as JobStatus | null);
+      jobStore.setInvoiceFilter(null, null);
+    }
+    
+    jobStore.setDateRange(startDate || null, endDate || null);
     jobStore.fetchJobs();
-  }, [jobStore]);
+  }, [tab, invoicePaidFilter, startDate, endDate, jobStore]);
 
   const handleTabChange = (_: unknown, newValue: number) => {
     setTab(newValue);
-    const statusMap: (JobStatus | null)[] = [null, 'ESTIMATE', 'APPROVED', 'IN_PROGRESS', 'ON_HOLD', 'INVOICED', 'PAID'];
-    jobStore.setStatusFilter(statusMap[newValue]);
-    jobStore.fetchJobs();
+    setInvoicePaidFilter('all'); // Reset invoice filter when changing tabs
   };
 
   const handleSearch = (value: string) => {
     setSearch(value);
     jobStore.setSearch(value);
+    jobStore.fetchJobs();
+  };
+
+  const handlePageChange = (_: unknown, newPage: number) => {
+    jobStore.setPage(newPage + 1); // MUI uses 0-based, API uses 1-based
+    jobStore.fetchJobs();
+  };
+
+  const handleRowsPerPageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    jobStore.setLimit(parseInt(event.target.value, 10));
     jobStore.fetchJobs();
   };
 
@@ -350,29 +370,68 @@ const JobList: React.FC = observer(() => {
       {/* Status Tabs */}
       <Tabs value={tab} onChange={handleTabChange} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="All" />
-        <Tab label="Estimates" />
-        <Tab label="Approved" />
+        <Tab label="Booked" />
         <Tab label="In Progress" />
-        <Tab label="On Hold" />
+        <Tab label="Pending" />
+        <Tab label="Awaiting Pickup" />
+        <Tab label="Completed" />
         <Tab label="Invoiced" />
-        <Tab label="Paid" />
       </Tabs>
 
-      {/* Search */}
-      <TextField
-        fullWidth
-        placeholder="Search jobs by code, customer, or vehicle..."
-        sx={{ mb: 3 }}
-        value={search}
-        onChange={(e) => handleSearch(e.target.value)}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon sx={{ color: 'text.secondary' }} />
-            </InputAdornment>
-          ),
-        }}
-      />
+      {/* Filters */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={4}>
+          <TextField
+            fullWidth
+            placeholder="Search jobs by code, customer, or vehicle..."
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <TextField
+            fullWidth
+            type="date"
+            label="Start Date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <TextField
+            fullWidth
+            type="date"
+            label="End Date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        {tab === 6 && (
+          <Grid item xs={12} md={2}>
+            <FormControl fullWidth>
+              <InputLabel>Payment Status</InputLabel>
+              <Select
+                value={invoicePaidFilter}
+                label="Payment Status"
+                onChange={(e) => setInvoicePaidFilter(e.target.value as 'all' | 'paid' | 'unpaid')}
+              >
+                <MenuItem value="all">All</MenuItem>
+                <MenuItem value="paid">Paid</MenuItem>
+                <MenuItem value="unpaid">Unpaid</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
+      </Grid>
 
       {jobStore.error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -409,6 +468,7 @@ const JobList: React.FC = observer(() => {
                 <TableCell>Customer</TableCell>
                 <TableCell>Vehicle</TableCell>
                 <TableCell>Status</TableCell>
+                {tab === 6 && <TableCell align="center">Paid</TableCell>}
                 <TableCell align="right">Excl. GST</TableCell>
                 <TableCell align="right">GST</TableCell>
                 <TableCell align="right">Total</TableCell>
@@ -447,12 +507,33 @@ const JobList: React.FC = observer(() => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      label={statusConfig[job.status].label}
-                      color={statusConfig[job.status].color}
-                      size="small"
-                    />
+                    {statusConfig[job.status] ? (
+                      <Chip
+                        label={statusConfig[job.status].label}
+                        color={statusConfig[job.status].color}
+                        size="small"
+                      />
+                    ) : (
+                      <Chip
+                        label={job.status}
+                        color="default"
+                        size="small"
+                      />
+                    )}
                   </TableCell>
+                  {tab === 6 && (
+                    <TableCell align="center">
+                      {job.invoiceId && job.invoice ? (
+                        job.invoice.status === 'PAID' ? (
+                          <CheckIcon color="success" />
+                        ) : (
+                          <CancelIcon color="error" />
+                        )
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell align="right">
                     <Typography variant="body2">{formatCurrency(calculateJobTotals(job).subtotal)}</Typography>
                   </TableCell>
@@ -472,6 +553,16 @@ const JobList: React.FC = observer(() => {
               ))}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={jobStore.total}
+            page={jobStore.page - 1} // MUI uses 0-based, API uses 1-based
+            onPageChange={handlePageChange}
+            rowsPerPage={jobStore.limit}
+            onRowsPerPageChange={handleRowsPerPageChange}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            labelRowsPerPage="Rows per page:"
+          />
         </TableContainer>
       )}
     </Box>
@@ -608,31 +699,7 @@ const NewJob: React.FC = observer(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCustomer, vehicleStore]);
 
-  // Debounced unified search - using same logic as CommandPalette
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    if (!searchInputValue.trim() || searchInputValue.trim().length < 3) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    setIsSearching(true);
-    searchTimeoutRef.current = setTimeout(async () => {
-      await performSearch(searchInputValue.trim());
-    }, 300);
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [searchInputValue]);
-
-  const performSearch = async (query: string) => {
+  const performSearch = useCallback(async (query: string) => {
     try {
       const results: SearchResult[] = [];
 
@@ -693,7 +760,31 @@ const NewJob: React.FC = observer(() => {
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [selectedCustomer, selectedVehicle, customerStore, vehicleStore]);
+
+  // Debounced unified search - using same logic as CommandPalette
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (!searchInputValue.trim() || searchInputValue.trim().length < 3) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    searchTimeoutRef.current = setTimeout(async () => {
+      await performSearch(searchInputValue.trim());
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchInputValue, performSearch]);
 
   const handleSelectResult = async (result: SearchResult) => {
     if (result.type === 'vehicle' && result.vehicle) {
@@ -724,9 +815,9 @@ const NewJob: React.FC = observer(() => {
         } catch (err) {
           console.error('Failed to fetch customer:', err);
           // If fetch fails, try to use the customer from vehicle if it has required fields
-          const customer = vehicle.customer as any;
+          const customer = vehicle.customer as CustomerWithVehicles | undefined;
           if (customer && customer.id && customer.name) {
-            setSelectedCustomer(customer as CustomerWithVehicles);
+            setSelectedCustomer(customer);
           }
         }
       }
@@ -1451,7 +1542,7 @@ const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
   const modelsForMake = useMemo(() => {
     if (!selectedMake) return [];
     return vehicleStore.getModelsForMake(selectedMake.name);
-  }, [selectedMake, vehicleStore, vehicleStore.makes]);
+  }, [selectedMake, vehicleStore]);
 
   const handleSave = async () => {
     if (requireCustomer && !customerId) {
@@ -1624,7 +1715,7 @@ interface SelectedLineItem {
 
 const JobDetail: React.FC = observer(() => {
   const { id } = useParams<{ id: string }>();
-  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore } = useStore();
+  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore } = useStore();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
@@ -1634,6 +1725,8 @@ const JobDetail: React.FC = observer(() => {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [vehicleDialogOpen, setVehicleDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentNote, setPaymentNote] = useState('');
   
   // Line item form state
   const [lineItemType, setLineItemType] = useState<LineItemType>('TEXT');
@@ -1662,8 +1755,9 @@ const JobDetail: React.FC = observer(() => {
 
     return () => {
       jobStore.clearSelectedJob();
+      invoiceStore.clearSelectedInvoice();
     };
-  }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore]);
+  }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore]);
 
   // Build options for line item autocomplete
   const getLineItemOptions = (): SelectedLineItem[] => {
@@ -1699,6 +1793,15 @@ const JobDetail: React.FC = observer(() => {
 
   const job = jobStore.selectedJob;
 
+  // Fetch invoice when job changes
+  useEffect(() => {
+    if (job?.invoiceId) {
+      invoiceStore.fetchById(job.invoiceId);
+    } else if (job?.id && job.status === 'COMPLETED') {
+      invoiceStore.fetchByJobId(job.id);
+    }
+  }, [job?.id, job?.invoiceId, job?.status, invoiceStore]);
+
   // Sort line items by sortOrder
   const sortedLineItems = useMemo(() => {
     if (!job?.lineItems) return [];
@@ -1728,6 +1831,30 @@ const JobDetail: React.FC = observer(() => {
       await jobStore.updateJobStatus(job.id, newStatus);
     }
     setAnchorEl(null);
+  };
+
+  const handleConvertToInvoice = async () => {
+    if (job) {
+      try {
+        await invoiceStore.createFromJob(job.id);
+        await jobStore.fetchJobById(job.id); // Refresh job to get invoiceId
+      } catch (error) {
+        // Error handling is done in the store
+      }
+    }
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (invoiceStore.selectedInvoice) {
+      try {
+        await invoiceStore.markAsPaid(invoiceStore.selectedInvoice.id, paymentNote || undefined);
+        setPaymentDialogOpen(false);
+        setPaymentNote('');
+        await jobStore.fetchJobById(job?.id || ''); // Refresh job
+      } catch (error) {
+        // Error handling is done in the store
+      }
+    }
   };
 
   const handleDuplicate = async () => {
@@ -1891,7 +2018,7 @@ const JobDetail: React.FC = observer(() => {
               <h2>${title}</h2>
               <p><strong>${job?.code}</strong></p>
               <p>Date: ${new Date().toLocaleDateString()}</p>
-              ${type === 'invoice' && job?.invoicedAt ? `<p>Invoiced: ${new Date(job.invoicedAt).toLocaleDateString()}</p>` : ''}
+              ${type === 'invoice' && invoiceStore.selectedInvoice ? `<p>Invoice Date: ${new Date(invoiceStore.selectedInvoice.invoiceDate).toLocaleDateString()}</p>` : ''}
             </div>
           </div>
 
@@ -1999,8 +2126,8 @@ const JobDetail: React.FC = observer(() => {
     );
   }
 
-  const canEdit = job.status === 'ESTIMATE';
-  const validTransitions = statusTransitions[job.status];
+  const canEdit = job.status !== 'COMPLETED';
+  // Flexible transitions - allow any status to transition to any other status
   const taxName = settingsStore.taxSettings.name || 'GST';
 
   return (
@@ -2015,7 +2142,11 @@ const JobDetail: React.FC = observer(() => {
             <Typography variant="h4" fontWeight={600}>
               {job.code}
             </Typography>
-            <Chip label={statusConfig[job.status].label} color={statusConfig[job.status].color} />
+            {statusConfig[job.status] ? (
+              <Chip label={statusConfig[job.status].label} color={statusConfig[job.status].color} />
+            ) : (
+              <Chip label={job.status} color="default" />
+            )}
           </Box>
           <Typography color="text.secondary">
             {job.customer?.name} • {job.vehicle?.year} {job.vehicle?.make} {job.vehicle?.model}
@@ -2024,7 +2155,7 @@ const JobDetail: React.FC = observer(() => {
         
         {/* Print Buttons - Status aware */}
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {job.status === 'ESTIMATE' && (
+          {job.status !== 'COMPLETED' && (
             <Button
               variant="outlined"
               startIcon={<EstimateIcon />}
@@ -2033,7 +2164,7 @@ const JobDetail: React.FC = observer(() => {
               Print Estimate
             </Button>
           )}
-          {['INVOICED', 'PAID', 'DISPUTED'].includes(job.status) && (
+          {job.status === 'COMPLETED' && job.invoiceId && (
             <Button
               variant="outlined"
               startIcon={<PrintIcon />}
@@ -2057,62 +2188,18 @@ const JobDetail: React.FC = observer(() => {
 
       {/* Actions Menu */}
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        {validTransitions.includes('APPROVED') && (
-          <MenuItem onClick={() => handleStatusChange('APPROVED')}>
+        {allStatuses.filter(s => s !== job.status).map((status) => (
+          <MenuItem key={status} onClick={() => handleStatusChange(status)}>
             <ListItemIcon>
-              <ApproveIcon fontSize="small" />
+              {status === 'BOOKED' && <JobIcon fontSize="small" />}
+              {status === 'IN_PROGRESS' && <StartIcon fontSize="small" />}
+              {status === 'PENDING' && <PauseIcon fontSize="small" />}
+              {status === 'AWAITING_PICKUP' && <VehicleIcon fontSize="small" />}
+              {status === 'COMPLETED' && <ApproveIcon fontSize="small" />}
             </ListItemIcon>
-            <ListItemText>Approve</ListItemText>
+            <ListItemText>{statusConfig[status]?.label || status}</ListItemText>
           </MenuItem>
-        )}
-        {validTransitions.includes('IN_PROGRESS') && (
-          <MenuItem onClick={() => handleStatusChange('IN_PROGRESS')}>
-            <ListItemIcon>
-              <StartIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Start Work</ListItemText>
-          </MenuItem>
-        )}
-        {validTransitions.includes('ON_HOLD') && (
-          <MenuItem onClick={() => handleStatusChange('ON_HOLD')}>
-            <ListItemIcon>
-              <PauseIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Put On Hold</ListItemText>
-          </MenuItem>
-        )}
-        {validTransitions.includes('INVOICED') && (
-          <MenuItem onClick={() => handleStatusChange('INVOICED')}>
-            <ListItemIcon>
-              <InvoiceIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Create Invoice</ListItemText>
-          </MenuItem>
-        )}
-        {validTransitions.includes('PAID') && (
-          <MenuItem onClick={() => handleStatusChange('PAID')}>
-            <ListItemIcon>
-              <PaidIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Mark Paid</ListItemText>
-          </MenuItem>
-        )}
-        {validTransitions.includes('DECLINED') && (
-          <MenuItem onClick={() => handleStatusChange('DECLINED')}>
-            <ListItemIcon>
-              <DeclineIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Decline</ListItemText>
-          </MenuItem>
-        )}
-        {validTransitions.includes('CANCELLED') && (
-          <MenuItem onClick={() => handleStatusChange('CANCELLED')}>
-            <ListItemIcon>
-              <CancelIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Cancel</ListItemText>
-          </MenuItem>
-        )}
+        ))}
         <Divider />
         {canEdit && (
           <MenuItem onClick={() => { setEditDialogOpen(true); setAnchorEl(null); }}>
@@ -2347,25 +2434,89 @@ const JobDetail: React.FC = observer(() => {
                     <Typography variant="body2">{formatDate(job.completedAt)}</Typography>
                   </Box>
                 )}
-                {job.invoicedAt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Invoiced
-                    </Typography>
-                    <Typography variant="body2">{formatDate(job.invoicedAt)}</Typography>
-                  </Box>
-                )}
-                {job.paidAt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Paid
-                    </Typography>
-                    <Typography variant="body2">{formatDate(job.paidAt)}</Typography>
-                  </Box>
-                )}
               </Box>
             </CardContent>
           </Card>
+
+          {/* Invoice Section */}
+          {job.status === 'COMPLETED' && (
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                  Invoice
+                </Typography>
+                {invoiceStore.selectedInvoice ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Invoice Number
+                      </Typography>
+                      <Typography variant="body2" fontWeight={500}>
+                        {invoiceStore.selectedInvoice.invoiceNumber}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Status
+                      </Typography>
+                      <Chip
+                        label={invoiceStore.selectedInvoice.status}
+                        color={invoiceStore.selectedInvoice.status === 'PAID' ? 'success' : 'warning'}
+                        size="small"
+                      />
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Invoice Date
+                      </Typography>
+                      <Typography variant="body2">{formatDate(invoiceStore.selectedInvoice.invoiceDate)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Due Date
+                      </Typography>
+                      <Typography variant="body2">{formatDate(invoiceStore.selectedInvoice.dueDate)}</Typography>
+                    </Box>
+                    {invoiceStore.selectedInvoice.status === 'UNPAID' && (
+                      <Button
+                        variant="contained"
+                        color="success"
+                        fullWidth
+                        sx={{ mt: 2 }}
+                        onClick={() => setPaymentDialogOpen(true)}
+                      >
+                        Mark as Paid
+                      </Button>
+                    )}
+                    {invoiceStore.selectedInvoice.paymentNote && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Payment Note
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 0.5 }}>
+                          {invoiceStore.selectedInvoice.paymentNote}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                ) : (
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      No invoice created yet
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<InvoiceIcon />}
+                      onClick={handleConvertToInvoice}
+                      disabled={invoiceStore.isLoading}
+                    >
+                      Convert to Invoice
+                    </Button>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Notes Section */}
           {(job.notes || job.internalNotes || canEdit) && (
@@ -2687,6 +2838,31 @@ const JobDetail: React.FC = observer(() => {
         </DialogActions>
       </Dialog>
 
+      {/* Payment Dialog */}
+      <Dialog open={paymentDialogOpen} onClose={() => { setPaymentDialogOpen(false); setPaymentNote(''); }} maxWidth="sm" fullWidth>
+        <DialogTitle>Mark Invoice as Paid</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Payment Note (Optional)"
+              multiline
+              rows={3}
+              fullWidth
+              value={paymentNote}
+              onChange={(e) => setPaymentNote(e.target.value)}
+              placeholder="e.g., Paid via credit card, Check #1234, Bank transfer"
+              helperText="Add any notes about the payment method or details"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setPaymentDialogOpen(false); setPaymentNote(''); }}>Cancel</Button>
+          <Button onClick={handleMarkAsPaid} color="success" variant="contained" disabled={invoiceStore.isLoading}>
+            Mark as Paid
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Edit Job Dialog */}
       <EditJobDialog
         open={editDialogOpen}
@@ -2739,7 +2915,7 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isEstimate = job?.status === 'ESTIMATE';
+  const isBooked = job?.status === 'BOOKED';
 
   useEffect(() => {
     if (open) {
@@ -2868,9 +3044,9 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
         discountPercent: discountPercent,
       };
 
-      // Add customer/vehicle changes only if in estimate status
+      // Add customer/vehicle changes only if in booked status
       // Use refs to get current values (state updates are async, refs are sync)
-      if (isEstimate) {
+      if (isBooked) {
         const currentCustomer = selectedCustomerRef.current;
         const currentVehicle = selectedVehicleRef.current;
         
@@ -2906,11 +3082,11 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
           </Alert>
         )}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-          {/* Customer & Vehicle Selection - Only in ESTIMATE status */}
-          {isEstimate && (
+          {/* Customer & Vehicle Selection - Only in BOOKED status */}
+          {isBooked && (
             <>
               <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 1 }}>
-                Customer & Vehicle (only editable in Estimate status)
+                Customer & Vehicle (only editable in Booked status)
               </Typography>
               <Autocomplete
                 options={customers}

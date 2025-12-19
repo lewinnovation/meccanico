@@ -10,7 +10,6 @@ import {
   ListItemText,
   Typography,
   InputAdornment,
-  Chip,
   ListSubheader,
   CircularProgress,
 } from '@mui/material';

@@ -26,7 +26,7 @@ CREATE TABLE jobs (
   customer_id UUID NOT NULL REFERENCES customers(id),
   vehicle_id UUID NOT NULL REFERENCES vehicles(id),
   assigned_to UUID REFERENCES users(id),
-  status VARCHAR(20) NOT NULL DEFAULT 'ESTIMATE',
+  status VARCHAR(20) NOT NULL DEFAULT 'BOOKED',
   notes TEXT,
   internal_notes TEXT,
   tax_rate DECIMAL(5,2) DEFAULT 0,
@@ -35,8 +35,7 @@ CREATE TABLE jobs (
   due_date TIMESTAMP WITH TIME ZONE,
   started_at TIMESTAMP WITH TIME ZONE,
   completed_at TIMESTAMP WITH TIME ZONE,
-  invoiced_at TIMESTAMP WITH TIME ZONE,
-  paid_at TIMESTAMP WITH TIME ZONE,
+  invoice_id UUID REFERENCES invoices(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -70,15 +69,11 @@ import { User } from './User';
 import { LineItem } from './LineItem';
 
 export enum JobStatus {
-  ESTIMATE = 'ESTIMATE',
-  APPROVED = 'APPROVED',
+  BOOKED = 'BOOKED',
   IN_PROGRESS = 'IN_PROGRESS',
-  ON_HOLD = 'ON_HOLD',
-  INVOICED = 'INVOICED',
-  PAID = 'PAID',
-  CANCELLED = 'CANCELLED',
-  DECLINED = 'DECLINED',
-  DISPUTED = 'DISPUTED',
+  PENDING = 'PENDING',
+  AWAITING_PICKUP = 'AWAITING_PICKUP',
+  COMPLETED = 'COMPLETED',
 }
 
 @Entity('jobs')
@@ -101,7 +96,7 @@ export class Job {
   @Column({
     type: 'varchar',
     length: 20,
-    default: JobStatus.ESTIMATE,
+    default: JobStatus.BOOKED,
   })
   status: JobStatus;
 
@@ -129,11 +124,8 @@ export class Job {
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt: Date | null;
 
-  @Column({ name: 'invoiced_at', type: 'timestamptz', nullable: true })
-  invoicedAt: Date | null;
-
-  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
-  paidAt: Date | null;
+  @Column({ name: 'invoice_id', type: 'uuid', nullable: true })
+  invoiceId: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -156,6 +148,10 @@ export class Job {
 
   @OneToMany(() => LineItem, (lineItem) => lineItem.job, { cascade: true })
   lineItems: LineItem[];
+
+  @OneToOne(() => Invoice, (invoice) => invoice.job, { nullable: true })
+  @JoinColumn({ name: 'invoice_id' })
+  invoice: Invoice | null;
 
   // Computed properties
   get subtotal(): number {
@@ -192,6 +188,7 @@ export class Job {
 | vehicle | N:1 | Vehicle | Vehicle being serviced |
 | assignee | N:1 | User | Mechanic assigned to job |
 | lineItems | 1:N | LineItem | Items in the job |
+| invoice | 1:1 | Invoice | Invoice created from completed job |
 
 ### Cascade Rules
 - Deleting a job: Cascades to line items
@@ -202,64 +199,51 @@ export class Job {
 ## 🔄 Status Workflow
 
 ```
-┌─────────┐    approve     ┌──────────┐    start      ┌─────────────┐
-│ ESTIMATE│───────────────▶│ APPROVED │──────────────▶│ IN_PROGRESS │
-└────┬────┘                └────┬─────┘               └──────┬──────┘
-     │                          │                            │
-     │ decline                  │ decline                    │ hold
-     ▼                          ▼                            ▼
-┌─────────┐               ┌──────────┐                ┌──────────┐
-│CANCELLED│               │ DECLINED │                │ ON_HOLD  │
-└─────────┘               └──────────┘                └────┬─────┘
-                                                          │ resume
-                                                          ▼
-                                                   ┌─────────────┐
-                                                   │ IN_PROGRESS │
-                                                   └──────┬──────┘
-                                                          │ complete
-                                                          ▼
-                                                   ┌──────────┐
-                                                   │ INVOICED │
-                                                   └────┬─────┘
-                                                        │
-                                    ┌───────────────────┼───────────────────┐
-                                    │ pay               │ dispute           │
-                                    ▼                   ▼                   │
-                              ┌──────────┐        ┌──────────┐             │
-                              │   PAID   │        │ DISPUTED │─────────────┘
-                              └──────────┘        └──────────┘   resolve
+┌─────────┐
+│ BOOKED  │ (Initial job created)
+└────┬────┘
+     │
+     ├─────────────────────────────────────┐
+     │                                     │
+     ▼                                     ▼
+┌─────────────┐                    ┌──────────┐
+│IN_PROGRESS  │                    │ PENDING  │
+└────┬────┬───┘                    └────┬─────┘
+     │    │                              │
+     │    └──────────────────────────────┘
+     │
+     ▼
+┌──────────────┐
+│AWAITING_PICKUP│
+└──────┬───────┘
+       │
+       ▼
+┌──────────┐
+│COMPLETED │ → Can be converted to Invoice
+└──────────┘
 ```
+
+**Note:** Status transitions are flexible - any status can transition to any other status. The system allows for workflow flexibility based on shop needs.
 
 ### Status Definitions
 
-| Status | Description | Editable | Can Delete |
-|--------|-------------|----------|------------|
-| ESTIMATE | Initial quote | ✅ Full | ✅ |
-| APPROVED | Customer approved | 📝 Metadata only | ❌ |
-| IN_PROGRESS | Work ongoing | 🔒 Locked* | ❌ |
-| ON_HOLD | Temporarily paused | 🔒 Locked* | ❌ |
-| INVOICED | Completed, awaiting payment | 🔒 Locked | ❌ |
-| PAID | Payment received | 🔒 Locked | ❌ |
-| CANCELLED | Job cancelled | 🔒 Locked | ❌ |
-| DECLINED | Customer declined | 🔒 Locked | ❌ |
-| DISPUTED | Payment disputed | 🔒 Locked | ❌ |
+| Status | Description | Editable | Can Delete | Can Convert to Invoice |
+|--------|-------------|----------|------------|------------------------|
+| BOOKED | Initial job created | ✅ Full | ✅ | ❌ |
+| IN_PROGRESS | Work ongoing | 📝 Line items locked | ❌ | ❌ |
+| PENDING | Work temporarily paused | 📝 Line items locked | ❌ | ❌ |
+| AWAITING_PICKUP | Work complete, waiting for customer | 📝 Line items locked | ❌ | ❌ |
+| COMPLETED | Work finished | 🔒 Locked | ❌ | ✅ |
 
-*Admin can override lock
+### Status Transitions
 
-### Valid Transitions
+The system supports flexible status transitions. Common workflows:
 
-| From | To | Trigger |
-|------|-----|---------|
-| ESTIMATE | APPROVED | Customer approves |
-| ESTIMATE | CANCELLED | User cancels |
-| APPROVED | IN_PROGRESS | Work starts |
-| APPROVED | DECLINED | Customer declines |
-| IN_PROGRESS | ON_HOLD | Work paused |
-| IN_PROGRESS | INVOICED | Work complete |
-| ON_HOLD | IN_PROGRESS | Work resumes |
-| INVOICED | PAID | Payment received |
-| INVOICED | DISPUTED | Payment issue |
-| DISPUTED | PAID | Dispute resolved |
+- **Standard Flow**: `BOOKED → IN_PROGRESS → AWAITING_PICKUP → COMPLETED`
+- **With Hold**: `BOOKED → IN_PROGRESS → PENDING → IN_PROGRESS → COMPLETED`
+- **Direct Completion**: `BOOKED → COMPLETED` (for quick jobs)
+
+Once a job reaches `COMPLETED` status, it can be converted to an invoice for payment tracking.
 
 ---
 
@@ -278,17 +262,19 @@ export class Job {
 | notes | Optional, max 10000 characters |
 
 ### Code Generation
-- Format: `J{NNN}` (e.g., J001, J042)
-- Auto-incremented on creation
+- Format: `J{yyMMdd}{nnn}` (e.g., J241216001, J241216002)
+- Date-based prefix with auto-incremented number
 - Immutable after creation
 
 ### Business Logic
 1. Vehicle must belong to the specified customer
 2. Cannot have both discountAmount and discountPercent
-3. Line items locked when status is IN_PROGRESS or beyond
-4. Timestamps auto-set on status transitions
-5. Tax rate defaults to shop setting but can be overridden
-6. Jobs can be duplicated (creates new ESTIMATE)
+3. Line items locked when status is COMPLETED
+4. Customer and vehicle can only be changed when status is BOOKED
+5. Timestamps auto-set on status transitions (startedAt for IN_PROGRESS, completedAt for COMPLETED)
+6. Tax rate defaults to shop setting but can be overridden
+7. Jobs can be duplicated (creates new BOOKED job)
+8. Completed jobs can be converted to invoices
 
 ---
 
@@ -332,13 +318,13 @@ Response: Job
 ```
 DELETE /api/jobs/:id
 Response: 204 No Content
-Error: 409 Conflict if not in ESTIMATE status
+Error: 409 Conflict if not in BOOKED status
 ```
 
 ### Duplicate Job
 ```
 POST /api/jobs/:id/duplicate
-Response: Job (new ESTIMATE)
+Response: Job (new BOOKED)
 ```
 
 ### Add Line Item
@@ -454,5 +440,20 @@ Total:                                $243.00
 
 ---
 
-*See also: [LineItem](./line-item.md) | [Customer](./customer.md) | [Vehicle](./vehicle.md)*
+---
+
+## 💳 Invoice Relationship
+
+When a job reaches `COMPLETED` status, it can be converted to an invoice for payment tracking. The invoice is a separate entity that tracks:
+
+- Invoice number (format: `INV-{yyMMdd}-{nnn}`)
+- Invoice date
+- Due date (calculated from payment terms setting)
+- Payment status (UNPAID/PAID)
+- Payment note (optional payment method/details)
+- Paid date (when payment was received)
+
+The job maintains a one-to-one relationship with its invoice via the `invoiceId` foreign key.
+
+*See also: [LineItem](./line-item.md) | [Customer](./customer.md) | [Vehicle](./vehicle.md) | [Invoice](./invoice.md)*
 

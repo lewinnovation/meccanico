@@ -30,6 +30,7 @@ export interface InvoiceSettings {
   prefix: string;
   terms: string;
   footer: string;
+  paymentTermsDays: number;
 }
 
 export class SettingsStore {
@@ -74,6 +75,7 @@ export class SettingsStore {
       prefix: (this.settings['invoice.prefix']?.value as string) || '',
       terms: (this.settings['invoice.terms']?.value as string) || '',
       footer: (this.settings['invoice.footer']?.value as string) || '',
+      paymentTermsDays: (this.settings['invoice.payment_terms_days']?.value as number) || 14,
     };
   }
 
@@ -149,6 +151,7 @@ export class SettingsStore {
       'invoice.prefix': invoice.prefix,
       'invoice.terms': invoice.terms,
       'invoice.footer': invoice.footer,
+      'invoice.payment_terms_days': invoice.paymentTermsDays,
     });
   }
 
