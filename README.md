@@ -267,7 +267,17 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](./docs/contributing.md) for guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+### Commit Messages
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/) format enforced by commitlint and husky.
+
+**Format**: `<type>(<scope>): <subject>`
+
+**Example**: `feat(backend): add customer code generation`
+
+All commits are automatically validated. Invalid commit messages will be rejected. See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 
 ---
 
