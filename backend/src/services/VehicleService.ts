@@ -42,9 +42,14 @@ export class VehicleService {
       .leftJoinAndSelect('vehicle.customer', 'customer');
 
     if (search) {
+      // Normalize search term: remove common formatting characters for flexible matching
+      const normalizedSearch = search.replace(/[\s\-\(\)]/g, '');
+      const searchPattern = `%${search}%`;
+      const normalizedPattern = `%${normalizedSearch}%`;
+      
       queryBuilder.andWhere(
-        '(vehicle.make ILIKE :search OR vehicle.model ILIKE :search OR vehicle.licensePlate ILIKE :search OR vehicle.vin ILIKE :search OR vehicle.code ILIKE :search)',
-        { search: `%${search}%` }
+        '(vehicle.make ILIKE :search OR vehicle.model ILIKE :search OR vehicle.vin ILIKE :search OR vehicle.code ILIKE :search) OR (vehicle.licensePlate IS NOT NULL AND UPPER(REPLACE(REPLACE(TRIM(vehicle.licensePlate), \' \', \'\'), \'-\', \'\')) LIKE UPPER(:normalizedSearch))',
+        { search: searchPattern, normalizedSearch: normalizedPattern }
       );
     }
 
@@ -92,6 +97,38 @@ export class VehicleService {
       where: { customerId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findByLicensePlate(licensePlate: string): Promise<Vehicle> {
+    // Normalize: trim, uppercase, and remove spaces/hyphens for flexible matching
+    const normalizedPlate = licensePlate.trim().toUpperCase().replace(/[\s-]/g, '');
+    const vehicle = await this.vehicleRepository
+      .createQueryBuilder('vehicle')
+      .leftJoinAndSelect('vehicle.customer', 'customer')
+      .where('vehicle.licensePlate IS NOT NULL')
+      .andWhere('UPPER(REPLACE(REPLACE(TRIM(vehicle.licensePlate), \' \', \'\'), \'-\', \'\')) = :plate', { plate: normalizedPlate })
+      .getOne();
+
+    if (!vehicle) {
+      throw new NotFoundError('Vehicle not found');
+    }
+
+    return vehicle;
+  }
+
+  async findByVin(vin: string): Promise<Vehicle> {
+    const normalizedVin = vin.trim().toUpperCase();
+    const vehicle = await this.vehicleRepository
+      .createQueryBuilder('vehicle')
+      .leftJoinAndSelect('vehicle.customer', 'customer')
+      .where('UPPER(vehicle.vin) = :vin', { vin: normalizedVin })
+      .getOne();
+
+    if (!vehicle) {
+      throw new NotFoundError('Vehicle not found');
+    }
+
+    return vehicle;
   }
 
   async create(data: CreateVehicleDto): Promise<Vehicle> {

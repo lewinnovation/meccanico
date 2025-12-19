@@ -152,6 +152,24 @@ export class VehicleStore {
     }
   }
 
+  async findByLicensePlate(licensePlate: string): Promise<Vehicle> {
+    try {
+      const response = await api.get(`/api/vehicles/search/license-plate/${encodeURIComponent(licensePlate)}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findByVin(vin: string): Promise<Vehicle> {
+    try {
+      const response = await api.get(`/api/vehicles/search/vin/${encodeURIComponent(vin)}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async createVehicle(data: CreateVehicleDto): Promise<Vehicle> {
     this.isLoading = true;
     this.error = null;

@@ -34,7 +34,6 @@ import {
   ListItemText,
   Autocomplete,
   Tooltip,
-  Link,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -67,6 +66,7 @@ import { useStore } from '../stores/RootStore';
 import type { JobStatus, LineItemType, CreateLineItemDto, LineItem, Job } from '../stores/JobStore';
 import type { Template } from '../stores/TemplateStore';
 import type { Customer as CustomerType } from '../stores/CustomerStore';
+import type { Vehicle } from '../stores/VehicleStore';
 import {
   DndContext,
   closestCenter,
@@ -499,57 +499,247 @@ interface VehicleOption {
   licensePlate: string | null;
 }
 
+type SearchResultType = 'customer' | 'vehicle';
+
+interface SearchResult {
+  type: SearchResultType;
+  customer?: CustomerWithVehicles;
+  vehicle?: Vehicle & { customer?: CustomerWithVehicles };
+}
+
+// Pattern detection utilities
+const detectSearchType = (input: string): 'vin' | 'licensePlate' | 'email' | 'phone' | 'name' => {
+  const trimmed = input.trim();
+  
+  // VIN: exactly 17 alphanumeric characters
+  if (/^[A-Z0-9]{17}$/i.test(trimmed)) {
+    return 'vin';
+  }
+  
+  // License plate: 2-8 alphanumeric characters, may contain spaces/hyphens
+  if (/^[A-Z0-9\s-]{2,8}$/i.test(trimmed) && trimmed.length <= 8) {
+    return 'licensePlate';
+  }
+  
+  // Email: contains @ symbol
+  if (trimmed.includes('@')) {
+    return 'email';
+  }
+  
+  // Phone: mostly digits with optional formatting
+  const digitsOnly = trimmed.replace(/[\s\-()]/g, '');
+  if (/^\d{7,15}$/.test(digitsOnly)) {
+    return 'phone';
+  }
+  
+  // Default to name
+  return 'name';
+};
+
 const NewJob: React.FC = observer(() => {
   const { jobStore, customerStore, vehicleStore, settingsStore } = useStore();
   const navigate = useNavigate();
-  const [customers, setCustomers] = useState<CustomerWithVehicles[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithVehicles | null>(null);
   const [customerVehicles, setCustomerVehicles] = useState<VehicleOption[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleOption | null>(null);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingVehicles, setLoadingVehicles] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createVehicleOpen, setCreateVehicleOpen] = useState(false);
+  const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
+  
+  // Unified search state
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchInputValue, setSearchInputValue] = useState('');
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    customerStore.fetchCustomers();
     vehicleStore.fetchMakes();
     settingsStore.fetchSettings();
-  }, [customerStore, vehicleStore, settingsStore]);
+  }, [vehicleStore, settingsStore]);
 
+  // Auto-focus search input when component mounts and no customer/vehicle selected
   useEffect(() => {
-    setCustomers(customerStore.customers as CustomerWithVehicles[]);
-  }, [customerStore.customers]);
+    if (!selectedCustomer && !selectedVehicle && searchInputRef.current) {
+      // Small delay to ensure the input is rendered
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  }, [selectedCustomer, selectedVehicle]);
 
   // Fetch vehicles when customer is selected
   useEffect(() => {
     if (selectedCustomer) {
-      setLoadingVehicles(true);
       setCustomerVehicles([]);
-      setSelectedVehicle(null);
+      // Capture current selectedVehicle to check after fetching
+      const currentVehicle = selectedVehicle;
       vehicleStore.fetchVehiclesByCustomer(selectedCustomer.id)
         .then((vehicles) => {
-          setCustomerVehicles(vehicles.map(v => ({
+          const vehicleOptions = vehicles.map(v => ({
             id: v.id,
             code: v.code,
             make: v.make,
             model: v.model,
             year: v.year || 0,
             licensePlate: v.licensePlate,
-          })));
+          }));
+          setCustomerVehicles(vehicleOptions);
+          
+          // If we had a selected vehicle, verify it belongs to this customer
+          // Only clear it if it doesn't belong to this customer
+          if (currentVehicle && currentVehicle.id) {
+            const vehicleBelongsToCustomer = vehicleOptions.some(v => v.id === currentVehicle.id);
+            if (!vehicleBelongsToCustomer) {
+              setSelectedVehicle(null);
+            }
+            // If it does belong, keep it (don't clear)
+          }
         })
         .catch(() => {
           setError('Failed to fetch vehicles for customer');
-        })
-        .finally(() => {
-          setLoadingVehicles(false);
         });
     } else {
       setCustomerVehicles([]);
       setSelectedVehicle(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCustomer, vehicleStore]);
+
+  // Debounced unified search - using same logic as CommandPalette
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (!searchInputValue.trim() || searchInputValue.trim().length < 3) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    searchTimeoutRef.current = setTimeout(async () => {
+      await performSearch(searchInputValue.trim());
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchInputValue]);
+
+  const performSearch = async (query: string) => {
+    try {
+      const results: SearchResult[] = [];
+
+      // Determine what to search for based on current state
+      // Step 1: Search both if nothing selected
+      // Step 2: Search only the missing one
+      const shouldSearchVehicles = !selectedVehicle;
+      const shouldSearchCustomers = !selectedCustomer;
+
+      // Search customers if needed - same as CommandPalette
+      if (shouldSearchCustomers) {
+        try {
+          await customerStore.fetchCustomers(query, 1);
+          const customers = customerStore.customers.slice(0, 10) as CustomerWithVehicles[];
+          customers.forEach(customer => {
+            results.push({
+              type: 'customer',
+              customer,
+            });
+          });
+        } catch {
+          // Error searching customers
+        }
+      }
+
+      // Search vehicles if needed - same as CommandPalette
+      if (shouldSearchVehicles) {
+        try {
+          const originalLimit = vehicleStore.limit;
+          const originalPage = vehicleStore.page;
+          const originalSearch = vehicleStore.search;
+          vehicleStore.setSearch(query);
+          vehicleStore.setPage(1);
+          vehicleStore.limit = 10;
+          await vehicleStore.fetchVehicles();
+          const vehicles = vehicleStore.vehicles.slice(0, 10);
+          vehicles.forEach(vehicle => {
+            results.push({
+              type: 'vehicle',
+              vehicle: vehicle as Vehicle & { customer: CustomerWithVehicles },
+            });
+          });
+          // Restore vehicle store state
+          vehicleStore.limit = originalLimit;
+          vehicleStore.setPage(originalPage);
+          vehicleStore.setSearch(originalSearch);
+        } catch {
+          // Error searching vehicles - restore defaults
+          vehicleStore.limit = 50;
+          vehicleStore.setPage(1);
+          vehicleStore.setSearch('');
+        }
+      }
+
+      setSearchResults(results);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Search failed');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSelectResult = async (result: SearchResult) => {
+    if (result.type === 'vehicle' && result.vehicle) {
+      // Auto-populate vehicle first, then customer if available
+      const vehicle = result.vehicle;
+      
+      setSelectedVehicle({
+        id: vehicle.id,
+        code: vehicle.code,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year || 0,
+        licensePlate: vehicle.licensePlate,
+      });
+      
+      // Always try to populate customer if vehicle has one
+      // Fetch full customer details to ensure we have all required fields
+      if (vehicle.customer && vehicle.customer.id) {
+        try {
+          const fullCustomer = await customerStore.fetchCustomerById(vehicle.customer.id);
+          if (fullCustomer) {
+            // Use the returned customer object
+            setSelectedCustomer(fullCustomer as CustomerWithVehicles);
+          } else if (customerStore.selectedCustomer) {
+            // Fallback to store's selectedCustomer if return value is undefined
+            setSelectedCustomer(customerStore.selectedCustomer as CustomerWithVehicles);
+          }
+        } catch (err) {
+          console.error('Failed to fetch customer:', err);
+          // If fetch fails, try to use the customer from vehicle if it has required fields
+          const customer = vehicle.customer as any;
+          if (customer && customer.id && customer.name) {
+            setSelectedCustomer(customer as CustomerWithVehicles);
+          }
+        }
+      }
+      
+      setSearchInputValue('');
+      setSearchResults([]);
+    } else if (result.type === 'customer' && result.customer) {
+      // Auto-populate customer and load vehicles
+      setSelectedCustomer(result.customer);
+      setSearchInputValue('');
+      setSearchResults([]);
+    }
+  };
 
   const handleCreate = async () => {
     if (!selectedCustomer || !selectedVehicle) return;
@@ -578,9 +768,30 @@ const NewJob: React.FC = observer(() => {
   };
 
   const handleVehicleCreated = (vehicle: VehicleOption) => {
-    setCustomerVehicles(prev => [...prev, vehicle]);
+    if (selectedCustomer) {
+      // If customer already selected, just add vehicle to list and select it
+      setCustomerVehicles(prev => [...prev, vehicle]);
+    }
     setSelectedVehicle(vehicle);
     setCreateVehicleOpen(false);
+    setSearchInputValue('');
+    setSearchResults([]);
+  };
+
+  const handleCustomerCreated = async (customer: CustomerWithVehicles) => {
+    setSelectedCustomer(customer);
+    setCreateCustomerOpen(false);
+    setSearchInputValue('');
+    setSearchResults([]);
+    // If vehicle was already selected, we're ready to create job
+  };
+
+  const handleClear = () => {
+    setSelectedCustomer(null);
+    setSelectedVehicle(null);
+    setCustomerVehicles([]);
+    setSearchInputValue('');
+    setSearchResults([]);
   };
 
   return (
@@ -604,57 +815,397 @@ const NewJob: React.FC = observer(() => {
       <Card>
         <CardContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Autocomplete
-              options={customers}
-              getOptionLabel={(option) => `${option.name} (${option.code})`}
-              value={selectedCustomer}
-              onChange={(_, value) => {
-                setSelectedCustomer(value);
-                setSelectedVehicle(null);
-              }}
-              renderInput={(params) => <TextField {...params} label="Customer" required />}
-              loading={customerStore.isLoading}
-            />
-
-            {selectedCustomer && (
+            {/* Step 1: Search for Vehicle OR Customer */}
+            {!selectedCustomer && !selectedVehicle && (
               <Box>
-                <FormControl fullWidth required>
-                  <InputLabel>Vehicle</InputLabel>
-                  <Select
-                    value={selectedVehicle?.id || ''}
-                    label="Vehicle"
-                    disabled={loadingVehicles}
-                    onChange={(e) => {
-                      const vehicle = customerVehicles.find((v) => v.id === e.target.value);
-                      setSelectedVehicle(vehicle || null);
-                    }}
-                  >
-                    {loadingVehicles ? (
-                      <MenuItem disabled>Loading vehicles...</MenuItem>
-                    ) : customerVehicles.length === 0 ? (
-                      <MenuItem disabled>No vehicles found for this customer</MenuItem>
+                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                  Step 1: Find or create a vehicle or customer
+                </Typography>
+                <Autocomplete
+                  freeSolo
+                  open={searchInputValue.trim().length >= 3}
+                  onOpen={() => {}}
+                  onClose={() => {}}
+                  options={searchResults}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    if (option.type === 'vehicle' && option.vehicle) {
+                      const v = option.vehicle;
+                      return `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}${v.licensePlate ? ` - ${v.licensePlate}` : ''}${v.vin ? ` [VIN: ${v.vin}]` : ''}`;
+                    }
+                    if (option.type === 'customer' && option.customer) {
+                      return `${option.customer.name}${option.customer.phone ? ` - ${option.customer.phone}` : ''}${option.customer.email ? ` - ${option.customer.email}` : ''}`;
+                    }
+                    return '';
+                  }}
+                  inputValue={searchInputValue}
+                  onInputChange={(_, value) => {
+                    setSearchInputValue(value);
+                  }}
+                  onChange={(_, value) => {
+                    if (value && typeof value !== 'string') {
+                      handleSelectResult(value);
+                    }
+                  }}
+                  loading={isSearching}
+                  renderInput={(params) => {
+                    const inputRef = (input: HTMLInputElement | null) => {
+                      searchInputRef.current = input;
+                      if (params.inputProps?.ref) {
+                        if (typeof params.inputProps.ref === 'function') {
+                          params.inputProps.ref(input);
+                        } else if (params.inputProps.ref) {
+                          (params.inputProps.ref as React.MutableRefObject<HTMLInputElement | null>).current = input;
+                        }
+                      }
+                    };
+                    return (
+                      <TextField
+                        {...params}
+                        inputRef={inputRef}
+                        label="Search by customer name, phone, email, or vehicle registration/VIN"
+                        placeholder="Type customer name, phone, email, license plate, or VIN..."
+                        InputProps={{
+                          ...params.InputProps,
+                          startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                        }}
+                      />
+                    );
+                  }}
+                renderOption={(props, option) => {
+                  if (typeof option === 'string') return null;
+                  return (
+                    <Box component="li" {...props} key={option.type === 'vehicle' ? option.vehicle?.id : option.customer?.id}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                        <Chip
+                          label={option.type === 'vehicle' ? 'Vehicle' : 'Customer'}
+                          size="small"
+                          color={option.type === 'vehicle' ? 'primary' : 'secondary'}
+                        />
+                        <Box sx={{ flex: 1 }}>
+                          {option.type === 'vehicle' && option.vehicle ? (
+                            <>
+                              <Typography variant="body2" fontWeight={500}>
+                                {option.vehicle.make} {option.vehicle.model}
+                                {option.vehicle.year ? ` (${option.vehicle.year})` : ''}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {option.vehicle.licensePlate && `Plate: ${option.vehicle.licensePlate}`}
+                                {option.vehicle.vin && ` • VIN: ${option.vehicle.vin}`}
+                                {option.vehicle.customer && ` • Customer: ${option.vehicle.customer.name}`}
+                              </Typography>
+                            </>
+                          ) : option.type === 'customer' && option.customer ? (
+                            <>
+                              <Typography variant="body2" fontWeight={500}>
+                                {option.customer.name}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {option.customer.phone && `Phone: ${option.customer.phone}`}
+                                {option.customer.email && ` • Email: ${option.customer.email}`}
+                              </Typography>
+                            </>
+                          ) : null}
+                        </Box>
+                      </Box>
+                    </Box>
+                  );
+                }}
+                  noOptionsText={
+                    searchInputValue.trim() ? (
+                      <Box sx={{ p: 2, textAlign: 'center' }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          No results found
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<AddIcon />}
+                            onClick={() => {
+                              const searchType = detectSearchType(searchInputValue);
+                              if (searchType === 'vin' || searchType === 'licensePlate') {
+                                setCreateVehicleOpen(true);
+                              } else {
+                                setCreateCustomerOpen(true);
+                              }
+                            }}
+                            fullWidth
+                          >
+                            Create {detectSearchType(searchInputValue) === 'vin' || detectSearchType(searchInputValue) === 'licensePlate' ? 'Vehicle' : 'Customer'}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<AddIcon />}
+                            onClick={() => {
+                              const searchType = detectSearchType(searchInputValue);
+                              if (searchType === 'vin' || searchType === 'licensePlate') {
+                                setCreateCustomerOpen(true);
+                              } else {
+                                setCreateVehicleOpen(true);
+                              }
+                            }}
+                            fullWidth
+                          >
+                            Create {detectSearchType(searchInputValue) === 'vin' || detectSearchType(searchInputValue) === 'licensePlate' ? 'Customer' : 'Vehicle'}
+                          </Button>
+                        </Box>
+                      </Box>
                     ) : (
-                      customerVehicles.map((v) => (
-                        <MenuItem key={v.id} value={v.id}>
-                          {v.year ? v.year : ''} {v.make} {v.model} {v.licensePlate ? `(${v.licensePlate})` : ''}
-                        </MenuItem>
-                      ))
-                    )}
-                  </Select>
-                </FormControl>
+                      'Start typing to search...'
+                    )
+                  }
+                />
+              </Box>
+            )}
+
+            {/* Step 2: If vehicle selected first, find/create customer */}
+            {selectedVehicle && !selectedCustomer && (
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                  Step 2: Find or create the customer for this vehicle
+                </Typography>
+                <Autocomplete
+                  freeSolo
+                  options={searchResults.filter(r => r.type === 'customer')}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    if (option.type === 'customer' && option.customer) {
+                      return `${option.customer.name}${option.customer.phone ? ` - ${option.customer.phone}` : ''}${option.customer.email ? ` - ${option.customer.email}` : ''}`;
+                    }
+                    return '';
+                  }}
+                  inputValue={searchInputValue}
+                  onInputChange={(_, value) => {
+                    setSearchInputValue(value);
+                  }}
+                  onChange={(_, value) => {
+                    if (value && typeof value !== 'string' && value.type === 'customer') {
+                      setSelectedCustomer(value.customer!);
+                      setSearchInputValue('');
+                      setSearchResults([]);
+                    }
+                  }}
+                  loading={isSearching}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Search for customer"
+                      placeholder="Type customer name, phone, or email..."
+                      InputProps={{
+                        ...params.InputProps,
+                        startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                      }}
+                    />
+                  )}
+                  renderOption={(props, option) => {
+                    if (typeof option === 'string' || option.type !== 'customer') return null;
+                    const customer = option.customer!;
+                    return (
+                      <Box component="li" {...props} key={customer.id}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                          <Chip label="Customer" size="small" color="secondary" />
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="body2" fontWeight={500}>
+                              {customer.name}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {customer.phone && `Phone: ${customer.phone}`}
+                              {customer.email && ` • Email: ${customer.email}`}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    );
+                  }}
+                  noOptionsText={
+                    searchInputValue.trim() ? (
+                      <Box sx={{ p: 2, textAlign: 'center' }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          No customer found
+                        </Typography>
+                        <Button
+                          size="small"
+                          startIcon={<AddIcon />}
+                          onClick={() => setCreateCustomerOpen(true)}
+                        >
+                          Create New Customer
+                        </Button>
+                      </Box>
+                    ) : (
+                      'Start typing to search for customer...'
+                    )
+                  }
+                />
+              </Box>
+            )}
+
+            {/* Step 2: If customer selected first, find/create vehicle */}
+            {selectedCustomer && !selectedVehicle && (
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                  Step 2: Find or create a vehicle for this customer
+                </Typography>
+                <Autocomplete
+                  freeSolo
+                  options={searchResults.filter(r => r.type === 'vehicle')}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    if (option.type === 'vehicle' && option.vehicle) {
+                      const v = option.vehicle;
+                      return `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}${v.licensePlate ? ` - ${v.licensePlate}` : ''}`;
+                    }
+                    return '';
+                  }}
+                  inputValue={searchInputValue}
+                  onInputChange={(_, value) => {
+                    setSearchInputValue(value);
+                  }}
+                  onChange={(_, value) => {
+                    if (value && typeof value !== 'string' && value.type === 'vehicle') {
+                      const vehicle = value.vehicle!;
+                      setSelectedVehicle({
+                        id: vehicle.id,
+                        code: vehicle.code,
+                        make: vehicle.make,
+                        model: vehicle.model,
+                        year: vehicle.year || 0,
+                        licensePlate: vehicle.licensePlate,
+                      });
+                      setSearchInputValue('');
+                      setSearchResults([]);
+                    }
+                  }}
+                  loading={isSearching}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Search for vehicle"
+                      placeholder="Type vehicle make, model, license plate, or VIN..."
+                      InputProps={{
+                        ...params.InputProps,
+                        startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                      }}
+                    />
+                  )}
+                  renderOption={(props, option) => {
+                    if (typeof option === 'string' || option.type !== 'vehicle') return null;
+                    const vehicle = option.vehicle!;
+                    return (
+                      <Box component="li" {...props} key={vehicle.id}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                          <Chip label="Vehicle" size="small" color="primary" />
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="body2" fontWeight={500}>
+                              {vehicle.make} {vehicle.model}
+                              {vehicle.year ? ` (${vehicle.year})` : ''}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {vehicle.licensePlate && `Plate: ${vehicle.licensePlate}`}
+                              {vehicle.vin && ` • VIN: ${vehicle.vin}`}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    );
+                  }}
+                  noOptionsText={
+                    searchInputValue.trim() ? (
+                      <Box sx={{ p: 2, textAlign: 'center' }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          No vehicle found
+                        </Typography>
+                        <Button
+                          size="small"
+                          startIcon={<AddIcon />}
+                          onClick={() => setCreateVehicleOpen(true)}
+                        >
+                          Create New Vehicle
+                        </Button>
+                      </Box>
+                    ) : (
+                      'Start typing to search for vehicle...'
+                    )
+                  }
+                />
                 
-                {/* Create Vehicle Link */}
-                <Box sx={{ mt: 1 }}>
-                  <Link
-                    component="button"
-                    variant="body2"
-                    onClick={() => setCreateVehicleOpen(true)}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                  >
-                    <AddIcon sx={{ fontSize: 16 }} />
-                    Add new vehicle for {selectedCustomer.name}
-                  </Link>
-                </Box>
+                {/* Also show customer's existing vehicles */}
+                {customerVehicles.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Or select from existing vehicles:
+                    </Typography>
+                    <FormControl fullWidth>
+                      <InputLabel>Existing Vehicles</InputLabel>
+                      <Select
+                        value={selectedVehicle ? (selectedVehicle as VehicleOption).id : ''}
+                        label="Existing Vehicles"
+                        onChange={(e) => {
+                          const vehicleId: string = e.target.value;
+                          const vehicle = customerVehicles.find((v) => v.id === vehicleId);
+                          if (vehicle) {
+                            setSelectedVehicle(vehicle);
+                          }
+                        }}
+                      >
+                        {customerVehicles.map((v) => (
+                          <MenuItem key={v.id} value={v.id}>
+                            {v.year ? v.year : ''} {v.make} {v.model} {v.licensePlate ? `(${v.licensePlate})` : ''}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                )}
+              </Box>
+            )}
+
+            {/* Selected Customer and Vehicle Display */}
+            {(selectedCustomer || selectedVehicle) && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {selectedCustomer && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+                    <Chip label="Customer" color="secondary" size="small" />
+                    <Typography variant="body1" sx={{ flex: 1 }}>
+                      {selectedCustomer.name}
+                      {selectedCustomer.phone && ` • ${selectedCustomer.phone}`}
+                      {selectedCustomer.email && ` • ${selectedCustomer.email}`}
+                    </Typography>
+                    <IconButton size="small" onClick={() => {
+                      setSelectedCustomer(null);
+                      setCustomerVehicles([]);
+                    }}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                )}
+
+                {selectedVehicle && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+                    <Chip label="Vehicle" color="primary" size="small" />
+                    <Typography variant="body1" sx={{ flex: 1 }}>
+                      {selectedVehicle.year ? `${selectedVehicle.year} ` : ''}
+                      {selectedVehicle.make} {selectedVehicle.model}
+                      {selectedVehicle.licensePlate && ` (${selectedVehicle.licensePlate})`}
+                    </Typography>
+                    <IconButton size="small" onClick={() => setSelectedVehicle(null)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                )}
+
+                {selectedCustomer && selectedVehicle && (
+                  <Alert severity="success" sx={{ mt: 1 }}>
+                    Ready to create job! Both customer and vehicle are selected.
+                  </Alert>
+                )}
+
+                {(selectedCustomer || selectedVehicle) && (
+                  <Button size="small" onClick={handleClear} sx={{ alignSelf: 'flex-start' }}>
+                    Clear All
+                  </Button>
+                )}
               </Box>
             )}
 
@@ -681,17 +1232,167 @@ const NewJob: React.FC = observer(() => {
         </CardContent>
       </Card>
 
+      {/* Create Customer Dialog */}
+      <CreateCustomerDialog
+        open={createCustomerOpen}
+        onClose={() => setCreateCustomerOpen(false)}
+        onCreated={handleCustomerCreated}
+        prefillData={searchInputValue}
+      />
+
       {/* Create Vehicle Dialog */}
-      {selectedCustomer && (
-        <CreateVehicleDialog
-          open={createVehicleOpen}
-          onClose={() => setCreateVehicleOpen(false)}
-          customerId={selectedCustomer.id}
-          customerName={selectedCustomer.name}
-          onCreated={handleVehicleCreated}
-        />
-      )}
+      <CreateVehicleDialog
+        open={createVehicleOpen}
+        onClose={() => setCreateVehicleOpen(false)}
+        customerId={selectedCustomer?.id || ''}
+        customerName={selectedCustomer?.name || ''}
+        onCreated={handleVehicleCreated}
+        prefillLicensePlate={detectSearchType(searchInputValue) === 'licensePlate' ? searchInputValue : undefined}
+        prefillVin={detectSearchType(searchInputValue) === 'vin' ? searchInputValue : undefined}
+        requireCustomer={!selectedCustomer}
+      />
     </Box>
+  );
+});
+
+// ==================== CREATE CUSTOMER DIALOG ====================
+interface CreateCustomerDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (customer: CustomerWithVehicles) => void;
+  prefillData?: string;
+}
+
+const CreateCustomerDialog: React.FC<CreateCustomerDialogProps> = observer(({
+  open,
+  onClose,
+  onCreated,
+  prefillData,
+}) => {
+  const { customerStore } = useStore();
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      // Parse prefill data
+      let name = '';
+      let phone = '';
+      let email = '';
+      
+      if (prefillData) {
+        const trimmed = prefillData.trim();
+        // Try to extract email
+        const emailMatch = trimmed.match(/\S+@\S+\.\S+/);
+        if (emailMatch) {
+          email = emailMatch[0];
+          name = trimmed.replace(emailMatch[0], '').trim();
+        } else {
+          // Try to extract phone (digits with formatting)
+          const phoneMatch = trimmed.match(/[\d\s\-()]{7,}/);
+          if (phoneMatch) {
+            phone = phoneMatch[0].trim();
+            name = trimmed.replace(phoneMatch[0], '').trim();
+          } else {
+            name = trimmed;
+          }
+        }
+      }
+      
+      setFormData({
+        name,
+        phone,
+        email,
+        address: '',
+      });
+      setError(null);
+    }
+  }, [open, prefillData]);
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const customer = await customerStore.createCustomer({
+        name: formData.name.trim(),
+        phone: formData.phone.trim() || undefined,
+        email: formData.email.trim() || undefined,
+        address: formData.address.trim() || undefined,
+      });
+
+      if (customer) {
+        onCreated(customer as CustomerWithVehicles);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create customer');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Create New Customer</DialogTitle>
+      <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2, mt: 1 }}>
+            {error}
+          </Alert>
+        )}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <TextField
+            label="Name"
+            required
+            fullWidth
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          />
+          <TextField
+            label="Phone"
+            fullWidth
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+          />
+          <TextField
+            label="Email"
+            type="email"
+            fullWidth
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          />
+          <TextField
+            label="Address"
+            fullWidth
+            multiline
+            rows={2}
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+          />
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={saving || !formData.name.trim()}
+        >
+          {saving ? <CircularProgress size={20} /> : 'Create Customer'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 });
 
@@ -702,6 +1403,9 @@ interface CreateVehicleDialogProps {
   customerId: string;
   customerName: string;
   onCreated: (vehicle: VehicleOption) => void;
+  prefillLicensePlate?: string;
+  prefillVin?: string;
+  requireCustomer?: boolean;
 }
 
 const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
@@ -710,6 +1414,9 @@ const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
   customerId,
   customerName,
   onCreated,
+  prefillLicensePlate,
+  prefillVin,
+  requireCustomer = false,
 }) => {
   const { vehicleStore } = useStore();
   const [formData, setFormData] = useState({
@@ -731,14 +1438,14 @@ const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
         make: '',
         model: '',
         year: new Date().getFullYear().toString(),
-        licensePlate: '',
-        vin: '',
+        licensePlate: prefillLicensePlate?.toUpperCase() || '',
+        vin: prefillVin?.toUpperCase() || '',
         color: '',
       });
       setSelectedMake(null);
       setError(null);
     }
-  }, [open, vehicleStore]);
+  }, [open, vehicleStore, prefillLicensePlate, prefillVin]);
 
   // Get models for selected make
   const modelsForMake = useMemo(() => {
@@ -747,6 +1454,16 @@ const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
   }, [selectedMake, vehicleStore, vehicleStore.makes]);
 
   const handleSave = async () => {
+    if (requireCustomer && !customerId) {
+      setError('Please select or create a customer first');
+      return;
+    }
+
+    if (!customerId) {
+      setError('Customer is required to create a vehicle');
+      return;
+    }
+
     const makeName = selectedMake?.name || formData.make;
     const modelName = formData.model;
 
@@ -786,17 +1503,22 @@ const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
     }
   };
 
-  const isValid = (selectedMake?.name || formData.make) && formData.model;
+  const isValid = (selectedMake?.name || formData.make) && formData.model && (!requireCustomer || customerId);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        Add Vehicle for {customerName}
+        {requireCustomer && !customerId ? 'Create Vehicle (Customer Required)' : `Add Vehicle${customerName ? ` for ${customerName}` : ''}`}
       </DialogTitle>
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2, mt: 1 }}>
             {error}
+          </Alert>
+        )}
+        {requireCustomer && !customerId && (
+          <Alert severity="info" sx={{ mb: 2, mt: 1 }}>
+            Please create a customer first before adding a vehicle.
           </Alert>
         )}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>

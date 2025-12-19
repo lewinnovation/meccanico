@@ -66,6 +66,26 @@ export class VehicleController extends Controller {
   }
 
   /**
+   * Find a vehicle by license plate
+   */
+  @Get('/search/license-plate/:plate')
+  public async getVehicleByLicensePlate(
+    @Path() plate: string
+  ): Promise<Vehicle> {
+    return this.vehicleService.findByLicensePlate(plate);
+  }
+
+  /**
+   * Find a vehicle by VIN
+   */
+  @Get('/search/vin/:vin')
+  public async getVehicleByVin(
+    @Path() vin: string
+  ): Promise<Vehicle> {
+    return this.vehicleService.findByVin(vin);
+  }
+
+  /**
    * Create a new vehicle
    */
   @Post('/')

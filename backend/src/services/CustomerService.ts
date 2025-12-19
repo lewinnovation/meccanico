@@ -33,9 +33,15 @@ export class CustomerService {
     const queryBuilder = this.repository.createQueryBuilder('customer');
 
     if (search) {
+      // Normalize search term: remove common phone formatting characters for phone number search
+      const normalizedSearch = search.replace(/[\s\-\(\)]/g, '');
+      const searchPattern = `%${search}%`;
+      const normalizedPattern = `%${normalizedSearch}%`;
+      
+      // Use nested REPLACE to remove formatting from phone numbers for comparison
       queryBuilder.where(
-        'customer.name ILIKE :search OR customer.email ILIKE :search OR customer.phone ILIKE :search OR customer.code ILIKE :search',
-        { search: `%${search}%` }
+        '(customer.name ILIKE :search OR customer.email ILIKE :search OR customer.code ILIKE :search) OR (customer.phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(REPLACE(customer.phone, \' \', \'\'), \'-\', \'\'), \'(\', \'\'), \')\', \'\') LIKE :normalizedSearch)',
+        { search: searchPattern, normalizedSearch: normalizedPattern }
       );
     }
 
