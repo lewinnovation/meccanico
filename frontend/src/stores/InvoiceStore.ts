@@ -39,9 +39,11 @@ export interface MarkInvoicePaidDto {
 
 export class InvoiceStore {
   rootStore: RootStore;
+  invoices: Invoice[] = [];
   selectedInvoice: Invoice | null = null;
   isLoading = false;
   error: string | null = null;
+  total = 0;
 
   constructor(rootStore: RootStore) {
     this.rootStore = rootStore;
@@ -154,6 +156,30 @@ export class InvoiceStore {
         this.isLoading = false;
       });
       throw error;
+    }
+  }
+
+  async fetchAll(status?: InvoiceStatus): Promise<void> {
+    this.isLoading = true;
+    this.error = null;
+
+    try {
+      const params = new URLSearchParams();
+      if (status) params.append('status', status);
+      params.append('limit', '1000'); // Get all for dashboard
+
+      const response = await api.get(`/api/invoices?${params}`);
+
+      runInAction(() => {
+        this.invoices = response.data.data;
+        this.total = response.data.total;
+        this.isLoading = false;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to fetch invoices';
+        this.isLoading = false;
+      });
     }
   }
 

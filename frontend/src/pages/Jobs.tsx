@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import { Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -283,12 +283,131 @@ const SortableLineItemRow: React.FC<SortableLineItemRowProps> = ({ item, canEdit
 const JobList: React.FC = observer(() => {
   const { jobStore, settingsStore } = useStore();
   const navigate = useNavigate();
-  const [tab, setTab] = useState(0);
-  const [search, setSearch] = useState('');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  const [invoicePaidFilter, setInvoicePaidFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-  const [invoicedFilter, setInvoicedFilter] = useState<'all' | 'invoiced' | 'not-invoiced'>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Initialize tab from URL params
+  const initialTab = parseInt(searchParams.get('tab') || '0', 10);
+  const [tab, setTab] = useState(initialTab);
+  
+  // Initialize search from URL params
+  const urlSearch = searchParams.get('search') || '';
+  const [search, setSearch] = useState(urlSearch);
+  
+  // Initialize date range from URL params
+  const urlStartDate = searchParams.get('startDate') || '';
+  const urlEndDate = searchParams.get('endDate') || '';
+  const [startDate, setStartDate] = useState<string>(urlStartDate);
+  const [endDate, setEndDate] = useState<string>(urlEndDate);
+  
+  // Initialize invoice filters from URL params
+  const urlInvoicePaid = searchParams.get('invoicePaid') as 'all' | 'paid' | 'unpaid' | null;
+  const urlInvoiced = searchParams.get('invoiced') as 'all' | 'invoiced' | 'not-invoiced' | null;
+  const [invoicePaidFilter, setInvoicePaidFilter] = useState<'all' | 'paid' | 'unpaid'>(urlInvoicePaid || 'all');
+  const [invoicedFilter, setInvoicedFilter] = useState<'all' | 'invoiced' | 'not-invoiced'>(urlInvoiced || 'all');
+  
+  // Function to update URL params
+  const updateURLParams = useCallback((updates: {
+    tab?: number;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    invoicePaid?: 'all' | 'paid' | 'unpaid';
+    invoiced?: 'all' | 'invoiced' | 'not-invoiced';
+  }) => {
+    const newParams = new URLSearchParams(searchParams);
+    
+    if (updates.tab !== undefined) {
+      if (updates.tab === 0) {
+        newParams.delete('tab');
+      } else {
+        newParams.set('tab', updates.tab.toString());
+      }
+    }
+    
+    if (updates.search !== undefined) {
+      if (updates.search === '') {
+        newParams.delete('search');
+      } else {
+        newParams.set('search', updates.search);
+      }
+    }
+    
+    if (updates.startDate !== undefined) {
+      if (updates.startDate === '') {
+        newParams.delete('startDate');
+      } else {
+        newParams.set('startDate', updates.startDate);
+      }
+    }
+    
+    if (updates.endDate !== undefined) {
+      if (updates.endDate === '') {
+        newParams.delete('endDate');
+      } else {
+        newParams.set('endDate', updates.endDate);
+      }
+    }
+    
+    if (updates.invoicePaid !== undefined) {
+      if (updates.invoicePaid === 'all') {
+        newParams.delete('invoicePaid');
+      } else {
+        newParams.set('invoicePaid', updates.invoicePaid);
+      }
+    }
+    
+    if (updates.invoiced !== undefined) {
+      if (updates.invoiced === 'all') {
+        newParams.delete('invoiced');
+      } else {
+        newParams.set('invoiced', updates.invoiced);
+      }
+    }
+    
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+  
+  // Sync URL params with state on mount and when URL changes (e.g., browser back/forward)
+  useEffect(() => {
+    const currentTab = parseInt(searchParams.get('tab') || '0', 10);
+    const currentSearch = searchParams.get('search') || '';
+    const currentStartDate = searchParams.get('startDate') || '';
+    const currentEndDate = searchParams.get('endDate') || '';
+    const currentInvoicePaid = searchParams.get('invoicePaid') as 'all' | 'paid' | 'unpaid' | null;
+    const currentInvoiced = searchParams.get('invoiced') as 'all' | 'invoiced' | 'not-invoiced' | null;
+    
+    // Only update state if URL params differ from current state (avoids circular updates)
+    if (currentTab !== tab) setTab(currentTab);
+    if (currentSearch !== search) {
+      setSearch(currentSearch);
+      jobStore.setSearch(currentSearch);
+    }
+    if (currentStartDate !== startDate) setStartDate(currentStartDate);
+    if (currentEndDate !== endDate) setEndDate(currentEndDate);
+    if ((currentInvoicePaid || 'all') !== invoicePaidFilter) {
+      setInvoicePaidFilter(currentInvoicePaid || 'all');
+    }
+    if ((currentInvoiced || 'all') !== invoicedFilter) {
+      setInvoicedFilter(currentInvoiced || 'all');
+    }
+    
+    // Apply filters to jobStore from URL
+    if (currentStartDate) {
+      jobStore.setDateRange(currentStartDate, currentEndDate);
+    } else if (!currentStartDate && startDate) {
+      // Clear date range if removed from URL
+      jobStore.setDateRange(null, null);
+    }
+    if (currentInvoicePaid && currentInvoicePaid !== 'all') {
+      const isPaid = currentInvoicePaid === 'paid';
+      jobStore.setInvoiceFilter(true, isPaid);
+    }
+    if (currentInvoiced && currentInvoiced !== 'all') {
+      const hasInvoice = currentInvoiced === 'invoiced';
+      jobStore.setInvoiceFilter(hasInvoice, null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]); // Only run when URL params actually change
 
   // Initial fetch and when filters change
   useEffect(() => {
@@ -324,12 +443,34 @@ const JobList: React.FC = observer(() => {
     setTab(newValue);
     setInvoicePaidFilter('all'); // Reset invoice filter when changing tabs
     setInvoicedFilter('all'); // Reset invoiced filter when changing tabs
+    updateURLParams({ tab: newValue, invoicePaid: 'all', invoiced: 'all' });
   };
 
   const handleSearch = (value: string) => {
     setSearch(value);
     jobStore.setSearch(value);
+    updateURLParams({ search: value });
     jobStore.fetchJobs();
+  };
+  
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+    updateURLParams({ startDate: value });
+  };
+  
+  const handleEndDateChange = (value: string) => {
+    setEndDate(value);
+    updateURLParams({ endDate: value });
+  };
+  
+  const handleInvoicePaidFilterChange = (value: 'all' | 'paid' | 'unpaid') => {
+    setInvoicePaidFilter(value);
+    updateURLParams({ invoicePaid: value });
+  };
+  
+  const handleInvoicedFilterChange = (value: 'all' | 'invoiced' | 'not-invoiced') => {
+    setInvoicedFilter(value);
+    updateURLParams({ invoiced: value });
   };
 
   const handlePageChange = (_: unknown, newPage: number) => {
@@ -389,6 +530,7 @@ const JobList: React.FC = observer(() => {
         <Grid item xs={12} md={4}>
           <TextField
             fullWidth
+            size="small"
             placeholder="Search jobs by code, customer, or vehicle..."
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
@@ -404,31 +546,33 @@ const JobList: React.FC = observer(() => {
         <Grid item xs={12} md={3}>
           <TextField
             fullWidth
+            size="small"
             type="date"
             label="Start Date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => handleStartDateChange(e.target.value)}
             InputLabelProps={{ shrink: true }}
           />
         </Grid>
         <Grid item xs={12} md={3}>
           <TextField
             fullWidth
+            size="small"
             type="date"
             label="End Date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => handleEndDateChange(e.target.value)}
             InputLabelProps={{ shrink: true }}
           />
         </Grid>
         {tab === 5 && (
           <Grid item xs={12} md={2}>
-            <FormControl fullWidth>
+            <FormControl fullWidth size="small">
               <InputLabel>Invoiced Status</InputLabel>
               <Select
                 value={invoicedFilter}
                 label="Invoiced Status"
-                onChange={(e) => setInvoicedFilter(e.target.value as 'all' | 'invoiced' | 'not-invoiced')}
+                onChange={(e) => handleInvoicedFilterChange(e.target.value as 'all' | 'invoiced' | 'not-invoiced')}
               >
                 <MenuItem value="all">All</MenuItem>
                 <MenuItem value="invoiced">Invoiced</MenuItem>
@@ -439,12 +583,12 @@ const JobList: React.FC = observer(() => {
         )}
         {tab === 6 && (
           <Grid item xs={12} md={2}>
-            <FormControl fullWidth>
+            <FormControl fullWidth size="small">
               <InputLabel>Payment Status</InputLabel>
               <Select
                 value={invoicePaidFilter}
                 label="Payment Status"
-                onChange={(e) => setInvoicePaidFilter(e.target.value as 'all' | 'paid' | 'unpaid')}
+                onChange={(e) => handleInvoicePaidFilterChange(e.target.value as 'all' | 'paid' | 'unpaid')}
               >
                 <MenuItem value="all">All</MenuItem>
                 <MenuItem value="paid">Paid</MenuItem>

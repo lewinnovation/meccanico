@@ -1,6 +1,7 @@
 import React from 'react';
-import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, useTheme } from '@mui/material';
-import { Menu as MenuIcon, Search as SearchIcon } from '@mui/icons-material';
+import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, Button, useTheme } from '@mui/material';
+import { Menu as MenuIcon, Search as SearchIcon, Add as AddIcon, People } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../../stores/RootStore';
 import { Sidebar } from './Sidebar';
@@ -14,6 +15,7 @@ interface MainLayoutProps {
 
 export const MainLayout: React.FC<MainLayoutProps> = observer(({ children }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { uiStore } = useStore();
 
   return (
@@ -46,38 +48,59 @@ export const MainLayout: React.FC<MainLayoutProps> = observer(({ children }) => 
             </IconButton>
           </Box>
 
-          <Box
-            onClick={() => uiStore.toggleCommandPalette()}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              px: 2,
-              py: 1,
-              bgcolor: 'grey.100',
-              borderRadius: 1,
-              cursor: 'pointer',
-              '&:hover': { bgcolor: 'grey.200' },
-            }}
-          >
-            <SearchIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-            <Typography variant="body2" color="text.secondary">
-              Search...
-            </Typography>
-            <Typography
-              variant="body2"
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, justifyContent: 'center', maxWidth: 600 }}>
+            <Box
+              onClick={() => uiStore.toggleCommandPalette()}
               sx={{
-                ml: 2,
-                px: 1,
-                py: 0.25,
-                bgcolor: 'grey.200',
-                borderRadius: 0.5,
-                fontSize: '0.75rem',
-                fontFamily: 'monospace',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                py: 1,
+                bgcolor: 'grey.100',
+                borderRadius: 1,
+                cursor: 'pointer',
+                flex: 1,
+                '&:hover': { bgcolor: 'grey.200' },
               }}
             >
-              ⌘K
-            </Typography>
+              <SearchIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+              <Typography variant="body2" color="text.secondary">
+                Search...
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  ml: 2,
+                  px: 1,
+                  py: 0.25,
+                  bgcolor: 'grey.200',
+                  borderRadius: 0.5,
+                  fontSize: '0.75rem',
+                  fontFamily: 'monospace',
+                }}
+              >
+                ⌘K
+              </Typography>
+            </Box>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={() => navigate('/jobs/new')}
+              sx={{ minWidth: 'auto', px: 1.5 }}
+            >
+              New Job
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<People />}
+              onClick={() => navigate('/customers')}
+              sx={{ minWidth: 'auto', px: 1.5 }}
+            >
+              New Customer
+            </Button>
           </Box>
 
           <Box sx={{ width: 48 }} /> {/* Spacer for balance */}
