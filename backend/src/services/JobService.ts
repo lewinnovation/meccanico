@@ -4,6 +4,7 @@ import { LineItem, LineItemType } from '../models/LineItem';
 import { Template } from '../models/Template';
 import { Vehicle } from '../models/Vehicle';
 import { Customer } from '../models/Customer';
+import { Invoice } from '../models/Invoice';
 import { generateJobCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
 import { PaginatedResult } from '../types/common';
@@ -216,6 +217,11 @@ export class JobService {
   async update(id: string, data: UpdateJobDto, userId?: string | null): Promise<Job> {
     const job = await this.findById(id);
     
+    // Prevent editing cancelled jobs
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictError('Cannot edit cancelled jobs');
+    }
+    
     // Store old values for audit log
     const oldValue = {
       customerId: job.customerId,
@@ -340,6 +346,13 @@ export class JobService {
     
     const oldStatus = job.status;
 
+    // If transitioning to CANCELLED, remove the invoice if it exists
+    if (newStatus === JobStatus.CANCELLED && job.invoiceId) {
+      const invoiceRepository = AppDataSource.getRepository(Invoice);
+      await invoiceRepository.delete({ id: job.invoiceId });
+      job.invoiceId = null;
+    }
+
     // Flexible transitions - allow any status to transition to any other status
     // Set timestamps based on transition
     const now = new Date();
@@ -416,9 +429,12 @@ export class JobService {
   async addLineItem(jobId: string, data: CreateLineItemDto, userId?: string | null): Promise<LineItem> {
     const job = await this.findById(jobId);
 
-    // Allow adding items to jobs that are not yet completed
+    // Allow adding items to jobs that are not yet completed or cancelled
     if (job.status === JobStatus.COMPLETED) {
       throw new ConflictError('Cannot add items to completed jobs');
+    }
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictError('Cannot add items to cancelled jobs');
     }
 
     // Get max sort order
@@ -467,9 +483,12 @@ export class JobService {
   ): Promise<LineItem> {
     const job = await this.findById(jobId);
 
-    // Allow updating items on jobs that are not yet completed
+    // Allow updating items on jobs that are not yet completed or cancelled
     if (job.status === JobStatus.COMPLETED) {
       throw new ConflictError('Cannot update items on completed jobs');
+    }
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictError('Cannot update items on cancelled jobs');
     }
 
     const lineItem = await this.lineItemRepository.findOne({
@@ -514,9 +533,12 @@ export class JobService {
   async deleteLineItem(jobId: string, lineItemId: string, userId?: string | null): Promise<void> {
     const job = await this.findById(jobId);
 
-    // Allow deleting items from jobs that are not yet completed
+    // Allow deleting items from jobs that are not yet completed or cancelled
     if (job.status === JobStatus.COMPLETED) {
       throw new ConflictError('Cannot delete items from completed jobs');
+    }
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictError('Cannot delete items from cancelled jobs');
     }
 
     // Get line item before deletion for audit log
@@ -549,7 +571,12 @@ export class JobService {
     jobId: string,
     items: { id: string; sortOrder: number }[]
   ): Promise<LineItem[]> {
-    await this.findById(jobId);
+    const job = await this.findById(jobId);
+    
+    // Prevent reordering items on cancelled jobs
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictError('Cannot reorder items on cancelled jobs');
+    }
 
     for (const item of items) {
       await this.lineItemRepository.update(
@@ -558,16 +585,18 @@ export class JobService {
       );
     }
 
-    const job = await this.findById(jobId);
-    return job.lineItems;
+    return (await this.findById(jobId)).lineItems;
   }
 
   async applyTemplate(jobId: string, templateId: string): Promise<Job> {
     const job = await this.findById(jobId);
 
-    // Allow applying templates to jobs that are not yet completed
+    // Allow applying templates to jobs that are not yet completed or cancelled
     if (job.status === JobStatus.COMPLETED) {
       throw new ConflictError('Cannot apply templates to completed jobs');
+    }
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictError('Cannot apply templates to cancelled jobs');
     }
 
     const template = await this.templateRepository.findOne({

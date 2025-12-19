@@ -2371,7 +2371,7 @@ const JobDetail: React.FC = observer(() => {
     );
   }
 
-  const canEdit = job.status !== 'COMPLETED';
+  const canEdit = job.status !== 'COMPLETED' && job.status !== 'CANCELLED';
   // Flexible transitions - allow any status to transition to any other status
   const taxName = settingsStore.taxSettings.name || 'GST';
 
