@@ -34,7 +34,7 @@ function formatNumberWithSeparators(num: number): string {
 }
 
 /**
- * Format line items as HTML table
+ * Format line items as HTML list
  */
 export function formatLineItemsAsHtml(
   lineItems: LineItem[] | undefined,
@@ -47,45 +47,21 @@ export function formatLineItemsAsHtml(
   // Sort by sortOrder
   const sortedItems = [...lineItems].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
-  let tableRows = '';
+  let listItems = '';
   for (const item of sortedItems) {
     if (item.type === LineItemType.TEXT) {
-      tableRows += `
-        <tr style="background-color: #f5f5f5;">
-          <td colspan="4" style="padding: 8px; font-style: italic;">${item.description}</td>
-        </tr>
-      `;
+      listItems += `<li style="font-style: italic; margin-bottom: 4px;">${item.description}</li>`;
     } else {
       const quantity = Number(item.quantity) || 0;
       const unitPrice = Number(item.unitPrice) || 0;
       const total = quantity * unitPrice;
+      const quantityStr = Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2);
 
-      tableRows += `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${item.description}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${Number.isInteger(quantity) ? quantity : quantity.toFixed(2)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${currencySymbol}${formatNumberWithSeparators(unitPrice)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${currencySymbol}${formatNumberWithSeparators(total)}</td>
-        </tr>
-      `;
+      listItems += `<li style="margin-bottom: 4px;">${item.description} - Qty: ${quantityStr} @ ${currencySymbol}${formatNumberWithSeparators(unitPrice)} = ${currencySymbol}${formatNumberWithSeparators(total)}</li>`;
     }
   }
 
-  return `
-    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-      <thead>
-        <tr style="background-color: #f0f0f0;">
-          <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Description</th>
-          <th style="padding: 8px; text-align: right; border-bottom: 2px solid #ddd;">Qty</th>
-          <th style="padding: 8px; text-align: right; border-bottom: 2px solid #ddd;">Price</th>
-          <th style="padding: 8px; text-align: right; border-bottom: 2px solid #ddd;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${tableRows}
-      </tbody>
-    </table>
-  `;
+  return `<ul style="margin: 16px 0; padding-left: 20px;">${listItems}</ul>`;
 }
 
 /**
