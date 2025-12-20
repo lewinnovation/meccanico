@@ -47,6 +47,8 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
 import type { Vehicle, CreateVehicleDto, UpdateVehicleDto, VehicleMake } from '../stores/VehicleStore';
 import type { Customer } from '../stores/CustomerStore';
+import type { Job, JobStatus } from '../stores/JobStore';
+import { api } from '../utils/api';
 
 // ==================== VEHICLE FORM ====================
 interface VehicleFormData {
@@ -980,6 +982,8 @@ const VehicleDetail: React.FC = observer(() => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vehicleJobs, setVehicleJobs] = useState<Job[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -988,6 +992,36 @@ const VehicleDetail: React.FC = observer(() => {
       });
     }
   }, [id, vehicleStore]);
+
+  // Fetch service history when vehicle is loaded
+  useEffect(() => {
+    const fetchVehicleJobs = async () => {
+      if (!id) return;
+      setLoadingJobs(true);
+      try {
+        const params = new URLSearchParams({
+          page: '1',
+          limit: '100', // Get all jobs for this vehicle
+          vehicleId: id,
+        });
+        const response = await api.get(`/api/jobs?${params}`);
+        // Sort by created date descending (most recent first)
+        const jobs = (response.data.data || []).sort((a: Job, b: Job) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setVehicleJobs(jobs);
+      } catch (err) {
+        console.error('Failed to fetch vehicle jobs:', err);
+        setVehicleJobs([]);
+      } finally {
+        setLoadingJobs(false);
+      }
+    };
+
+    if (id) {
+      fetchVehicleJobs();
+    }
+  }, [id]);
 
   const vehicle = vehicleStore.selectedVehicle;
 
@@ -1200,23 +1234,138 @@ const VehicleDetail: React.FC = observer(() => {
           </Card>
         </Grid>
 
-        {/* Service History Placeholder */}
+        {/* Service History */}
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">Service History</Typography>
-                <Button variant="outlined" size="small">
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  onClick={() => navigate(`/jobs/new?vehicleId=${id}`)}
+                >
                   New Job
                 </Button>
               </Box>
               <Divider sx={{ mb: 2 }} />
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <VehicleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-                <Typography color="text.secondary">
-                  No service history yet
-                </Typography>
-              </Box>
+              {loadingJobs ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : vehicleJobs.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <VehicleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                  <Typography color="text.secondary">
+                    No service history yet
+                  </Typography>
+                </Box>
+              ) : (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Job Code</TableCell>
+                        <TableCell>Customer</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell align="right">Total</TableCell>
+                        <TableCell align="right"></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {(() => {
+                        const statusConfig: Record<JobStatus, { label: string; color: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' }> = {
+                          BOOKED: { label: 'Booked', color: 'default' },
+                          IN_PROGRESS: { label: 'In Progress', color: 'primary' },
+                          PENDING: { label: 'Pending', color: 'warning' },
+                          AWAITING_PICKUP: { label: 'Awaiting Pick Up', color: 'info' },
+                          COMPLETED: { label: 'Completed', color: 'success' },
+                          CANCELLED: { label: 'Cancelled', color: 'error' },
+                        };
+                        
+                        const formatDate = (date: string) => new Date(date).toLocaleDateString();
+                        const formatCurrency = (amount: number) => {
+                          return new Intl.NumberFormat('en-AU', {
+                            style: 'currency',
+                            currency: 'AUD',
+                          }).format(amount);
+                        };
+                        
+                        const calculateJobTotals = (job: Job) => {
+                          const subtotal = (job.lineItems || []).reduce(
+                            (sum, item) => sum + item.quantity * item.unitPrice,
+                            0
+                          );
+                          let discount = 0;
+                          if (job.discountPercent && job.discountPercent > 0) {
+                            discount = subtotal * (job.discountPercent / 100);
+                          } else {
+                            discount = job.discountAmount || 0;
+                          }
+                          const afterDiscount = Math.max(0, subtotal - discount);
+                          const gst = afterDiscount * ((job.taxRate || 0) / 100);
+                          const total = afterDiscount + gst;
+                          return { subtotal: afterDiscount, gst, total };
+                        };
+                        
+                        return vehicleJobs.map((job) => {
+                          const totals = calculateJobTotals(job);
+                          const status = statusConfig[job.status] || { label: job.status, color: 'default' as const };
+                          
+                          return (
+                            <TableRow 
+                              key={job.id} 
+                              hover 
+                              sx={{ cursor: 'pointer' }} 
+                              onClick={() => navigate(`/jobs/${job.id}`)}
+                            >
+                              <TableCell>
+                                <Typography variant="body2" fontFamily="monospace">
+                                  {job.code}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography fontWeight={500}>
+                                  {job.customer?.name || 'Unknown'}
+                                </Typography>
+                                {job.customer?.code && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {job.customer.code}
+                                  </Typography>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={status.label}
+                                  color={status.color}
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {formatDate(job.createdAt)}
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" fontWeight={500}>
+                                  {formatCurrency(totals.total)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                                <IconButton 
+                                  size="small" 
+                                  onClick={() => navigate(`/jobs/${job.id}`)}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        });
+                      })()}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
             </CardContent>
           </Card>
         </Grid>
