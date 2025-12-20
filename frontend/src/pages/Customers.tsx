@@ -870,7 +870,7 @@ const AddVehicleDialog: React.FC<AddVehicleDialogProps> = observer(({
     setError(null);
     try {
       const newVehicle = await vehicleStore.createVehicle({
-        customerId,
+        customerIds: [customerId],
         make: formData.make,
         model: formData.model,
         year: formData.year ? parseInt(formData.year, 10) : undefined,

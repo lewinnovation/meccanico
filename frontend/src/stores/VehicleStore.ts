@@ -21,10 +21,21 @@ export interface VehicleModel {
   isActive: boolean;
 }
 
+export interface VehicleOwner {
+  id: string;
+  vehicleId: string;
+  customerId: string;
+  isPrimary: boolean;
+  customer?: {
+    id: string;
+    code: string;
+    name: string;
+  };
+}
+
 export interface Vehicle {
   id: string;
   code: string;
-  customerId: string;
   make: string;
   model: string;
   year: number | null;
@@ -35,6 +46,14 @@ export interface Vehicle {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  owners?: Array<{
+    id: string;
+    code: string;
+    name: string;
+  }>;
+  vehicleOwners?: VehicleOwner[];
+  // Deprecated: kept for backward compatibility
+  customerId?: string;
   customer?: {
     id: string;
     code: string;
@@ -43,7 +62,7 @@ export interface Vehicle {
 }
 
 export interface CreateVehicleDto {
-  customerId: string;
+  customerIds: string[];
   make: string;
   model: string;
   year?: number;
@@ -276,6 +295,83 @@ export class VehicleStore {
       }
     });
     return response.data;
+  }
+
+  // ===================== OWNER MANAGEMENT =====================
+
+  async addOwner(vehicleId: string, customerId: string, isPrimary: boolean = false): Promise<Vehicle> {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      const response = await api.post(`/api/vehicles/${vehicleId}/owners`, { customerId, isPrimary });
+      runInAction(() => {
+        const index = this.vehicles.findIndex((v) => v.id === vehicleId);
+        if (index !== -1) {
+          this.vehicles[index] = response.data;
+        }
+        if (this.selectedVehicle?.id === vehicleId) {
+          this.selectedVehicle = response.data;
+        }
+        this.isLoading = false;
+      });
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to add owner';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
+
+  async removeOwner(vehicleId: string, customerId: string): Promise<Vehicle> {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      const response = await api.delete(`/api/vehicles/${vehicleId}/owners/${customerId}`);
+      runInAction(() => {
+        const index = this.vehicles.findIndex((v) => v.id === vehicleId);
+        if (index !== -1) {
+          this.vehicles[index] = response.data;
+        }
+        if (this.selectedVehicle?.id === vehicleId) {
+          this.selectedVehicle = response.data;
+        }
+        this.isLoading = false;
+      });
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to remove owner';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
+
+  async setPrimaryOwner(vehicleId: string, customerId: string): Promise<Vehicle> {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      const response = await api.patch(`/api/vehicles/${vehicleId}/owners/${customerId}/primary`);
+      runInAction(() => {
+        const index = this.vehicles.findIndex((v) => v.id === vehicleId);
+        if (index !== -1) {
+          this.vehicles[index] = response.data;
+        }
+        if (this.selectedVehicle?.id === vehicleId) {
+          this.selectedVehicle = response.data;
+        }
+        this.isLoading = false;
+      });
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to set primary owner';
+        this.isLoading = false;
+      });
+      throw error;
+    }
   }
 }
 

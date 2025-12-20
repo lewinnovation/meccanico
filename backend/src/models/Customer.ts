@@ -4,9 +4,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToMany,
   OneToMany,
 } from 'typeorm';
 import { Vehicle } from './Vehicle';
+import { VehicleOwner } from './VehicleOwner';
 
 @Entity('customers')
 export class Customer {
@@ -37,7 +39,10 @@ export class Customer {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => Vehicle, (vehicle) => vehicle.customer)
+  @ManyToMany(() => Vehicle, (vehicle) => vehicle.owners)
   vehicles: Vehicle[];
+
+  @OneToMany(() => VehicleOwner, (vehicleOwner) => vehicleOwner.customer)
+  vehicleOwners: VehicleOwner[];
 }
 

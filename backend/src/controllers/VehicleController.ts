@@ -118,15 +118,41 @@ export class VehicleController extends Controller {
   }
 
   /**
-   * Transfer vehicle to another customer
+   * Add an owner to a vehicle
    */
-  @Patch('/{id}/transfer')
+  @Post('/{id}/owners')
   @Security('jwt', ['ADMIN', 'MECHANIC'])
-  public async transferVehicle(
+  public async addOwner(
     @Path() id: string,
-    @Body() body: { newCustomerId: string }
+    @Body() body: { customerId: string; isPrimary?: boolean }
   ): Promise<Vehicle> {
-    return this.vehicleService.transferToCustomer(id, body.newCustomerId);
+    return this.vehicleService.addOwner(id, body.customerId, body.isPrimary || false);
+  }
+
+  /**
+   * Remove an owner from a vehicle
+   */
+  @Delete('/{id}/owners/{customerId}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
+  @SuccessResponse(204, 'Deleted')
+  public async removeOwner(
+    @Path() id: string,
+    @Path() customerId: string
+  ): Promise<Vehicle> {
+    this.setStatus(204);
+    return this.vehicleService.removeOwner(id, customerId);
+  }
+
+  /**
+   * Set a primary owner for a vehicle
+   */
+  @Patch('/{id}/owners/{customerId}/primary')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
+  public async setPrimaryOwner(
+    @Path() id: string,
+    @Path() customerId: string
+  ): Promise<Vehicle> {
+    return this.vehicleService.setPrimaryOwner(id, customerId);
   }
 
   /**

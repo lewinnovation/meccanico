@@ -4,6 +4,7 @@ import { VehicleModel } from '../models/VehicleModel';
 import { User, UserRole } from '../models/User';
 import { Customer } from '../models/Customer';
 import { Vehicle } from '../models/Vehicle';
+import { VehicleOwner } from '../models/VehicleOwner';
 import { Inventory } from '../models/Inventory';
 import { Labour } from '../models/Labour';
 import { Service } from '../models/Service';
@@ -701,6 +702,7 @@ async function seedCustomers(): Promise<Customer[]> {
  */
 async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
   const vehicleRepository = AppDataSource.getRepository(Vehicle);
+  const vehicleOwnerRepository = AppDataSource.getRepository(VehicleOwner);
 
   // Check if vehicles already exist
   const existingCount = await vehicleRepository.count();
@@ -731,7 +733,6 @@ async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
     const code = await generateCode('vehicles', CODE_PREFIXES.VEHICLE);
     const vehicle = vehicleRepository.create({
       code,
-      customerId: customers[data.customerIndex].id,
       make: data.make,
       model: data.model,
       year: data.year,
@@ -740,6 +741,15 @@ async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
       mileage: data.mileage,
     });
     const saved = await vehicleRepository.save(vehicle);
+    
+    // Create VehicleOwner record
+    const vehicleOwner = vehicleOwnerRepository.create({
+      vehicleId: saved.id,
+      customerId: customers[data.customerIndex].id,
+      isPrimary: true,
+    });
+    await vehicleOwnerRepository.save(vehicleOwner);
+    
     vehicles.push(saved);
   }
 

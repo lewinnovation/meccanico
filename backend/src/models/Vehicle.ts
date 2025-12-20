@@ -4,12 +4,13 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
+  ManyToMany,
   OneToMany,
-  JoinColumn,
+  JoinTable,
 } from 'typeorm';
 import { Customer } from './Customer';
 import { Job } from './Job';
+import { VehicleOwner } from './VehicleOwner';
 
 @Entity('vehicles')
 export class Vehicle {
@@ -18,9 +19,6 @@ export class Vehicle {
 
   @Column({ type: 'varchar', length: 10, unique: true })
   code: string;
-
-  @Column({ name: 'customer_id', type: 'uuid' })
-  customerId: string;
 
   @Column({ type: 'varchar', length: 100 })
   make: string;
@@ -52,9 +50,16 @@ export class Vehicle {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @ManyToOne(() => Customer, (customer) => customer.vehicles)
-  @JoinColumn({ name: 'customer_id' })
-  customer: Customer;
+  @ManyToMany(() => Customer, (customer) => customer.vehicles)
+  @JoinTable({
+    name: 'vehicle_owners',
+    joinColumn: { name: 'vehicle_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'customer_id', referencedColumnName: 'id' },
+  })
+  owners: Customer[];
+
+  @OneToMany(() => VehicleOwner, (vehicleOwner) => vehicleOwner.vehicle)
+  vehicleOwners: VehicleOwner[];
 
   @OneToMany(() => Job, (job) => job.vehicle)
   jobs: Job[];

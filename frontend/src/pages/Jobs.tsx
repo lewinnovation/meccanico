@@ -988,24 +988,82 @@ const NewJob: React.FC = observer(() => {
         licensePlate: vehicle.licensePlate,
       });
       
-      // Always try to populate customer if vehicle has one
-      // Fetch full customer details to ensure we have all required fields
-      if (vehicle.customer && vehicle.customer.id) {
-        try {
-          const fullCustomer = await customerStore.fetchCustomerById(vehicle.customer.id);
-          if (fullCustomer) {
-            // Use the returned customer object
-            setSelectedCustomer(fullCustomer as CustomerWithVehicles);
-          } else if (customerStore.selectedCustomer) {
-            // Fallback to store's selectedCustomer if return value is undefined
-            setSelectedCustomer(customerStore.selectedCustomer as CustomerWithVehicles);
+      // Fetch full vehicle details to get owners
+      try {
+        const fullVehicle = await vehicleStore.fetchVehicleById(vehicle.id);
+        
+        if (fullVehicle.owners && fullVehicle.owners.length > 0) {
+          // If vehicle has multiple owners, determine default customer
+          // First, try to get the customer from the most recent job
+          try {
+            // Fetch jobs for this vehicle using API directly
+            const { api } = await import('../utils/api');
+            const response = await api.get('/api/jobs', {
+              params: {
+                page: 1,
+                limit: 100,
+                vehicleId: vehicle.id,
+              },
+            });
+            const jobs = response.data.data || [];
+            if (jobs && jobs.length > 0) {
+              // Sort by createdAt descending and get the most recent job
+              const sortedJobs = [...jobs].sort((a, b) => 
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+              const lastJob = sortedJobs[0];
+              if (lastJob && lastJob.customerId) {
+                // Verify this customer is still an owner
+                const isOwner = fullVehicle.owners.some(o => o.id === lastJob.customerId);
+                if (isOwner) {
+                  const customer = await customerStore.fetchCustomerById(lastJob.customerId);
+                  if (customer) {
+                    setSelectedCustomer(customer as CustomerWithVehicles);
+                    setSearchInputValue('');
+                    setSearchResults([]);
+                    return;
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Failed to fetch jobs:', err);
           }
-        } catch (err) {
-          console.error('Failed to fetch customer:', err);
-          // If fetch fails, try to use the customer from vehicle if it has required fields
-          const customer = vehicle.customer as CustomerWithVehicles | undefined;
-          if (customer && customer.id && customer.name) {
-            setSelectedCustomer(customer);
+          
+          // No jobs or last job customer not found - use primary owner or first owner
+          const primaryOwner = fullVehicle.vehicleOwners?.find(vo => vo.isPrimary);
+          const defaultOwner = primaryOwner 
+            ? fullVehicle.owners.find(o => o.id === primaryOwner.customerId)
+            : fullVehicle.owners[0];
+          
+          if (defaultOwner) {
+            const customer = await customerStore.fetchCustomerById(defaultOwner.id);
+            if (customer) {
+              setSelectedCustomer(customer as CustomerWithVehicles);
+            }
+          }
+        } else if (vehicle.customer && vehicle.customer.id) {
+          // Fallback to old customer field for backward compatibility
+          try {
+            const customer = await customerStore.fetchCustomerById(vehicle.customer.id);
+            if (customer) {
+              setSelectedCustomer(customer as CustomerWithVehicles);
+            }
+          } catch (err) {
+            console.error('Failed to fetch customer:', err);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch vehicle details:', err);
+        // Fallback to old behavior
+        if (vehicle.customer && vehicle.customer.id) {
+          try {
+            const customer = await customerStore.fetchCustomerById(vehicle.customer.id);
+            if (customer) {
+              setSelectedCustomer(customer as CustomerWithVehicles);
+            }
+          } catch (fetchErr) {
+            console.error('Failed to fetch customer:', fetchErr);
           }
         }
       }
@@ -1756,7 +1814,7 @@ const CreateVehicleDialog: React.FC<CreateVehicleDialogProps> = observer(({
 
     try {
       const vehicle = await vehicleStore.createVehicle({
-        customerId,
+        customerIds: customerId ? [customerId] : [],
         make: makeName,
         model: modelName,
         year: parseInt(formData.year) || undefined,

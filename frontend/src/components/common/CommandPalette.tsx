@@ -402,7 +402,15 @@ export const CommandPalette: React.FC = observer(() => {
                             <>
                               {vehicle.licensePlate && `Plate: ${vehicle.licensePlate}`}
                               {vehicle.vin && ` • VIN: ${vehicle.vin}`}
-                              {vehicle.customer && ` • Customer: ${vehicle.customer.name}`}
+                              {vehicle.owners && vehicle.owners.length > 0 && (
+                                <>
+                                  {' • Owners: '}
+                                  {vehicle.owners.length <= 2
+                                    ? vehicle.owners.map(o => o.name).join(', ')
+                                    : `${vehicle.owners[0].name} and ${vehicle.owners.length - 1} more`}
+                                </>
+                              )}
+                              {!vehicle.owners && vehicle.customer && ` • Customer: ${vehicle.customer.name}`}
                             </>
                           }
                           secondaryTypographyProps={{

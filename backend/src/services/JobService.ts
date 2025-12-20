@@ -5,6 +5,7 @@ import { Template } from '../models/Template';
 import { Vehicle } from '../models/Vehicle';
 import { Customer } from '../models/Customer';
 import { Invoice } from '../models/Invoice';
+import { VehicleOwner } from '../models/VehicleOwner';
 import { generateJobCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
 import { PaginatedResult } from '../types/common';
@@ -58,6 +59,7 @@ export class JobService {
   private lineItemRepository = AppDataSource.getRepository(LineItem);
   private templateRepository = AppDataSource.getRepository(Template);
   private vehicleRepository = AppDataSource.getRepository(Vehicle);
+  private vehicleOwnerRepository = AppDataSource.getRepository(VehicleOwner);
   private pdfService = new PdfService();
   private settingsService = new SettingsService();
 
@@ -82,8 +84,10 @@ export class JobService {
       .leftJoinAndSelect('job.invoice', 'invoice');
 
     if (search) {
+      queryBuilder.leftJoin('vehicle.vehicleOwners', 'vehicleOwner')
+        .leftJoin('vehicleOwner.customer', 'owner');
       queryBuilder.andWhere(
-        '(job.code ILIKE :search OR customer.name ILIKE :search OR vehicle.make ILIKE :search OR vehicle.model ILIKE :search)',
+        '(job.code ILIKE :search OR customer.name ILIKE :search OR vehicle.make ILIKE :search OR vehicle.model ILIKE :search OR owner.name ILIKE :search)',
         { search: `%${search}%` }
       );
     }
@@ -172,26 +176,59 @@ export class JobService {
   }
 
   async create(data: CreateJobDto, userId?: string | null): Promise<Job> {
-    // Verify vehicle belongs to customer if vehicleId is provided
+    let customerId = data.customerId;
+
+    // If vehicle is provided, validate and potentially set default customer
     if (data.vehicleId) {
       const vehicle = await this.vehicleRepository.findOne({
         where: { id: data.vehicleId },
+        relations: ['vehicleOwners', 'vehicleOwners.customer'],
       });
 
       if (!vehicle) {
         throw new NotFoundError('Vehicle not found');
       }
 
-      if (vehicle.customerId !== data.customerId) {
-        throw new BadRequestError('Vehicle does not belong to the specified customer');
+      // If customerId not provided, use last job's customer or first/primary owner
+      if (!customerId) {
+        // Find the most recent job for this vehicle
+        const lastJob = await this.repository.findOne({
+          where: { vehicleId: data.vehicleId },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (lastJob) {
+          customerId = lastJob.customerId;
+        } else {
+          // No jobs exist, use primary owner or first owner
+          const primaryOwner = vehicle.vehicleOwners?.find(vo => vo.isPrimary);
+          if (primaryOwner) {
+            customerId = primaryOwner.customerId;
+          } else if (vehicle.vehicleOwners && vehicle.vehicleOwners.length > 0) {
+            customerId = vehicle.vehicleOwners[0].customerId;
+          } else {
+            throw new BadRequestError('Vehicle has no owners');
+          }
+        }
       }
+
+      // Validate that customer is in vehicle's owners list
+      const isOwner = vehicle.vehicleOwners?.some(
+        vo => vo.customerId === customerId
+      );
+
+      if (!isOwner) {
+        throw new BadRequestError('Customer must be an owner of the specified vehicle');
+      }
+    } else if (!customerId) {
+      throw new BadRequestError('Customer is required when vehicle is not specified');
     }
 
     const code = await generateJobCode();
 
     const job = this.repository.create({
       code,
-      customerId: data.customerId,
+      customerId,
       vehicleId: data.vehicleId || null,
       assignedTo: data.assignedTo,
       notes: data.notes,
@@ -266,10 +303,11 @@ export class JobService {
       }
     }
 
-    // If changing vehicle, verify it exists and belongs to the (potentially new) customer
+    // If changing vehicle, verify it exists and customer is an owner
     if (isChangingVehicle) {
       const vehicle = await this.vehicleRepository.findOne({
         where: { id: data.vehicleId },
+        relations: ['vehicleOwners'],
       });
 
       if (!vehicle) {
@@ -277,8 +315,30 @@ export class JobService {
       }
 
       const targetCustomerId = data.customerId || job.customerId;
-      if (vehicle.customerId !== targetCustomerId) {
-        throw new BadRequestError('Vehicle must belong to the selected customer');
+      const isOwner = vehicle.vehicleOwners?.some(
+        vo => vo.customerId === targetCustomerId
+      );
+
+      if (!isOwner) {
+        throw new BadRequestError('Customer must be an owner of the selected vehicle');
+      }
+    }
+
+    // If changing customer and vehicle is set, verify customer is an owner
+    if (isChangingCustomer && job.vehicleId) {
+      const vehicle = await this.vehicleRepository.findOne({
+        where: { id: job.vehicleId },
+        relations: ['vehicleOwners'],
+      });
+
+      if (vehicle) {
+        const isOwner = vehicle.vehicleOwners?.some(
+          vo => vo.customerId === data.customerId
+        );
+
+        if (!isOwner) {
+          throw new BadRequestError('Customer must be an owner of the vehicle');
+        }
       }
     }
 

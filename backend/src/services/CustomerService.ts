@@ -1,5 +1,6 @@
 import { AppDataSource } from '../config/database';
 import { Customer } from '../models/Customer';
+import { VehicleOwner } from '../models/VehicleOwner';
 import { generateCustomerCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError } from '../middleware/errorHandler';
 import { PaginatedResult } from '../types/common';
@@ -24,6 +25,7 @@ export { PaginatedResult };
 
 export class CustomerService {
   private repository = AppDataSource.getRepository(Customer);
+  private vehicleOwnerRepository = AppDataSource.getRepository(VehicleOwner);
 
   async findAll(
     page: number = 1,
@@ -121,10 +123,13 @@ export class CustomerService {
   async delete(id: string): Promise<void> {
     const customer = await this.findById(id);
     
-    // Check if customer has vehicles with active jobs
-    // This would need a more complex query in production
-    if (customer.vehicles && customer.vehicles.length > 0) {
-      throw new ConflictError('Cannot delete customer with vehicles. Remove vehicles first.');
+    // Check if customer is an owner of any vehicles
+    const vehicleOwnerCount = await this.vehicleOwnerRepository.count({
+      where: { customerId: id },
+    });
+
+    if (vehicleOwnerCount > 0) {
+      throw new ConflictError('Cannot delete customer who owns vehicles. Remove vehicle ownership first.');
     }
 
     await this.repository.remove(customer);

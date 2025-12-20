@@ -50,7 +50,7 @@ import type { Customer } from '../stores/CustomerStore';
 
 // ==================== VEHICLE FORM ====================
 interface VehicleFormData {
-  customerId: string;
+  customerIds: string[];
   make: string;
   model: string;
   year: string;
@@ -62,7 +62,7 @@ interface VehicleFormData {
 }
 
 const defaultFormData: VehicleFormData = {
-  customerId: '',
+  customerIds: [],
   make: '',
   model: '',
   year: '',
@@ -93,7 +93,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
   const { vehicleStore, customerStore } = useStore();
   const [formData, setFormData] = useState<VehicleFormData>(defaultFormData);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCustomers, setSelectedCustomers] = useState<Customer[]>([]);
   const [selectedMake, setSelectedMake] = useState<VehicleMake | null>(null);
   const [customModel, setCustomModel] = useState('');
   
@@ -116,35 +116,72 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
   useEffect(() => {
     if (!open) return; // Only run when dialog is open
     
-    if (vehicle) {
-      setFormData({
-        customerId: vehicle.customerId,
-        make: vehicle.make,
-        model: vehicle.model,
-        year: vehicle.year?.toString() || '',
-        vin: vehicle.vin || '',
-        licensePlate: vehicle.licensePlate || '',
-        color: vehicle.color || '',
-        mileage: vehicle.mileage?.toString() || '',
-        notes: vehicle.notes || '',
-      });
-      // Set selected make
-      const make = vehicleStore.makes.find((m) => m.name === vehicle.make);
-      setSelectedMake(make || null);
-      setCustomModel(vehicle.model);
-      setMakeInputValue(vehicle.make);
-      setModelInputValue(vehicle.model);
-    } else {
-      setFormData({
-        ...defaultFormData,
-        customerId: preselectedCustomerId || '',
-      });
-      setSelectedMake(null);
-      setCustomModel('');
-      setMakeInputValue('');
-      setModelInputValue('');
-    }
-    setError(null);
+    const loadVehicleOwners = async () => {
+      if (vehicle) {
+        setFormData({
+          customerIds: vehicle.owners?.map(o => o.id) || [],
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.year?.toString() || '',
+          vin: vehicle.vin || '',
+          licensePlate: vehicle.licensePlate || '',
+          color: vehicle.color || '',
+          mileage: vehicle.mileage?.toString() || '',
+          notes: vehicle.notes || '',
+        });
+        // Load full customer details for owners
+        if (vehicle.owners && vehicle.owners.length > 0) {
+          try {
+            const ownerPromises = vehicle.owners.map(owner => 
+              customerStore.fetchCustomerById(owner.id).catch(() => null)
+            );
+            const fullOwners = await Promise.all(ownerPromises);
+            const validOwners = fullOwners.filter((c): c is Customer => c !== null);
+            setSelectedCustomers(validOwners);
+          } catch (err) {
+            console.error('Failed to fetch owner details:', err);
+            // Fallback to basic owner info
+            setSelectedCustomers(vehicle.owners.map(o => ({
+              id: o.id,
+              code: o.code,
+              name: o.name,
+              email: null,
+              phone: null,
+              address: null,
+              notes: null,
+              createdAt: '',
+              updatedAt: '',
+            })));
+          }
+        } else {
+          setSelectedCustomers([]);
+        }
+        // Set selected make
+        const make = vehicleStore.makes.find((m) => m.name === vehicle.make);
+        setSelectedMake(make || null);
+        setCustomModel(vehicle.model);
+        setMakeInputValue(vehicle.make);
+        setModelInputValue(vehicle.model);
+      } else {
+        setFormData({
+          ...defaultFormData,
+          customerIds: preselectedCustomerId ? [preselectedCustomerId] : [],
+        });
+        if (preselectedCustomerId) {
+          const customer = customerStore.customers.find((c) => c.id === preselectedCustomerId);
+          setSelectedCustomers(customer ? [customer] : []);
+        } else {
+          setSelectedCustomers([]);
+        }
+        setSelectedMake(null);
+        setCustomModel('');
+        setMakeInputValue('');
+        setModelInputValue('');
+      }
+      setError(null);
+    };
+    
+    loadVehicleOwners();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle, open, preselectedCustomerId]); // Intentionally excluding vehicleStore.makes to prevent reset on refresh
   
@@ -161,9 +198,19 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
   useEffect(() => {
     if (preselectedCustomerId) {
       const customer = customerStore.customers.find((c) => c.id === preselectedCustomerId);
-      setSelectedCustomer(customer || null);
+      setSelectedCustomers(customer ? [customer] : []);
     }
   }, [preselectedCustomerId, customerStore.customers]);
+
+  // Update selectedCustomers when formData.customerIds changes
+  useEffect(() => {
+    if (formData.customerIds.length > 0) {
+      const customers = customerStore.customers.filter(c => formData.customerIds.includes(c.id));
+      setSelectedCustomers(customers);
+    } else {
+      setSelectedCustomers([]);
+    }
+  }, [formData.customerIds, customerStore.customers]);
 
   const handleMakeChange = (make: VehicleMake | null) => {
     setSelectedMake(make);
@@ -247,8 +294,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
       setError('Make and Model are required');
       return;
     }
-    if (!vehicle && !formData.customerId) {
-      setError('Customer is required');
+    if (!vehicle && formData.customerIds.length === 0) {
+      setError('At least one customer is required');
       return;
     }
 
@@ -265,7 +312,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
       };
 
       if (!vehicle) {
-        (data as CreateVehicleDto).customerId = formData.customerId;
+        (data as CreateVehicleDto).customerIds = formData.customerIds;
       }
 
       await onSave(data);
@@ -289,20 +336,30 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
           </Alert>
         )}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-          {/* Customer (only for new vehicles) */}
+          {/* Customers (only for new vehicles) */}
           {!vehicle && (
             <Autocomplete
+              multiple
               options={customerStore.customers}
               getOptionLabel={(option) => `${option.name} (${option.code})`}
-              value={selectedCustomer}
+              value={selectedCustomers}
               onChange={(_, newValue) => {
-                setSelectedCustomer(newValue);
-                setFormData((prev) => ({ ...prev, customerId: newValue?.id || '' }));
+                setSelectedCustomers(newValue);
+                setFormData((prev) => ({ ...prev, customerIds: newValue.map(c => c.id) }));
               }}
               disabled={!!preselectedCustomerId}
               renderInput={(params) => (
-                <TextField {...params} label="Customer" required />
+                <TextField {...params} label="Owners" required placeholder="Select one or more customers" />
               )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    {...getTagProps({ index })}
+                    key={option.id}
+                    label={`${option.name} (${option.code})`}
+                  />
+                ))
+              }
             />
           )}
 
@@ -818,14 +875,30 @@ const VehicleList: React.FC = observer(() => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      {vehicle.customer ? (
-                        <Link
-                          href={`/customers/${vehicle.customer.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          sx={{ textDecoration: 'none' }}
-                        >
-                          {vehicle.customer.name}
-                        </Link>
+                      {vehicle.owners && vehicle.owners.length > 0 ? (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {vehicle.owners.slice(0, 2).map((owner) => (
+                            <Link
+                              key={owner.id}
+                              href={`/customers/${owner.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              sx={{ textDecoration: 'none' }}
+                            >
+                              <Chip
+                                label={owner.name}
+                                size="small"
+                                sx={{ cursor: 'pointer' }}
+                              />
+                            </Link>
+                          ))}
+                          {vehicle.owners.length > 2 && (
+                            <Chip
+                              label={`+${vehicle.owners.length - 2} more`}
+                              size="small"
+                              variant="outlined"
+                            />
+                          )}
+                        </Box>
                       ) : (
                         '-'
                       )}
@@ -1071,30 +1144,42 @@ const VehicleDetail: React.FC = observer(() => {
           </Card>
         </Grid>
 
-        {/* Owner */}
+        {/* Owners */}
         <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Owner
+                Owners
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
-              {vehicle.customer ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <PersonIcon color="action" sx={{ fontSize: 40 }} />
-                  <Box>
-                    <Typography fontWeight={500}>{vehicle.customer.name}</Typography>
-                    <Chip
-                      label={vehicle.customer.code}
-                      size="small"
-                      sx={{ fontFamily: 'monospace' }}
-                      onClick={() => navigate(`/customers/${vehicle.customer!.id}`)}
-                    />
-                  </Box>
+              {vehicle.owners && vehicle.owners.length > 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  {vehicle.owners.map((owner, index) => {
+                    const isPrimary = vehicle.vehicleOwners?.find(vo => vo.customerId === owner.id)?.isPrimary || index === 0;
+                    return (
+                      <Box key={owner.id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <PersonIcon color="action" sx={{ fontSize: 40 }} />
+                        <Box sx={{ flex: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography fontWeight={500}>{owner.name}</Typography>
+                            {isPrimary && (
+                              <Chip label="Primary" size="small" color="primary" />
+                            )}
+                          </Box>
+                          <Chip
+                            label={owner.code}
+                            size="small"
+                            sx={{ fontFamily: 'monospace', mt: 0.5 }}
+                            onClick={() => navigate(`/customers/${owner.id}`)}
+                          />
+                        </Box>
+                      </Box>
+                    );
+                  })}
                 </Box>
               ) : (
-                <Typography color="text.secondary">No owner assigned</Typography>
+                <Typography color="text.secondary">No owners assigned</Typography>
               )}
             </CardContent>
           </Card>
