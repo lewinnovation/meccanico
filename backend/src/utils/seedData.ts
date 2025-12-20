@@ -14,6 +14,7 @@ import { Job, JobStatus } from '../models/Job';
 import { LineItem, LineItemType } from '../models/LineItem';
 import { Invoice, InvoiceStatus } from '../models/Invoice';
 import { Settings } from '../models/Settings';
+import { CommunicationTemplate, CommunicationTemplateType, CommunicationTemplateAction } from '../models/CommunicationTemplate';
 import { InvoiceService } from '../services/InvoiceService';
 import * as bcrypt from 'bcryptjs';
 import { generateCustomerCode, generateCode, CODE_PREFIXES } from './codeGenerator';
@@ -419,6 +420,9 @@ export async function seedDatabase(): Promise<void> {
 
   // Seed jobs
   await seedJobs(customers, vehicles, inventoryItems, labourItems, services);
+
+  // Seed communication templates
+  await seedCommunicationTemplates();
 
   console.log('✅ Comprehensive database seeding completed');
 }
@@ -1365,6 +1369,177 @@ async function seedJobs(
 
   console.log('  ✓ Seeded 5 jobs in various statuses');
   console.log('  ✓ Created invoices for completed jobs');
+}
+
+/**
+ * Seed communication templates
+ */
+async function seedCommunicationTemplates(): Promise<void> {
+  const templateRepository = AppDataSource.getRepository(CommunicationTemplate);
+
+  // Check if templates already exist
+  const existingCount = await templateRepository.count();
+  if (existingCount > 0) {
+    console.log('  Communication templates already seeded, skipping...');
+    return;
+  }
+
+  console.log('  Seeding communication templates...');
+
+  const defaultTemplates = [
+    {
+      name: 'Email Estimate',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.EMAIL_ESTIMATE,
+      subject: 'Estimate for {vehicle_make} {vehicle_model} ({rego})',
+      body: `<p>Hi {customer_name},</p>
+
+<p>Please find attached your estimate for {car_information}.</p>
+
+<p><strong>Job Code:</strong> {job_code}</p>
+
+{line_items}
+
+<p><strong>Estimate Total:</strong> {estimate_total}</p>
+
+<p><em>This is an estimate and does not require payment.</em></p>
+
+<p>If you have any questions or would like to proceed with this work, please don't hesitate to contact us.</p>
+
+<p><strong>Phone:</strong> {shop_phone}<br>
+<strong>Email:</strong> {shop_email}</p>
+
+<p>We look forward to serving you.</p>
+
+<p>Best regards,<br>
+{shop_name}</p>`,
+      isActive: true,
+    },
+    {
+      name: 'Email Invoice',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.EMAIL_INVOICE,
+      subject: 'Invoice for {vehicle_make} {vehicle_model} ({rego})',
+      body: `<p>Hi {customer_name},</p>
+
+<p>Please find attached your invoice for {car_information}.</p>
+
+<p><strong>Job Code:</strong> {job_code}</p>
+
+{line_items}
+
+<p><strong>Total amount due:</strong> {invoice_total}</p>
+
+<p>Payment can be made via the methods listed on the invoice. If you have any questions, please contact us.</p>
+
+<p><strong>Phone:</strong> {shop_phone}<br>
+<strong>Email:</strong> {shop_email}</p>
+
+<p>Thank you for your business!</p>
+
+<p>Best regards,<br>
+{shop_name}</p>`,
+      isActive: true,
+    },
+    {
+      name: 'Vehicle Ready',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.VEHICLE_READY,
+      subject: 'Your {car_information} is ready for pickup',
+      body: `Hi {customer_name},
+
+Great news! Your {car_information} is ready for pickup.
+
+Job Code: {job_code}
+
+Please contact us to arrange a convenient time to collect your vehicle.
+
+Phone: {shop_phone}
+Email: {shop_email}
+
+We look forward to seeing you soon.
+
+Best regards,
+{shop_name}`,
+      isActive: true,
+    },
+    {
+      name: 'Vehicle In Progress',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.VEHICLE_IN_PROGRESS,
+      subject: 'Update on your {car_information}',
+      body: `Hi {customer_name},
+
+This is an update on your {car_information}.
+
+Job Code: {job_code}
+Status: {job_status}
+
+We are currently working on your vehicle and will keep you updated on our progress.
+
+If you have any questions, please don't hesitate to contact us.
+
+Phone: {shop_phone}
+Email: {shop_email}
+
+Best regards,
+{shop_name}`,
+      isActive: true,
+    },
+    {
+      name: 'Vehicle Pending',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.VEHICLE_PENDING,
+      subject: 'Update on your {car_information}',
+      body: `Hi {customer_name},
+
+This is an update on your {car_information}.
+
+Job Code: {job_code}
+Status: {job_status}
+
+We are currently waiting on parts/materials to complete the work on your vehicle. We will contact you as soon as we have an update.
+
+If you have any questions, please don't hesitate to contact us.
+
+Phone: {shop_phone}
+Email: {shop_email}
+
+Best regards,
+{shop_name}`,
+      isActive: true,
+    },
+    {
+      name: 'Invoice Created',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.INVOICE_CREATED,
+      subject: 'Invoice created for {car_information} - {job_code}',
+      body: `Hi {customer_name},
+
+An invoice has been created for your {car_information}.
+
+Job Code: {job_code}
+Invoice Total: {invoice_total}
+
+Payment details are available on the invoice. If you have any questions, please contact us.
+
+Phone: {shop_phone}
+Email: {shop_email}
+
+Thank you for your business!
+
+Best regards,
+{shop_name}`,
+      isActive: true,
+    },
+  ];
+
+  for (const templateData of defaultTemplates) {
+    const template = templateRepository.create(templateData);
+    await templateRepository.save(template);
+  }
+
+  console.log(`  ✓ Seeded ${defaultTemplates.length} communication templates`);
 }
 
 /**

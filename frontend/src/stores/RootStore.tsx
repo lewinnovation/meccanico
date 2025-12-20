@@ -11,6 +11,7 @@ import { TemplateStore } from './TemplateStore';
 import { VehicleStore } from './VehicleStore';
 import { InvoiceStore } from './InvoiceStore';
 import { AuditLogStore } from './AuditLogStore';
+import { CommunicationTemplateStore } from './CommunicationTemplateStore';
 
 class RootStore {
   authStore: AuthStore;
@@ -25,6 +26,7 @@ class RootStore {
   vehicleStore: VehicleStore;
   invoiceStore: InvoiceStore;
   auditLogStore: AuditLogStore;
+  communicationTemplateStore: CommunicationTemplateStore;
 
   constructor() {
     this.authStore = new AuthStore(this);
@@ -39,6 +41,7 @@ class RootStore {
     this.vehicleStore = new VehicleStore(this);
     this.invoiceStore = new InvoiceStore(this);
     this.auditLogStore = new AuditLogStore(this);
+    this.communicationTemplateStore = new CommunicationTemplateStore(this);
   }
 }
 

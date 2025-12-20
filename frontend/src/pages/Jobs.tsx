@@ -57,6 +57,7 @@ import {
   OpenInNew as OpenIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
+  Mail as MailIcon,
   LocationOn as LocationIcon,
   CheckCircle as CheckIcon,
   Cancel as CancelIcon,
@@ -64,6 +65,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
 import { api } from '../utils/api';
+import { EmailDialog } from '../components/jobs/EmailDialog';
 import type { JobStatus, LineItemType, CreateLineItemDto, LineItem, Job } from '../stores/JobStore';
 import type { Template } from '../stores/TemplateStore';
 import type { Customer as CustomerType } from '../stores/CustomerStore';
@@ -2190,6 +2192,8 @@ const JobDetail: React.FC = observer(() => {
   const formatDate = (date: string | null) => (date ? new Date(date).toLocaleDateString() : '-');
 
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailDialogType, setEmailDialogType] = useState<'estimate' | 'invoice'>('estimate');
 
   const handleDownloadPdf = async (type: 'estimate' | 'invoice') => {
     if (!job || isDownloadingPdf) return;
@@ -2258,14 +2262,29 @@ const JobDetail: React.FC = observer(() => {
         <Box sx={{ display: 'flex', gap: 1 }}>
           {/* Download PDF Button */}
           {(job.status !== 'COMPLETED' || (job.status === 'COMPLETED' && job.invoiceId)) && (
-            <Button
-              variant="outlined"
-              startIcon={isDownloadingPdf ? <CircularProgress size={16} /> : <DownloadIcon />}
-              onClick={() => handleDownloadPdf(job.status === 'COMPLETED' && job.invoiceId ? 'invoice' : 'estimate')}
-              disabled={isDownloadingPdf}
-            >
-              {isDownloadingPdf ? 'Generating PDF...' : 'Download PDF'}
-            </Button>
+            <>
+              <Button
+                variant="outlined"
+                startIcon={isDownloadingPdf ? <CircularProgress size={16} /> : <DownloadIcon />}
+                onClick={() => handleDownloadPdf(job.status === 'COMPLETED' && job.invoiceId ? 'invoice' : 'estimate')}
+                disabled={isDownloadingPdf}
+              >
+                {isDownloadingPdf ? 'Generating PDF...' : 'Download'}
+              </Button>
+              {job.customer?.email && (
+                <Button
+                  variant="outlined"
+                  startIcon={<MailIcon />}
+                  onClick={() => {
+                    const emailType = job.status === 'COMPLETED' && job.invoiceId ? 'invoice' : 'estimate';
+                    setEmailDialogType(emailType);
+                    setEmailDialogOpen(true);
+                  }}
+                >
+                  Email
+                </Button>
+              )}
+            </>
           )}
           
           {/* Next Natural Step Button */}
@@ -3085,6 +3104,46 @@ const JobDetail: React.FC = observer(() => {
         onClose={() => setEditDialogOpen(false)}
         job={job}
       />
+      {job && (
+        <EmailDialog
+          open={emailDialogOpen}
+          onClose={() => setEmailDialogOpen(false)}
+          jobId={job.id}
+          jobCode={job.code}
+          customerEmail={job.customer?.email || null}
+          type={emailDialogType}
+          job={{
+            id: job.id,
+            code: job.code,
+            status: job.status,
+            customer: job.customer ? {
+              name: job.customer.name,
+              email: job.customer.email || null,
+              phone: job.customer.phone || null,
+            } : undefined,
+            vehicle: job.vehicle ? {
+              year: job.vehicle.year,
+              make: job.vehicle.make,
+              model: job.vehicle.model,
+              vin: job.vehicle.vin || null,
+              licensePlate: job.vehicle.licensePlate || null,
+            } : undefined,
+            lineItems: job.lineItems?.map(item => ({
+              type: item.type,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              sortOrder: item.sortOrder,
+            })),
+            discountAmount: job.discountAmount,
+            discountPercent: job.discountPercent,
+            taxRate: job.taxRate,
+          }}
+          onSuccess={() => {
+            // Email sent successfully
+          }}
+        />
+      )}
     </Box>
   );
 });

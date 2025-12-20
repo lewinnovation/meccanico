@@ -13,4 +13,5 @@ export * from './Template';
 export * from './TemplateItem';
 export * from './Settings';
 export * from './AuditLog';
+export * from './CommunicationTemplate';
 

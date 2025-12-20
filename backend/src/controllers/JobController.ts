@@ -27,12 +27,20 @@ import { Job, JobStatus } from '../models/Job';
 import { LineItem } from '../models/LineItem';
 import { User } from '../models/User';
 import { BadRequestError } from '../middleware/errorHandler';
+import { EmailService } from '../services/EmailService';
+import { CommunicationTemplateService } from '../services/CommunicationTemplateService';
+import { CommunicationTemplateType, CommunicationTemplateAction } from '../models/CommunicationTemplate';
+import { buildTemplateVariables, renderTemplate } from '../utils/templateRenderer';
+import { SettingsService } from '../services/SettingsService';
 
 @Route('api/jobs')
 @Tags('Jobs')
 @Security('jwt')
 export class JobController extends Controller {
   private jobService = new JobService();
+  private emailService = new EmailService();
+  private templateService = new CommunicationTemplateService();
+  private settingsService = new SettingsService();
 
   /**
    * Get all jobs with pagination and filters
@@ -266,6 +274,81 @@ export class JobController extends Controller {
         type,
       });
       // Re-throw to let error handler process it
+      throw error;
+    }
+  }
+
+  /**
+   * Send PDF via email for a job (estimate or invoice)
+   */
+  @Post('/{id}/email')
+  @Response<BadRequestError>(400, 'Invalid type, job does not have invoice, or customer email missing')
+  @SuccessResponse(200, 'Email sent successfully')
+  public async sendEmail(
+    @Path() id: string,
+    @Body() body: { type: 'estimate' | 'invoice'; recipientEmail?: string; customMessage?: string }
+  ): Promise<{ message: string }> {
+    try {
+      const job = await this.jobService.findById(id);
+
+      // Validate type
+      if (body.type === 'invoice' && !job.invoiceId) {
+        throw new BadRequestError('Job does not have an invoice');
+      }
+
+      // Determine recipient email
+      const recipientEmail = body.recipientEmail || job.customer?.email;
+      if (!recipientEmail) {
+        throw new BadRequestError('Customer email is required. Please provide recipientEmail.');
+      }
+
+      // Get template based on type
+      const templateAction = body.type === 'invoice' 
+        ? CommunicationTemplateAction.EMAIL_INVOICE 
+        : CommunicationTemplateAction.EMAIL_ESTIMATE;
+      
+      const template = await this.templateService.findByActionAndType(
+        templateAction,
+        CommunicationTemplateType.EMAIL
+      );
+
+      if (!template) {
+        throw new BadRequestError(`Email template for ${body.type} not found. Please create a template in Settings.`);
+      }
+
+      // Build template variables
+      const variables = await buildTemplateVariables(job, this.settingsService, body.type);
+
+      // Render subject and body
+      const subject = template.subject ? renderTemplate(template.subject, variables) : `${body.type === 'invoice' ? 'Invoice' : 'Estimate'} - ${job.code}`;
+      const bodyText = body.customMessage || renderTemplate(template.body, variables);
+
+      // Generate PDF
+      const pdfBuffer = await this.jobService.generatePdf(id, body.type);
+      const filename = `${body.type}-${job.code}.pdf`;
+
+      // Send email with PDF attachment
+      await this.emailService.sendEmail(
+        recipientEmail,
+        subject,
+        bodyText,
+        [
+          {
+            filename,
+            content: pdfBuffer,
+            contentType: 'application/pdf',
+          },
+        ]
+      );
+
+      return { message: `Email sent successfully to ${recipientEmail}` };
+    } catch (error) {
+      console.error('Error sending email:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        jobId: id,
+        type: body.type,
+      });
       throw error;
     }
   }
