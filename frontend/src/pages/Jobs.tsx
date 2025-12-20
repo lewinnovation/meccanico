@@ -817,6 +817,8 @@ const NewJob: React.FC = observer(() => {
   const [error, setError] = useState<string | null>(null);
   const [createVehicleOpen, setCreateVehicleOpen] = useState(false);
   const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
+  // Track if vehicle was selected before customer (to preserve it when creating new customer)
+  const vehicleSelectedFirstRef = useRef(false);
   
   // Unified search state
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -846,6 +848,7 @@ const NewJob: React.FC = observer(() => {
       setCustomerVehicles([]);
       // Capture current selectedVehicle to check after fetching
       const currentVehicle = selectedVehicle;
+      const wasVehicleSelectedFirst = vehicleSelectedFirstRef.current;
       vehicleStore.fetchVehiclesByCustomer(selectedCustomer.id)
         .then((vehicles) => {
           const vehicleOptions = vehicles.map(v => ({
@@ -859,10 +862,12 @@ const NewJob: React.FC = observer(() => {
           setCustomerVehicles(vehicleOptions);
           
           // If we had a selected vehicle, verify it belongs to this customer
-          // Only clear it if it doesn't belong to this customer
+          // Only clear it if it doesn't belong to this customer AND it wasn't selected first
+          // (If vehicle was selected first, preserve it even if customer has no vehicles yet)
           if (currentVehicle && currentVehicle.id) {
             const vehicleBelongsToCustomer = vehicleOptions.some(v => v.id === currentVehicle.id);
-            if (!vehicleBelongsToCustomer) {
+            if (!vehicleBelongsToCustomer && !wasVehicleSelectedFirst) {
+              // Only clear if vehicle doesn't belong AND vehicle wasn't selected first
               setSelectedVehicle(null);
               // If customer only has one vehicle, auto-select it
               if (vehicleOptions.length === 1) {
@@ -870,19 +875,27 @@ const NewJob: React.FC = observer(() => {
               }
             }
             // If it does belong, keep it (don't clear)
+            // If vehicle was selected first, also keep it (don't clear)
           } else {
             // No vehicle currently selected - auto-select if customer has exactly one vehicle
             if (vehicleOptions.length === 1) {
               setSelectedVehicle(vehicleOptions[0]);
             }
           }
+          // Reset the flag after processing
+          vehicleSelectedFirstRef.current = false;
         })
         .catch(() => {
           setError('Failed to fetch vehicles for customer');
+          // Reset the flag on error too
+          vehicleSelectedFirstRef.current = false;
         });
     } else {
+      // When customer is cleared, only clear the customer vehicles list
+      // Don't clear the selected vehicle - it may have been selected independently
       setCustomerVehicles([]);
-      setSelectedVehicle(null);
+      // Reset the flag when customer is cleared
+      vehicleSelectedFirstRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCustomer, vehicleStore]);
@@ -978,6 +991,9 @@ const NewJob: React.FC = observer(() => {
     if (result.type === 'vehicle' && result.vehicle) {
       // Auto-populate vehicle first, then customer if available
       const vehicle = result.vehicle;
+      
+      // Mark that vehicle was selected first
+      vehicleSelectedFirstRef.current = true;
       
       setSelectedVehicle({
         id: vehicle.id,
@@ -1116,6 +1132,12 @@ const NewJob: React.FC = observer(() => {
   };
 
   const handleCustomerCreated = async (customer: CustomerWithVehicles) => {
+    // Preserve the vehicle selection flag when creating a new customer
+    // This ensures the vehicle isn't cleared when the new customer has no vehicles yet
+    const hadVehicleSelected = !!selectedVehicle;
+    if (hadVehicleSelected) {
+      vehicleSelectedFirstRef.current = true;
+    }
     setSelectedCustomer(customer);
     setCreateCustomerOpen(false);
     setSearchInputValue('');
@@ -1303,78 +1325,99 @@ const NewJob: React.FC = observer(() => {
                 <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
                   Step 2: Find or create the customer for this vehicle
                 </Typography>
-                <Autocomplete
-                  freeSolo
-                  options={searchResults.filter(r => r.type === 'customer')}
-                  getOptionLabel={(option) => {
-                    if (typeof option === 'string') return option;
-                    if (option.type === 'customer' && option.customer) {
-                      return `${option.customer.name}${option.customer.phone ? ` - ${option.customer.phone}` : ''}${option.customer.email ? ` - ${option.customer.email}` : ''}`;
-                    }
-                    return '';
-                  }}
-                  inputValue={searchInputValue}
-                  onInputChange={(_, value) => {
-                    setSearchInputValue(value);
-                  }}
-                  onChange={(_, value) => {
-                    if (value && typeof value !== 'string' && value.type === 'customer') {
-                      setSelectedCustomer(value.customer!);
-                      setSearchInputValue('');
-                      setSearchResults([]);
-                    }
-                  }}
-                  loading={isSearching}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Search for customer"
-                      placeholder="Type customer name, phone, or email..."
-                      InputProps={{
-                        ...params.InputProps,
-                        startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-                      }}
-                    />
-                  )}
-                  renderOption={(props, option) => {
-                    if (typeof option === 'string' || option.type !== 'customer') return null;
-                    const customer = option.customer!;
-                    return (
-                      <Box component="li" {...props} key={customer.id}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                          <Chip label="Customer" size="small" color="secondary" />
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="body2" fontWeight={500}>
-                              {customer.name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {customer.phone && `Phone: ${customer.phone}`}
-                              {customer.email && ` • Email: ${customer.email}`}
-                            </Typography>
+                <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                  <Autocomplete
+                    freeSolo
+                    options={searchResults.filter(r => r.type === 'customer')}
+                    getOptionLabel={(option) => {
+                      if (typeof option === 'string') return option;
+                      if (option.type === 'customer' && option.customer) {
+                        return `${option.customer.name}${option.customer.phone ? ` - ${option.customer.phone}` : ''}${option.customer.email ? ` - ${option.customer.email}` : ''}`;
+                      }
+                      return '';
+                    }}
+                    inputValue={searchInputValue}
+                    onInputChange={(_, value) => {
+                      setSearchInputValue(value);
+                    }}
+                    onChange={(_, value) => {
+                      if (value && typeof value !== 'string' && value.type === 'customer') {
+                        setSelectedCustomer(value.customer!);
+                        setSearchInputValue('');
+                        setSearchResults([]);
+                      } else if (value && typeof value === 'string' && value.trim()) {
+                        // User typed something and pressed Enter - open create dialog
+                        setCreateCustomerOpen(true);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && searchInputValue.trim() && searchResults.filter(r => r.type === 'customer').length === 0) {
+                        // If Enter pressed with text but no results, open create dialog
+                        e.preventDefault();
+                        setCreateCustomerOpen(true);
+                      }
+                    }}
+                    loading={isSearching}
+                    sx={{ flex: 1 }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Search for customer"
+                        placeholder="Type customer name, phone, or email..."
+                        InputProps={{
+                          ...params.InputProps,
+                          startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                        }}
+                      />
+                    )}
+                    renderOption={(props, option) => {
+                      if (typeof option === 'string' || option.type !== 'customer') return null;
+                      const customer = option.customer!;
+                      return (
+                        <Box component="li" {...props} key={customer.id}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                            <Chip label="Customer" size="small" color="secondary" />
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2" fontWeight={500}>
+                                {customer.name}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {customer.phone && `Phone: ${customer.phone}`}
+                                {customer.email && ` • Email: ${customer.email}`}
+                              </Typography>
+                            </Box>
                           </Box>
                         </Box>
-                      </Box>
-                    );
-                  }}
-                  noOptionsText={
-                    searchInputValue.trim() ? (
-                      <Box sx={{ p: 2, textAlign: 'center' }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                          No customer found
-                        </Typography>
-                        <Button
-                          size="small"
-                          startIcon={<AddIcon />}
-                          onClick={() => setCreateCustomerOpen(true)}
-                        >
-                          Create New Customer
-                        </Button>
-                      </Box>
-                    ) : (
-                      'Start typing to search for customer...'
-                    )
-                  }
-                />
+                      );
+                    }}
+                    noOptionsText={
+                      searchInputValue.trim() ? (
+                        <Box sx={{ p: 2, textAlign: 'center' }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            No customer found
+                          </Typography>
+                          <Button
+                            size="small"
+                            startIcon={<AddIcon />}
+                            onClick={() => setCreateCustomerOpen(true)}
+                          >
+                            Create "{searchInputValue.trim()}"
+                          </Button>
+                        </Box>
+                      ) : (
+                        'Start typing to search for customer...'
+                      )
+                    }
+                  />
+                  <Button
+                    variant="outlined"
+                    startIcon={<AddIcon />}
+                    onClick={() => setCreateCustomerOpen(true)}
+                    sx={{ minWidth: 'auto', px: 2 }}
+                  >
+                    Create New
+                  </Button>
+                </Box>
               </Box>
             )}
 
@@ -1572,7 +1615,10 @@ const NewJob: React.FC = observer(() => {
       {/* Create Customer Dialog */}
       <CreateCustomerDialog
         open={createCustomerOpen}
-        onClose={() => setCreateCustomerOpen(false)}
+        onClose={() => {
+          setCreateCustomerOpen(false);
+          // Don't clear searchInputValue - user might want to search again
+        }}
         onCreated={handleCustomerCreated}
         prefillData={searchInputValue}
       />

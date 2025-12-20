@@ -212,13 +212,30 @@ export class JobService {
         }
       }
 
-      // Validate that customer is in vehicle's owners list
+      // Check if customer is in vehicle's owners list
       const isOwner = vehicle.vehicleOwners?.some(
         vo => vo.customerId === customerId
       );
 
+      // If customer is not an owner, automatically add them as an owner
       if (!isOwner) {
-        throw new BadRequestError('Customer must be an owner of the specified vehicle');
+        const vehicleOwnerRepository = AppDataSource.getRepository(VehicleOwner);
+        // Check if relationship already exists (race condition protection)
+        const existingOwner = await vehicleOwnerRepository.findOne({
+          where: {
+            vehicleId: data.vehicleId,
+            customerId: customerId,
+          },
+        });
+        
+        if (!existingOwner) {
+          const vehicleOwner = vehicleOwnerRepository.create({
+            vehicleId: data.vehicleId,
+            customerId: customerId,
+            isPrimary: false, // Don't make new owners primary by default
+          });
+          await vehicleOwnerRepository.save(vehicleOwner);
+        }
       }
     } else if (!customerId) {
       throw new BadRequestError('Customer is required when vehicle is not specified');
