@@ -10,6 +10,9 @@ import { NotFoundError, ConflictError, BadRequestError } from '../middleware/err
 import { PaginatedResult } from '../types/common';
 import { createAuditLog } from '../utils/auditLogger';
 import { AuditAction } from '../models/AuditLog';
+import { PdfService } from './PdfService';
+import { buildJobHtmlTemplate } from '../utils/jobHtmlTemplate';
+import { SettingsService } from './SettingsService';
 
 export interface CreateJobDto {
   customerId: string;
@@ -55,6 +58,8 @@ export class JobService {
   private lineItemRepository = AppDataSource.getRepository(LineItem);
   private templateRepository = AppDataSource.getRepository(Template);
   private vehicleRepository = AppDataSource.getRepository(Vehicle);
+  private pdfService = new PdfService();
+  private settingsService = new SettingsService();
 
   async findAll(
     page: number = 1,
@@ -684,6 +689,73 @@ export class JobService {
     }
     
     return savedItems;
+  }
+
+  /**
+   * Generate PDF for a job (estimate or invoice)
+   */
+  async generatePdf(jobId: string, type: 'estimate' | 'invoice'): Promise<Buffer> {
+    const job = await this.findById(jobId);
+
+    // Validate type
+    if (type === 'invoice' && !job.invoiceId) {
+      throw new BadRequestError('Job does not have an invoice');
+    }
+
+    // Fetch invoice if needed
+    let invoice: Invoice | null = null;
+    if (type === 'invoice' && job.invoiceId) {
+      const invoiceRepository = AppDataSource.getRepository(Invoice);
+      invoice = await invoiceRepository.findOne({
+        where: { id: job.invoiceId },
+      });
+    }
+
+    // Get settings
+    const shopName = (await this.settingsService.findByKey('shop.name')).value as string || 'Meccanico';
+    const shopAddress = (await this.settingsService.findByKey('shop.address')).value as string || '';
+    const shopPhone = (await this.settingsService.findByKey('shop.phone')).value as string || '';
+    const shopEmail = (await this.settingsService.findByKey('shop.email')).value as string || '';
+    const invoiceTerms = (await this.settingsService.findByKey('invoice.terms')).value as string || '';
+    const invoiceFooter = (await this.settingsService.findByKey('invoice.footer')).value as string || '';
+    const currencySymbol = (await this.settingsService.findByKey('currency.symbol')).value as string || '$';
+    const taxName = (await this.settingsService.findByKey('tax.name')).value as string || 'GST';
+
+    // Calculate totals
+    const subtotal = job.lineItems?.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) || 0;
+    let discountTotal = 0;
+    if (job.discountPercent > 0) {
+      discountTotal = subtotal * (job.discountPercent / 100);
+    } else {
+      discountTotal = job.discountAmount || 0;
+    }
+    const afterDiscount = subtotal - discountTotal;
+    const taxTotal = afterDiscount * (job.taxRate / 100);
+    const grandTotal = afterDiscount + taxTotal;
+
+    // Build HTML template
+    const html = buildJobHtmlTemplate({
+      job,
+      invoice,
+      shopName,
+      shopAddress,
+      shopPhone,
+      shopEmail,
+      invoiceTerms,
+      invoiceFooter,
+      currencySymbol,
+      taxName,
+      type,
+      subtotal,
+      discountTotal,
+      taxTotal,
+      grandTotal,
+    });
+
+    // Generate PDF
+    const pdfBuffer = await this.pdfService.generateFromHtml(html);
+
+    return pdfBuffer;
   }
 }
 

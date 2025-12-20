@@ -51,7 +51,7 @@ import {
   Pause as PauseIcon,
   Receipt as InvoiceIcon,
   Work as JobIcon,
-  Print as PrintIcon,
+  Download as DownloadIcon,
   DragIndicator as DragIcon,
   DirectionsCar as VehicleIcon,
   OpenInNew as OpenIcon,
@@ -2189,178 +2189,34 @@ const JobDetail: React.FC = observer(() => {
   };
   const formatDate = (date: string | null) => (date ? new Date(date).toLocaleDateString() : '-');
 
-  const handlePrint = async (type: 'estimate' | 'invoice') => {
-    if (!job) return;
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-    // Fetch invoice if printing invoice
-    if (type === 'invoice' && job.invoiceId && !invoiceStore.selectedInvoice) {
-      await invoiceStore.fetchByJobId(job.id);
+  const handleDownloadPdf = async (type: 'estimate' | 'invoice') => {
+    if (!job || isDownloadingPdf) return;
+
+    setIsDownloadingPdf(true);
+    try {
+      // Make API call to download PDF
+      const response = await api.get(`/api/jobs/${job.id}/pdf?type=${type}`, {
+        responseType: 'blob',
+      });
+
+      // Create blob and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${type}-${job.code}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download PDF:', error);
+      alert('Failed to download PDF. Please try again.');
+    } finally {
+      setIsDownloadingPdf(false);
     }
-
-    const shopName = settingsStore.shopSettings.name || 'Meccanico';
-    const shopAddress = settingsStore.shopSettings.address || '';
-    const shopPhone = settingsStore.shopSettings.phone || '';
-    const shopEmail = settingsStore.shopSettings.email || '';
-    const invoiceTerms = settingsStore.invoiceSettings.terms || '';
-    const invoiceFooter = settingsStore.invoiceSettings.footer || '';
-    const currencySymbol = settingsStore.currencySettings.symbol || '$';
-    const taxName = settingsStore.taxSettings.name || 'GST';
-
-    const title = type === 'estimate' ? 'Estimate' : 'Invoice';
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    printWindow.document.open();
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${title} - ${job?.code}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
-            .header { display: flex; justify-content: space-between; margin-bottom: 40px; }
-            .shop-info h1 { font-size: 24px; color: #1976d2; margin-bottom: 8px; }
-            .shop-info p { font-size: 12px; color: #666; }
-            .document-info { text-align: right; }
-            .document-info h2 { font-size: 28px; color: ${type === 'estimate' ? '#1976d2' : '#2e7d32'}; margin-bottom: 8px; }
-            .document-info p { font-size: 14px; }
-            .details { display: flex; justify-content: space-between; margin-bottom: 30px; }
-            .customer-info, .vehicle-info { width: 48%; }
-            .customer-info h3, .vehicle-info h3 { font-size: 14px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-            .customer-info p, .vehicle-info p { font-size: 14px; line-height: 1.6; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { background: #f5f5f5; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #ddd; }
-            td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
-            .text-right { text-align: right; }
-            .text-row td { background: transparent; font-style: italic; color: #666; }
-            .totals { margin-left: auto; width: 300px; }
-            .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
-            .totals .row.total { border-top: 2px solid #333; font-weight: bold; font-size: 18px; margin-top: 8px; padding-top: 16px; }
-            .totals .row.discount { color: #2e7d32; }
-            .totals .row.tax { color: #666; }
-            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; }
-            .terms { font-size: 12px; color: #666; margin-bottom: 20px; }
-            .terms h4 { margin-bottom: 8px; }
-            .footer-text { font-size: 12px; color: #999; text-align: center; }
-            @media print {
-              body { padding: 20px; }
-              @page { margin: 0.5cm; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="shop-info">
-              <h1>${shopName}</h1>
-              <p>${shopAddress}</p>
-              <p>${shopPhone}</p>
-              <p>${shopEmail}</p>
-            </div>
-            <div class="document-info">
-              <h2>${title}</h2>
-              <p><strong>${job?.code}</strong></p>
-              <p>Date: ${new Date().toLocaleDateString()}</p>
-              ${type === 'invoice' && invoiceStore.selectedInvoice ? `<p>Invoice Date: ${new Date(invoiceStore.selectedInvoice.invoiceDate).toLocaleDateString()}</p>` : ''}
-            </div>
-          </div>
-
-          <div class="details">
-            <div class="customer-info">
-              <h3>Bill To</h3>
-              <p><strong>${job?.customer?.name || 'N/A'}</strong></p>
-              <p>${job?.customer?.phone || ''}</p>
-              <p>${job?.customer?.email || ''}</p>
-            </div>
-            <div class="vehicle-info">
-              <h3>Vehicle</h3>
-              <p><strong>${job?.vehicle?.year || ''} ${job?.vehicle?.make || ''} ${job?.vehicle?.model || ''}</strong></p>
-              ${job?.vehicle?.licensePlate ? `<p>License: ${job.vehicle.licensePlate}</p>` : ''}
-              ${job?.vehicle?.vin ? `<p>VIN: ${job.vehicle.vin}</p>` : ''}
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th class="text-right">Qty</th>
-                <th class="text-right">Price</th>
-                <th class="text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${job?.lineItems?.map((item) => item.type === 'TEXT' ? `
-                <tr class="text-row">
-                  <td colspan="4">${item.description}</td>
-                </tr>
-              ` : `
-                <tr>
-                  <td>${item.description}</td>
-                  <td class="text-right">${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}</td>
-                  <td class="text-right">${currencySymbol}${Number(item.unitPrice).toFixed(2)}</td>
-                  <td class="text-right">${currencySymbol}${(item.quantity * item.unitPrice).toFixed(2)}</td>
-                </tr>
-              `).join('') || '<tr><td colspan="4">No items</td></tr>'}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <div class="row">
-              <span>Subtotal</span>
-              <span>${currencySymbol}${jobStore.subtotal.toFixed(2)}</span>
-            </div>
-            ${jobStore.discountTotal > 0 ? `
-              <div class="row discount">
-                <span>Discount${job?.discountPercent && job.discountPercent > 0 ? ` (${job.discountPercent}%)` : ''}</span>
-                <span>-${currencySymbol}${jobStore.discountTotal.toFixed(2)}</span>
-              </div>
-            ` : ''}
-            ${job?.taxRate && job.taxRate > 0 ? `
-              <div class="row tax">
-                <span>${taxName} (${job.taxRate}%)</span>
-                <span>${currencySymbol}${jobStore.taxTotal.toFixed(2)}</span>
-              </div>
-            ` : ''}
-            <div class="row total">
-              <span>Total</span>
-              <span>${currencySymbol}${jobStore.grandTotal.toFixed(2)}</span>
-            </div>
-          </div>
-
-          ${job?.notes ? `
-            <div class="footer">
-              <div class="terms">
-                <h4>Notes</h4>
-                <p>${job.notes}</p>
-              </div>
-            </div>
-          ` : ''}
-
-          ${invoiceTerms || invoiceFooter ? `
-            <div class="footer">
-              ${invoiceTerms ? `
-                <div class="terms">
-                  <h4>Terms & Conditions</h4>
-                  <p>${invoiceTerms}</p>
-                </div>
-              ` : ''}
-              ${invoiceFooter ? `
-                <div class="footer-text">${invoiceFooter}</div>
-              ` : ''}
-            </div>
-          ` : ''}
-
-          <script>
-            window.onload = function() { 
-              setTimeout(function() { window.print(); }, 250);
-            }
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
   if (jobStore.isLoading || !job) {
@@ -2400,14 +2256,15 @@ const JobDetail: React.FC = observer(() => {
         
         {/* Print and Next Step Buttons */}
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {/* Print Button */}
+          {/* Download PDF Button */}
           {(job.status !== 'COMPLETED' || (job.status === 'COMPLETED' && job.invoiceId)) && (
             <Button
               variant="outlined"
-              startIcon={<PrintIcon />}
-              onClick={() => handlePrint(job.status === 'COMPLETED' && job.invoiceId ? 'invoice' : 'estimate')}
+              startIcon={isDownloadingPdf ? <CircularProgress size={16} /> : <DownloadIcon />}
+              onClick={() => handleDownloadPdf(job.status === 'COMPLETED' && job.invoiceId ? 'invoice' : 'estimate')}
+              disabled={isDownloadingPdf}
             >
-              Print
+              {isDownloadingPdf ? 'Generating PDF...' : 'Download PDF'}
             </Button>
           )}
           

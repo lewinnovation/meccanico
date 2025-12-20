@@ -12,7 +12,9 @@ import {
   Security,
   SuccessResponse,
   Request,
+  Response,
 } from 'tsoa';
+import { Readable } from 'stream';
 import {
   JobService,
   CreateJobDto,
@@ -24,6 +26,7 @@ import {
 import { Job, JobStatus } from '../models/Job';
 import { LineItem } from '../models/LineItem';
 import { User } from '../models/User';
+import { BadRequestError } from '../middleware/errorHandler';
 
 @Route('api/jobs')
 @Tags('Jobs')
@@ -224,6 +227,47 @@ export class JobController extends Controller {
     @Body() body: { items: { id: string; sortOrder: number }[] }
   ): Promise<LineItem[]> {
     return this.jobService.reorderLineItems(id, body.items);
+  }
+
+  /**
+   * Download PDF for a job (estimate or invoice)
+   */
+  @Get('/{id}/pdf')
+  @Response<BadRequestError>(400, 'Invalid type or job does not have invoice')
+  public async downloadPdf(
+    @Path() id: string,
+    @Query() type: 'estimate' | 'invoice'
+  ): Promise<Readable> {
+    try {
+      console.log(`Generating PDF for job ${id}, type: ${type}`);
+      const job = await this.jobService.findById(id);
+      console.log(`Job found: ${job.code}`);
+      
+      const pdfBuffer = await this.jobService.generatePdf(id, type);
+      console.log(`PDF generated, size: ${pdfBuffer.length} bytes`);
+      
+      const filename = `${type}-${job.code}.pdf`;
+      
+      // Set response headers for PDF download
+      this.setHeader('Content-Type', 'application/pdf');
+      this.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      this.setHeader('Content-Length', pdfBuffer.length.toString());
+      
+      // Convert Buffer to Readable stream for TSOA to handle binary data correctly
+      const stream = Readable.from(pdfBuffer);
+      console.log(`PDF stream created successfully`);
+      
+      return stream;
+    } catch (error) {
+      console.error('Error generating PDF:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        jobId: id,
+        type,
+      });
+      // Re-throw to let error handler process it
+      throw error;
+    }
   }
 }
 

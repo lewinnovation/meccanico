@@ -106,12 +106,19 @@ export function errorHandler(
   }
 
   // Unhandled errors
-  console.error('Unhandled error:', err);
+  console.error('Unhandled error:', {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+    path: req.path,
+    method: req.method,
+  });
   return res.status(500).json({
     status: 'error',
     message: process.env.NODE_ENV === 'production' 
       ? 'Internal server error' 
       : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
   });
 }
 
