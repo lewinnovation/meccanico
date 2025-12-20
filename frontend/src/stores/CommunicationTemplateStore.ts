@@ -54,6 +54,7 @@ export class CommunicationTemplateStore {
   templates: CommunicationTemplate[] = [];
   variables: TemplateVariable[] = [];
   isLoading = false;
+  isLoadingVariables = false;
   isSaving = false;
   error: string | null = null;
   successMessage: string | null = null;
@@ -83,15 +84,21 @@ export class CommunicationTemplateStore {
   }
 
   async fetchVariables(): Promise<void> {
+    this.isLoadingVariables = true;
     try {
       const response = await api.get('/api/communication-templates/variables');
+      const variables = Array.isArray(response.data) ? response.data : [];
+      console.log('Variables fetched:', variables.length, 'variables');
       runInAction(() => {
-        this.variables = response.data || [];
+        this.variables = variables;
+        this.isLoadingVariables = false;
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch template variables:', err);
+      console.error('Error details:', err.response?.data || err.message);
       runInAction(() => {
         this.variables = [];
+        this.isLoadingVariables = false;
       });
     }
   }

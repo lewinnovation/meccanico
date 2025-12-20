@@ -39,19 +39,19 @@ export class CommunicationTemplateController extends Controller {
   }
 
   /**
-   * Get a template by ID
-   */
-  @Get('/{id}')
-  public async getTemplate(@Path() id: string): Promise<CommunicationTemplate> {
-    return this.templateService.findById(id);
-  }
-
-  /**
    * Get available template variables
    */
   @Get('/variables')
   public async getVariables(): Promise<Array<{ key: string; description: string }>> {
     return this.templateService.getAvailableVariables();
+  }
+
+  /**
+   * Get a template by ID
+   */
+  @Get('/{id}')
+  public async getTemplate(@Path() id: string): Promise<CommunicationTemplate> {
+    return this.templateService.findById(id);
   }
 
   /**

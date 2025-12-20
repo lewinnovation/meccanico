@@ -1041,9 +1041,16 @@ const CommunicationTemplatesSettings: React.FC = observer(() => {
                   mb: 2,
                 }}
               >
-                {communicationTemplateStore.variables.length === 0 ? (
+                {communicationTemplateStore.isLoadingVariables ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
+                    <CircularProgress size={16} />
+                    <Typography variant="body2" color="text.secondary">
+                      Loading variables...
+                    </Typography>
+                  </Box>
+                ) : communicationTemplateStore.variables.length === 0 ? (
                   <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
-                    Loading variables...
+                    No variables available
                   </Typography>
                 ) : (
                   communicationTemplateStore.variables.map((variable) => (
