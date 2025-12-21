@@ -2,7 +2,8 @@ import { AppDataSource } from '../config/database';
 import { CreditNote } from '../models/CreditNote';
 import { Invoice, InvoiceStatus } from '../models/Invoice';
 import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
-import { InvoiceService } from './InvoiceService';
+import { PaymentService } from './PaymentService';
+import { PaymentMethodService } from './PaymentMethodService';
 
 export interface CreateCreditNoteDto {
   invoiceId: string;
@@ -14,7 +15,15 @@ export interface CreateCreditNoteDto {
 export class CreditNoteService {
   private repository = AppDataSource.getRepository(CreditNote);
   private invoiceRepository = AppDataSource.getRepository(Invoice);
-  private invoiceService = new InvoiceService();
+  private _paymentService: PaymentService | null = null;
+  private paymentMethodService = new PaymentMethodService();
+
+  private get paymentService(): PaymentService {
+    if (!this._paymentService) {
+      this._paymentService = new PaymentService();
+    }
+    return this._paymentService;
+  }
 
   /**
    * Generate credit note number in format CN-{YYYYMMDD}-{NNN}
@@ -90,29 +99,11 @@ export class CreditNoteService {
 
   /**
    * Calculate remaining balance for an invoice
-   * Credit notes are stored as pre-tax amounts, so we need to convert them to post-tax
-   * for comparison with the invoice total (which is post-tax)
+   * Remaining = Invoice Total - Total Payments - Total Credit Notes (post-tax)
+   * This method now delegates to PaymentService which handles both payments and credit notes
    */
   async getRemainingBalance(invoiceId: string): Promise<number> {
-    const invoice = await this.invoiceRepository.findOne({
-      where: { id: invoiceId },
-      relations: ['job', 'job.lineItems'],
-    });
-
-    if (!invoice) {
-      throw new NotFoundError('Invoice not found');
-    }
-
-    const invoiceTotal = this.calculateInvoiceTotal(invoice); // This is post-tax
-    const totalCreditsPreTax = await this.getTotalCredits(invoiceId); // Credit notes are stored pre-tax
-    
-    // Convert pre-tax credit notes to post-tax for comparison
-    const taxRate = invoice.job?.taxRate || 0;
-    const totalCreditsPostTax = totalCreditsPreTax * (1 + taxRate / 100);
-    
-    const remaining = Math.max(0, invoiceTotal - totalCreditsPostTax);
-
-    return remaining;
+    return this.paymentService.getRemainingBalance(invoiceId);
   }
 
   /**
@@ -182,12 +173,31 @@ export class CreditNoteService {
 
     const savedCreditNote = await this.repository.save(creditNote);
 
-    // Check if balance reaches zero and automatically mark invoice as paid
-    const remainingBalance = await this.getRemainingBalance(data.invoiceId);
-    if (remainingBalance <= 0.01) { // Small tolerance for floating point
-      await this.invoiceService.markAsPaid(data.invoiceId, {
-        paymentNote: 'Automatically marked as paid - balance fully credited',
-      });
+    // Update invoice status based on payments and credit notes
+    // The PaymentService.updateInvoiceStatus will be called automatically
+    // when we check remaining balance, but we need to trigger it manually here
+    // since we're not creating a payment
+    // Re-fetch invoice to get updated credit notes
+    const updatedInvoice = await this.invoiceRepository.findOne({
+      where: { id: data.invoiceId },
+      relations: ['job', 'job.lineItems'],
+    });
+
+    if (updatedInvoice) {
+      const invoiceTotal = this.calculateInvoiceTotal(updatedInvoice);
+      const totalPaid = await this.paymentService.getTotalPaid(data.invoiceId);
+      const totalCreditsPreTax = await this.getTotalCredits(data.invoiceId);
+      const taxRate = updatedInvoice.job?.taxRate || 0;
+      const totalCreditsPostTax = totalCreditsPreTax * (1 + taxRate / 100);
+      const totalCreditsAndPayments = totalPaid + totalCreditsPostTax;
+
+      if (totalCreditsAndPayments >= invoiceTotal - 0.01) {
+        updatedInvoice.status = InvoiceStatus.PAID;
+      } else {
+        updatedInvoice.status = InvoiceStatus.UNPAID;
+      }
+
+      await this.invoiceRepository.save(updatedInvoice);
     }
 
     return savedCreditNote;
@@ -229,25 +239,27 @@ export class CreditNoteService {
     // Delete the credit note
     await this.repository.remove(creditNote);
 
-    // Check remaining balance and update invoice status
-    const remainingBalance = await this.getRemainingBalance(invoiceId);
+    // Update invoice status based on payments and credit notes
     const invoice = await this.invoiceRepository.findOne({
       where: { id: invoiceId },
+      relations: ['job', 'job.lineItems'],
     });
 
-    if (!invoice) {
-      return; // Invoice not found, but credit note is already deleted
-    }
+    if (invoice) {
+      const invoiceTotal = this.calculateInvoiceTotal(invoice);
+      const totalPaid = await this.paymentService.getTotalPaid(invoiceId);
+      const totalCreditsPreTax = await this.getTotalCredits(invoiceId);
+      const taxRate = invoice.job?.taxRate || 0;
+      const totalCreditsPostTax = totalCreditsPreTax * (1 + taxRate / 100);
+      const totalCreditsAndPayments = totalPaid + totalCreditsPostTax;
 
-    // If balance is now greater than 0 and invoice was paid, mark as unpaid
-    if (remainingBalance > 0.01 && invoice.status === InvoiceStatus.PAID) {
-      await this.invoiceService.markAsUnpaid(invoiceId);
-    }
-    // If balance is 0 or less and invoice was unpaid, mark as paid
-    else if (remainingBalance <= 0.01 && invoice.status === InvoiceStatus.UNPAID) {
-      await this.invoiceService.markAsPaid(invoiceId, {
-        paymentNote: 'Automatically marked as paid - balance fully credited',
-      });
+      if (totalCreditsAndPayments >= invoiceTotal - 0.01) {
+        invoice.status = InvoiceStatus.PAID;
+      } else {
+        invoice.status = InvoiceStatus.UNPAID;
+      }
+
+      await this.invoiceRepository.save(invoice);
     }
   }
 }

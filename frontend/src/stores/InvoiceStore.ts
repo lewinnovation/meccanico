@@ -15,6 +15,21 @@ export interface CreditNote {
   updatedAt: string;
 }
 
+export interface Payment {
+  id: string;
+  invoiceId: string;
+  paymentMethodId: string;
+  amount: number;
+  paymentDate: string;
+  paymentNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  paymentMethod?: {
+    id: string;
+    name: string;
+  };
+}
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -22,11 +37,10 @@ export interface Invoice {
   status: InvoiceStatus;
   invoiceDate: string;
   dueDate: string;
-  paymentNote: string | null;
-  paidAt: string | null;
   createdAt: string;
   updatedAt: string;
   creditNotes?: CreditNote[];
+  payments?: Payment[];
   job?: {
     id: string;
     code: string;
@@ -43,10 +57,6 @@ export interface Invoice {
 
 export interface CreateInvoiceFromJobDto {
   jobId: string;
-}
-
-export interface MarkInvoicePaidDto {
-  paymentNote?: string;
 }
 
 export interface CreateCreditNoteDto {
@@ -102,31 +112,6 @@ export class InvoiceStore {
     }
   }
 
-  async markAsPaid(invoiceId: string, paymentNote?: string): Promise<Invoice | null> {
-    this.isLoading = true;
-    this.error = null;
-
-    try {
-      const response = await api.patch(`/api/invoices/${invoiceId}/pay`, {
-        paymentNote,
-      });
-
-      runInAction(() => {
-        if (this.selectedInvoice?.id === invoiceId) {
-          this.selectedInvoice = response.data;
-        }
-        this.isLoading = false;
-      });
-
-      return response.data;
-    } catch (error) {
-      runInAction(() => {
-        this.error = error instanceof Error ? error.message : 'Failed to mark invoice as paid';
-        this.isLoading = false;
-      });
-      throw error;
-    }
-  }
 
   async fetchByJobId(jobId: string): Promise<Invoice | null> {
     this.isLoading = true;

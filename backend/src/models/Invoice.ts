@@ -6,11 +6,11 @@ import {
   UpdateDateColumn,
   OneToOne,
   JoinColumn,
-  ManyToOne,
   OneToMany,
 } from 'typeorm';
 import { Job } from './Job';
 import { CreditNote } from './CreditNote';
+import { Payment } from './Payment';
 
 export enum InvoiceStatus {
   UNPAID = 'UNPAID',
@@ -41,12 +41,6 @@ export class Invoice {
   @Column({ name: 'due_date', type: 'timestamptz' })
   dueDate: Date;
 
-  @Column({ name: 'payment_note', type: 'text', nullable: true })
-  paymentNote: string | null;
-
-  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
-  paidAt: Date | null;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
@@ -59,5 +53,8 @@ export class Invoice {
 
   @OneToMany(() => CreditNote, (creditNote) => creditNote.invoice)
   creditNotes: CreditNote[];
+
+  @OneToMany(() => Payment, (payment) => payment.invoice)
+  payments: Payment[];
 }
 

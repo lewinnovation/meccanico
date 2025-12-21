@@ -18,6 +18,9 @@ import { Settings } from '../models/Settings';
 import { CommunicationTemplate, CommunicationTemplateType, CommunicationTemplateAction } from '../models/CommunicationTemplate';
 import { InvoiceService } from '../services/InvoiceService';
 import { CreditNoteService } from '../services/CreditNoteService';
+import { PaymentMethod } from '../models/PaymentMethod';
+import { PaymentMethodService } from '../services/PaymentMethodService';
+import { PaymentService } from '../services/PaymentService';
 import * as bcrypt from 'bcryptjs';
 import { generateCustomerCode, generateCode, CODE_PREFIXES } from './codeGenerator';
 
@@ -402,6 +405,9 @@ export async function seedDatabase(): Promise<void> {
   // Seed settings
   await seedSettings();
 
+  // Seed payment methods (needed before seeding invoices)
+  await seedPaymentMethods();
+
   // Seed customers
   const customers = await seedCustomers();
 
@@ -425,6 +431,8 @@ export async function seedDatabase(): Promise<void> {
 
   // Seed communication templates
   await seedCommunicationTemplates();
+  
+  // Note: Payment methods are seeded earlier (before jobs/invoices) to ensure they exist
 
   console.log('✅ Comprehensive database seeding completed');
 }
@@ -1359,7 +1367,14 @@ async function seedJobs(
   // Create invoices for completed jobs
   const invoiceService = new InvoiceService();
   const creditNoteService = new CreditNoteService();
+  const paymentMethodService = new PaymentMethodService();
+  const paymentService = new PaymentService();
   const invoiceRepository = AppDataSource.getRepository(Invoice);
+  
+  // Get payment methods for seeding paid invoices
+  const paymentMethods = await paymentMethodService.findAll();
+  const cashPaymentMethod = paymentMethods.find(pm => pm.name === 'CASH') || paymentMethods[0];
+  const cardPaymentMethod = paymentMethods.find(pm => pm.name === 'VISA' || pm.name === 'MASTER/BANK CARD') || paymentMethods[0];
 
   // Create invoice for job3 (unpaid)
   let invoice3: Invoice | null = null;
@@ -1370,13 +1385,68 @@ async function seedJobs(
     console.error(`  ✗ Failed to create invoice for job ${savedJob3.code}:`, error);
   }
 
-  // Create invoice for job4 (paid)
+  // Create invoice for job4 (paid with partial payments)
   let invoice4: Invoice | null = null;
   try {
     invoice4 = await invoiceService.createFromJob(savedJob4.id);
-    // Mark as paid
-    await invoiceService.markAsPaid(invoice4.id, { paymentNote: 'Payment received via credit card' });
-    console.log(`  ✓ Created and marked as paid invoice ${invoice4.invoiceNumber} for job ${savedJob4.code}`);
+    
+    // Create credit note FIRST (before payments) - more realistic scenario
+    try {
+      // Get remaining balance first to ensure we don't exceed it
+      const remainingBalance = await creditNoteService.getRemainingBalance(invoice4.id);
+      // Use a reasonable credit amount (about 10-15% of remaining balance)
+      // But ensure it doesn't exceed remaining balance and is at least $1
+      if (remainingBalance >= 1.00) {
+        const creditAmount = Math.min(remainingBalance * 0.15, remainingBalance);
+        
+        // Convert to pre-tax amount for credit note (credit notes are stored pre-tax)
+        const invoice = await invoiceService.findById(invoice4.id);
+        const taxRate = invoice.job?.taxRate || 0;
+        const preTaxCreditAmount = creditAmount / (1 + taxRate / 100);
+        
+        // Ensure the pre-tax amount is positive and reasonable
+        if (preTaxCreditAmount > 0.01) {
+          const creditNote2 = await creditNoteService.create({
+            invoiceId: invoice4.id,
+            amount: parseFloat(preTaxCreditAmount.toFixed(2)),
+            reason: 'Warranty adjustment - Brake service',
+            creditDate: new Date(),
+          });
+          console.log(`  ✓ Created credit note ${creditNote2.creditNoteNumber} for invoice ${invoice4.invoiceNumber} ($${creditAmount.toFixed(2)} post-tax)`);
+        }
+      }
+    } catch (error) {
+      console.error(`  ✗ Failed to create credit note for invoice ${invoice4.invoiceNumber}:`, error);
+    }
+    
+    // Create partial payments: $50 cash, then remaining with card
+    if (cashPaymentMethod && cardPaymentMethod) {
+      // Get remaining balance after credit note
+      const remainingAfterCredit = await paymentService.getRemainingBalance(invoice4.id);
+      
+      // First payment: $50 cash (or remaining balance if less)
+      const firstPaymentAmount = Math.min(50, remainingAfterCredit);
+      if (firstPaymentAmount > 0) {
+        await paymentService.create({
+          invoiceId: invoice4.id,
+          paymentMethodId: cashPaymentMethod.id,
+          amount: firstPaymentAmount,
+          paymentNote: 'Partial payment - cash',
+        });
+      }
+      
+      // Second payment: remaining balance with card
+      const remainingAfterFirst = await paymentService.getRemainingBalance(invoice4.id);
+      if (remainingAfterFirst > 0) {
+        await paymentService.create({
+          invoiceId: invoice4.id,
+          paymentMethodId: cardPaymentMethod.id,
+          amount: remainingAfterFirst,
+          paymentNote: 'Final payment - credit card',
+        });
+      }
+    }
+    console.log(`  ✓ Created and fully paid invoice ${invoice4.invoiceNumber} for job ${savedJob4.code} (with credit note and partial payments)`);
   } catch (error) {
     console.error(`  ✗ Failed to create invoice for job ${savedJob4.code}:`, error);
   }
@@ -1386,46 +1456,35 @@ async function seedJobs(
     try {
       // Get remaining balance first to ensure we don't exceed it
       const remainingBalance = await creditNoteService.getRemainingBalance(invoice3.id);
-      // Use a reasonable credit amount (about 10-15% of remaining balance, or $10 minimum)
-      const creditAmount = Math.max(10.00, Math.min(remainingBalance * 0.15, remainingBalance));
-      
-      if (creditAmount > 0) {
-        const creditNote1 = await creditNoteService.create({
-          invoiceId: invoice3.id,
-          amount: parseFloat(creditAmount.toFixed(2)),
-          reason: 'Returned unused parts - Oil filter',
-          creditDate: new Date(),
-        });
-        console.log(`  ✓ Created credit note ${creditNote1.creditNoteNumber} for invoice ${invoice3.invoiceNumber} ($${creditAmount.toFixed(2)})`);
+      // Use a reasonable credit amount (about 10-15% of remaining balance)
+      // But ensure it doesn't exceed remaining balance and is at least $1
+      if (remainingBalance >= 1.00) {
+        const creditAmount = Math.min(remainingBalance * 0.15, remainingBalance);
+        
+        // Convert to pre-tax amount for credit note (credit notes are stored pre-tax)
+        const invoice = await invoiceService.findById(invoice3.id);
+        const taxRate = invoice.job?.taxRate || 0;
+        const preTaxCreditAmount = creditAmount / (1 + taxRate / 100);
+        
+        // Ensure the pre-tax amount is positive and reasonable
+        if (preTaxCreditAmount > 0.01) {
+          const creditNote1 = await creditNoteService.create({
+            invoiceId: invoice3.id,
+            amount: parseFloat(preTaxCreditAmount.toFixed(2)),
+            reason: 'Returned unused parts - Oil filter',
+            creditDate: new Date(),
+          });
+          console.log(`  ✓ Created credit note ${creditNote1.creditNoteNumber} for invoice ${invoice3.invoiceNumber} ($${creditAmount.toFixed(2)} post-tax)`);
+        }
       }
     } catch (error) {
       console.error(`  ✗ Failed to create credit note for invoice ${invoice3.invoiceNumber}:`, error);
     }
   }
 
-  if (invoice4) {
-    try {
-      // Get remaining balance first to ensure we don't exceed it
-      const remainingBalance = await creditNoteService.getRemainingBalance(invoice4.id);
-      // Use a reasonable credit amount (about 10-15% of remaining balance, or $5 minimum)
-      const creditAmount = Math.max(5.00, Math.min(remainingBalance * 0.15, remainingBalance));
-      
-      if (creditAmount > 0) {
-        const creditNote2 = await creditNoteService.create({
-          invoiceId: invoice4.id,
-          amount: parseFloat(creditAmount.toFixed(2)),
-          reason: 'Warranty adjustment - Brake service',
-          creditDate: new Date(),
-        });
-        console.log(`  ✓ Created credit note ${creditNote2.creditNoteNumber} for invoice ${invoice4.invoiceNumber} ($${creditAmount.toFixed(2)})`);
-      }
-    } catch (error) {
-      console.error(`  ✗ Failed to create credit note for invoice ${invoice4.invoiceNumber}:`, error);
-    }
-  }
-
   console.log('  ✓ Seeded 5 jobs in various statuses');
   console.log('  ✓ Created invoices for completed jobs');
+  console.log('  ✓ Created payments for paid invoices');
   console.log('  ✓ Created credit notes for invoices');
 }
 
@@ -1598,6 +1657,46 @@ Best regards,
   }
 
   console.log(`  ✓ Seeded ${defaultTemplates.length} communication templates`);
+}
+
+/**
+ * Seed payment methods
+ */
+async function seedPaymentMethods(): Promise<void> {
+  const paymentMethodRepository = AppDataSource.getRepository(PaymentMethod);
+  const paymentMethodService = new PaymentMethodService();
+
+  const defaultPaymentMethods = [
+    'VISA',
+    'MASTER/BANK CARD',
+    'EFTPOS',
+    'DIRECT PAYMENT',
+    'MOTORCHARGE',
+    'CASH',
+    'CHEQUE RECEIVED',
+    'FLEET CARD',
+    'AMERICAN EXPRESS',
+    'BANK',
+    'CALTEX STARFLEET',
+  ];
+
+  for (const methodName of defaultPaymentMethods) {
+    // Check if payment method already exists
+    const existing = await paymentMethodRepository.findOne({
+      where: { name: methodName },
+    });
+
+    if (!existing) {
+      try {
+        await paymentMethodService.create({ name: methodName });
+        console.log(`  ✓ Created payment method: ${methodName}`);
+      } catch (error) {
+        console.error(`  ✗ Failed to create payment method ${methodName}:`, error);
+      }
+    }
+  }
+
+  console.log(`  ✓ Seeded ${defaultPaymentMethods.length} payment methods`);
 }
 
 /**

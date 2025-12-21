@@ -47,6 +47,7 @@ import {
   Delete as DeleteIcon,
   CheckCircle as CheckIcon,
   Cancel as CancelIcon,
+  Payment as PaymentIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
@@ -1133,6 +1134,283 @@ const CommunicationTemplatesSettings: React.FC = observer(() => {
   );
 });
 
+// Payment Methods Settings
+const PaymentMethodsSettings: React.FC = observer(() => {
+  const { paymentMethodStore, authStore } = useStore();
+  const navigate = useNavigate();
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<string | null>(null);
+  const [newMethodName, setNewMethodName] = useState('');
+  const [editMethodName, setEditMethodName] = useState('');
+  const [usageCounts, setUsageCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    paymentMethodStore.fetchAllIncludingInactive();
+  }, [paymentMethodStore]);
+
+  // Fetch usage counts for each payment method
+  useEffect(() => {
+    const fetchUsageCounts = async () => {
+      try {
+        const counts = await paymentMethodStore.fetchUsageCounts();
+        setUsageCounts(counts);
+      } catch (error) {
+        console.error('Failed to fetch usage counts', error);
+        // Set all to 0 on error
+        const counts: Record<string, number> = {};
+        paymentMethodStore.allPaymentMethods.forEach(method => {
+          counts[method.id] = 0;
+        });
+        setUsageCounts(counts);
+      }
+    };
+    if (paymentMethodStore.allPaymentMethods.length > 0) {
+      fetchUsageCounts();
+    }
+  }, [paymentMethodStore.allPaymentMethods, paymentMethodStore]);
+
+  const isReadOnly = !authStore.isAdmin;
+
+  const handleAdd = async () => {
+    if (!newMethodName.trim()) return;
+    try {
+      await paymentMethodStore.create({ name: newMethodName.trim() });
+      setNewMethodName('');
+      setAddDialogOpen(false);
+    } catch (err) {
+      console.error('Failed to add payment method', err);
+    }
+  };
+
+  const handleEdit = async (id: string) => {
+    if (!editMethodName.trim()) return;
+    try {
+      await paymentMethodStore.update(id, { name: editMethodName.trim() });
+      setEditMethodName('');
+      setEditDialogOpen(null);
+    } catch (err) {
+      console.error('Failed to update payment method', err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!id) return;
+    try {
+      await paymentMethodStore.delete(id);
+      setDeleteDialogOpen(null);
+    } catch (err) {
+      console.error('Failed to delete payment method', err);
+    }
+  };
+
+  const handleOpenEdit = (method: { id: string; name: string }) => {
+    setEditMethodName(method.name);
+    setEditDialogOpen(method.id);
+  };
+
+  const handleOpenDelete = (id: string) => {
+    setDeleteDialogOpen(id);
+  };
+
+  const selectedMethod = paymentMethodStore.allPaymentMethods.find(m => m.id === editDialogOpen || m.id === deleteDialogOpen);
+  const canDelete = selectedMethod && usageCounts[selectedMethod.id] === 0;
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+        <IconButton onClick={() => navigate('/settings')} sx={{ mr: 1 }}>
+          <BackIcon />
+        </IconButton>
+        <Typography variant="h5" fontWeight={600}>
+          Payment Methods
+        </Typography>
+      </Box>
+
+      {!isReadOnly && (
+        <Box sx={{ mb: 3 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setAddDialogOpen(true)}
+          >
+            Add Payment Method
+          </Button>
+        </Box>
+      )}
+
+      {paymentMethodStore.isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <Card>
+          <List disablePadding>
+            {paymentMethodStore.allPaymentMethods.map((method, index) => (
+              <React.Fragment key={method.id}>
+                {index > 0 && <Divider />}
+                <ListItem
+                  secondaryAction={
+                    !isReadOnly && (
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenEdit(method)}
+                          disabled={paymentMethodStore.isLoading}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenDelete(method.id)}
+                          disabled={paymentMethodStore.isLoading || usageCounts[method.id] > 0}
+                          color={usageCounts[method.id] > 0 ? 'default' : 'error'}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    )
+                  }
+                >
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography fontWeight={method.isActive ? 500 : 400}>
+                          {method.name}
+                        </Typography>
+                        {!method.isActive && (
+                          <Chip label="Inactive" size="small" color="default" />
+                        )}
+                        {usageCounts[method.id] > 0 && (
+                          <Typography variant="caption" color="text.secondary">
+                            ({usageCounts[method.id]} invoice{usageCounts[method.id] !== 1 ? 's' : ''})
+                          </Typography>
+                        )}
+                      </Box>
+                    }
+                    secondary={
+                      usageCounts[method.id] > 0
+                        ? 'Cannot delete - has been used in invoices'
+                        : method.isActive
+                        ? 'Active'
+                        : 'Inactive'
+                    }
+                  />
+                </ListItem>
+              </React.Fragment>
+            ))}
+          </List>
+
+          {paymentMethodStore.allPaymentMethods.length === 0 && (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <PaymentIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+              <Typography color="text.secondary">No payment methods configured</Typography>
+            </Box>
+          )}
+        </Card>
+      )}
+
+      {/* Add Dialog */}
+      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Payment Method</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Payment Method Name"
+              fullWidth
+              value={newMethodName}
+              onChange={(e) => setNewMethodName(e.target.value)}
+              placeholder="e.g., VISA, CASH, EFTPOS"
+              autoFocus
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAdd}
+            disabled={!newMethodName.trim() || paymentMethodStore.isLoading}
+          >
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editDialogOpen} onClose={() => setEditDialogOpen(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Payment Method</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Payment Method Name"
+              fullWidth
+              value={editMethodName}
+              onChange={(e) => setEditMethodName(e.target.value)}
+              autoFocus
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => editDialogOpen && handleEdit(editDialogOpen)}
+            disabled={!editMethodName.trim() || paymentMethodStore.isLoading}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteDialogOpen} onClose={() => setDeleteDialogOpen(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Delete Payment Method</DialogTitle>
+        <DialogContent>
+          {selectedMethod && (
+            <Box>
+              {usageCounts[selectedMethod.id] > 0 ? (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  Cannot delete "{selectedMethod.name}" because it has been used in {usageCounts[selectedMethod.id]} invoice(s).
+                </Alert>
+              ) : (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  Are you sure you want to delete "{selectedMethod.name}"? This action cannot be undone.
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => deleteDialogOpen && handleDelete(deleteDialogOpen)}
+            disabled={!canDelete || paymentMethodStore.isLoading}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Error Snackbar */}
+      {paymentMethodStore.error && (
+        <Snackbar
+          open={!!paymentMethodStore.error}
+          autoHideDuration={5000}
+          onClose={() => paymentMethodStore.clearError()}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={() => paymentMethodStore.clearError()} severity="error" sx={{ width: '100%' }}>
+            {paymentMethodStore.error}
+          </Alert>
+        </Snackbar>
+      )}
+    </Box>
+  );
+});
+
 // Settings Menu (main settings page)
 const SettingsMenu: React.FC = observer(() => {
   const { settingsStore } = useStore();
@@ -1175,6 +1453,12 @@ const SettingsMenu: React.FC = observer(() => {
       label: 'Communication Templates', 
       description: 'Email and SMS message templates',
       path: '/settings/communication-templates',
+    },
+    { 
+      icon: PaymentIcon, 
+      label: 'Payment Methods', 
+      description: 'Manage payment methods for invoices',
+      path: '/settings/payment-methods',
     },
   ];
 
@@ -1259,6 +1543,7 @@ const SettingsContainer: React.FC = observer(() => {
         <Route path="/invoice" element={<InvoiceSettings />} />
         <Route path="/vehicles" element={<VehicleMakesSettings />} />
         <Route path="/communication-templates" element={<CommunicationTemplatesSettings />} />
+        <Route path="/payment-methods" element={<PaymentMethodsSettings />} />
       </Routes>
 
       <Snackbar

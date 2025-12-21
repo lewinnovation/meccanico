@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
   Delete,
   Route,
   Path,
@@ -13,7 +12,7 @@ import {
   Response,
   SuccessResponse,
 } from 'tsoa';
-import { InvoiceService, CreateInvoiceFromJobDto, MarkInvoicePaidDto } from '../services/InvoiceService';
+import { InvoiceService, CreateInvoiceFromJobDto } from '../services/InvoiceService';
 import { CreditNoteService, CreateCreditNoteDto } from '../services/CreditNoteService';
 import { Invoice } from '../models/Invoice';
 import { CreditNote } from '../models/CreditNote';
@@ -36,20 +35,6 @@ export class InvoiceController extends Controller {
   @Response<BadRequestError>(409, 'Invoice already exists for this job')
   public async createFromJob(@Path() jobId: string): Promise<Invoice> {
     return this.invoiceService.createFromJob(jobId);
-  }
-
-  /**
-   * Mark an invoice as paid
-   */
-  @Patch('{id}/pay')
-  @SuccessResponse('200', 'Invoice marked as paid')
-  @Response<NotFoundError>(404, 'Invoice not found')
-  @Response<BadRequestError>(400, 'Invoice is already paid')
-  public async markAsPaid(
-    @Path() id: string,
-    @Body() body: MarkInvoicePaidDto
-  ): Promise<Invoice> {
-    return this.invoiceService.markAsPaid(id, body);
   }
 
   /**
@@ -114,13 +99,13 @@ export class InvoiceController extends Controller {
   }
 
   /**
-   * Get remaining balance for an invoice (invoice total - credit notes)
+   * Get remaining balance for an invoice (invoice total - payments - credit notes)
    */
   @Get('{id}/remaining-balance')
   @SuccessResponse('200', 'Remaining balance calculated')
   @Response<NotFoundError>(404, 'Invoice not found')
   public async getRemainingBalance(@Path() id: string): Promise<{ remainingBalance: number }> {
-    const remainingBalance = await this.creditNoteService.getRemainingBalance(id);
+    const remainingBalance = await this.invoiceService.getRemainingBalance(id);
     return { remainingBalance };
   }
 

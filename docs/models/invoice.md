@@ -27,8 +27,6 @@ CREATE TABLE invoices (
   status VARCHAR(20) NOT NULL DEFAULT 'UNPAID',
   invoice_date TIMESTAMP WITH TIME ZONE NOT NULL,
   due_date TIMESTAMP WITH TIME ZONE NOT NULL,
-  payment_note TEXT,
-  paid_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -52,8 +50,11 @@ import {
   UpdateDateColumn,
   OneToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { Job } from './Job';
+import { CreditNote } from './CreditNote';
+import { Payment } from './Payment';
 
 export enum InvoiceStatus {
   UNPAID = 'UNPAID',
@@ -84,12 +85,6 @@ export class Invoice {
   @Column({ name: 'due_date', type: 'timestamptz' })
   dueDate: Date;
 
-  @Column({ name: 'payment_note', type: 'text', nullable: true })
-  paymentNote: string | null;
-
-  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
-  paidAt: Date | null;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
@@ -99,6 +94,12 @@ export class Invoice {
   @OneToOne(() => Job, (job) => job.invoice)
   @JoinColumn({ name: 'job_id' })
   job: Job;
+
+  @OneToMany(() => CreditNote, (creditNote) => creditNote.invoice)
+  creditNotes: CreditNote[];
+
+  @OneToMany(() => Payment, (payment) => payment.invoice)
+  payments: Payment[];
 }
 ```
 
@@ -110,6 +111,7 @@ export class Invoice {
 |----------|------|--------|-------------|
 | job | 1:1 | Job | The completed job this invoice is for |
 | creditNotes | 1:Many | CreditNote | Credit notes issued against this invoice |
+| payments | 1:Many | Payment | Payments made against this invoice |
 
 ### Cascade Rules
 - Deleting a job: Prevents deletion if invoice exists (must delete invoice first)
@@ -163,11 +165,12 @@ export class Invoice {
 2. One invoice per job (enforced by unique constraint)
 3. Due date calculated from invoice date + `invoice.payment_terms_days` setting (default: 14 days)
 4. Invoice number is auto-generated on creation
-5. When marked as paid, `paidAt` timestamp is set
-6. Payment note is optional but recommended for audit trail
+5. Multiple payments can be made against an invoice using different payment methods
+6. Invoice status is automatically calculated: PAID if total payments + credit notes >= invoice total, otherwise UNPAID
 7. Credit notes can be issued to reduce the invoice balance
-8. Remaining balance = Invoice total - Sum of all credit notes
-9. Credit notes cannot exceed the invoice total
+8. Remaining balance = Invoice total - Sum of all payments - Sum of all credit notes (post-tax)
+9. Credit notes cannot exceed the remaining balance
+10. Payments cannot exceed the remaining balance
 
 ---
 
@@ -181,12 +184,27 @@ Error: 400 Bad Request if job is not completed
 Error: 409 Conflict if invoice already exists
 ```
 
-### Mark Invoice as Paid
+### Create Payment
 ```
-PATCH /api/invoices/:id/pay
-Body: { paymentNote?: string }
-Response: Invoice
-Error: 400 Bad Request if already paid
+POST /api/invoices/:id/payments
+Body: { paymentMethodId: string, amount: number, paymentDate?: string, paymentNote?: string }
+Response: Payment (201 Created)
+Error: 400 Bad Request if amount exceeds remaining balance or payment method invalid
+Error: 404 Not Found if invoice or payment method doesn't exist
+```
+
+### Get Payments for Invoice
+```
+GET /api/invoices/:id/payments
+Response: Payment[]
+Error: 404 Not Found if invoice doesn't exist
+```
+
+### Delete Payment
+```
+DELETE /api/invoices/:id/payments/:paymentId
+Response: 204 No Content
+Error: 404 Not Found if payment doesn't exist
 ```
 
 ### Get Invoice
@@ -229,6 +247,7 @@ Error: 404 Not Found if invoice doesn't exist
 GET /api/invoices/:id/remaining-balance
 Response: { remainingBalance: number }
 Error: 404 Not Found if invoice doesn't exist
+Note: Calculates invoice total - payments - credit notes (post-tax)
 ```
 
 ---
@@ -241,14 +260,20 @@ Error: 404 Not Found if invoice doesn't exist
 - Invoice date and due date
 - Invoice total amount
 - Credit notes list (if any)
+- Payments list (if any) with amounts, dates, and payment methods
+- Total paid amount
 - Remaining balance calculation
 - "Issue Credit Note" button
 - "Convert to Invoice" button (for completed jobs without invoice)
-- "Mark as Paid" button (for unpaid invoices)
-- Payment note display (if provided)
+- "Add Payment" button (for invoices with remaining balance)
+- Delete buttons for credit notes and payments
 
 ### Payment Dialog
+- Payment amount input (defaults to remaining balance)
+- Payment method selector (required)
+- Payment date (defaults to today)
 - Payment note input (optional)
+- Shows remaining balance after payment
 - Confirmation button
 - Closes and updates invoice status
 
@@ -286,13 +311,16 @@ Error: 404 Not Found if invoice doesn't exist
 8. Can issue multiple credit notes until balance reaches zero
 
 ### Step 4: Payment Received
-1. Click "Mark as Paid" button
+1. Click "Add Payment" button
 2. Payment dialog opens
-3. Enter payment note (optional, e.g., "Paid via credit card", "Check #1234")
-4. Confirm
-5. Invoice status → PAID
-6. `paidAt` timestamp set
-7. Payment note saved
+3. Enter payment amount (defaults to remaining balance, can be partial)
+4. **Required**: Select payment method from dropdown (e.g., "VISA", "CASH", "EFTPOS")
+5. Enter payment date (defaults to today)
+6. Enter payment note (optional, e.g., "Check #1234", "Bank transfer reference")
+7. Confirm
+8. Payment is created and invoice status is recalculated
+9. If total payments + credit notes >= invoice total, status → PAID
+10. Can add multiple payments with different payment methods until invoice is fully paid
 
 ---
 
@@ -328,16 +356,22 @@ Amount: $50.00
 Reason: "Returned unused parts"
 Remaining Balance: $400.00
 
-↓ Payment Received
+↓ Payment Received (Partial)
+
+Payment 1: $100.00 - CASH (2024-12-18)
+Remaining Balance: $300.00
+
+↓ Payment Received (Final)
+
+Payment 2: $300.00 - VISA (2024-12-18)
+Payment Note: "Card ending in 1234"
 
 Invoice: INV-241216-001
 Status: PAID
-Paid Date: 2024-12-18
-Payment Note: "Paid via credit card ending in 1234"
-Final Amount Paid: $400.00 (after credit note)
+Total Paid: $400.00 (after credit note)
 ```
 
 ---
 
-*See also: [Job](./job.md) | [CreditNote](./credit-note.md) | [Settings](./settings.md)*
+*See also: [Job](./job.md) | [CreditNote](./credit-note.md) | [Payment](./payment.md) | [PaymentMethod](./payment-method.md) | [Settings](./settings.md)*
 

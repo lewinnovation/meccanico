@@ -12,6 +12,8 @@ import { VehicleStore } from './VehicleStore';
 import { InvoiceStore } from './InvoiceStore';
 import { AuditLogStore } from './AuditLogStore';
 import { CommunicationTemplateStore } from './CommunicationTemplateStore';
+import { PaymentMethodStore } from './PaymentMethodStore';
+import { PaymentStore } from './PaymentStore';
 
 class RootStore {
   authStore: AuthStore;
@@ -27,6 +29,8 @@ class RootStore {
   invoiceStore: InvoiceStore;
   auditLogStore: AuditLogStore;
   communicationTemplateStore: CommunicationTemplateStore;
+  paymentMethodStore: PaymentMethodStore;
+  paymentStore: PaymentStore;
 
   constructor() {
     this.authStore = new AuthStore(this);
@@ -42,6 +46,8 @@ class RootStore {
     this.invoiceStore = new InvoiceStore(this);
     this.auditLogStore = new AuditLogStore(this);
     this.communicationTemplateStore = new CommunicationTemplateStore(this);
+    this.paymentMethodStore = new PaymentMethodStore(this);
+    this.paymentStore = new PaymentStore(this);
   }
 }
 

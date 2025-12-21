@@ -1,8 +1,9 @@
-import { InvoiceService, CreateInvoiceFromJobDto, MarkInvoicePaidDto } from '../../../src/services/InvoiceService';
+import { InvoiceService, CreateInvoiceFromJobDto } from '../../../src/services/InvoiceService';
 import { Invoice, InvoiceStatus } from '../../../src/models/Invoice';
 import { Job, JobStatus } from '../../../src/models/Job';
 import { NotFoundError, ConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
 import { SettingsService } from '../../../src/services/SettingsService';
+import { PaymentService } from '../../../src/services/PaymentService';
 
 // Mock dependencies
 jest.mock('../../../src/config/database', () => ({
@@ -14,6 +15,10 @@ jest.mock('../../../src/config/database', () => ({
 
 jest.mock('../../../src/services/SettingsService', () => ({
   SettingsService: jest.fn(),
+}));
+
+jest.mock('../../../src/services/PaymentService', () => ({
+  PaymentService: jest.fn(),
 }));
 
 describe('InvoiceService', () => {
@@ -42,8 +47,6 @@ describe('InvoiceService', () => {
     status: InvoiceStatus.UNPAID,
     invoiceDate: new Date(),
     dueDate: new Date(),
-    paymentNote: null,
-    paidAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     job: mockJob as Job,
@@ -230,7 +233,7 @@ describe('InvoiceService', () => {
       expect(result).toEqual(mockInvoice);
       expect(mockInvoiceRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'invoice-1' },
-        relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems'],
+        relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes', 'payments', 'payments.paymentMethod'],
       });
     });
 
@@ -250,7 +253,7 @@ describe('InvoiceService', () => {
       expect(result).toEqual(mockInvoice);
       expect(mockInvoiceRepository.findOne).toHaveBeenCalledWith({
         where: { jobId: 'job-1' },
-        relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems'],
+        relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes', 'payments', 'payments.paymentMethod'],
       });
     });
 

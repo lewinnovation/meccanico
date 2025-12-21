@@ -3,19 +3,17 @@ import { Invoice, InvoiceStatus } from '../models/Invoice';
 import { Job, JobStatus } from '../models/Job';
 import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
 import { SettingsService } from './SettingsService';
+import { PaymentService } from './PaymentService';
 
 export interface CreateInvoiceFromJobDto {
   jobId: string;
-}
-
-export interface MarkInvoicePaidDto {
-  paymentNote?: string;
 }
 
 export class InvoiceService {
   private repository = AppDataSource.getRepository(Invoice);
   private jobRepository = AppDataSource.getRepository(Job);
   private settingsService = new SettingsService();
+  private paymentService = new PaymentService();
 
   /**
    * Generate invoice number in format INV-{YYYYMMDD}-{NNN}
@@ -99,8 +97,6 @@ export class InvoiceService {
       status: InvoiceStatus.UNPAID,
       invoiceDate,
       dueDate,
-      paymentNote: null,
-      paidAt: null,
     });
 
     const savedInvoice = await this.repository.save(invoice);
@@ -113,41 +109,11 @@ export class InvoiceService {
   }
 
   /**
-   * Mark an invoice as paid
+   * Get remaining balance for an invoice
+   * This includes payments and credit notes
    */
-  async markAsPaid(invoiceId: string, data: MarkInvoicePaidDto): Promise<Invoice> {
-    const invoice = await this.findById(invoiceId);
-
-    if (invoice.status === InvoiceStatus.PAID) {
-      throw new BadRequestError('Invoice is already paid');
-    }
-
-    invoice.status = InvoiceStatus.PAID;
-    invoice.paidAt = new Date();
-    if (data.paymentNote) {
-      invoice.paymentNote = data.paymentNote;
-    }
-
-    await this.repository.save(invoice);
-    return this.findById(invoiceId);
-  }
-
-  /**
-   * Mark an invoice as unpaid
-   */
-  async markAsUnpaid(invoiceId: string): Promise<Invoice> {
-    const invoice = await this.findById(invoiceId);
-
-    if (invoice.status === InvoiceStatus.UNPAID) {
-      return invoice; // Already unpaid, no change needed
-    }
-
-    invoice.status = InvoiceStatus.UNPAID;
-    invoice.paidAt = null;
-    // Keep payment note for audit trail, but status is unpaid
-
-    await this.repository.save(invoice);
-    return this.findById(invoiceId);
+  async getRemainingBalance(invoiceId: string): Promise<number> {
+    return this.paymentService.getRemainingBalance(invoiceId);
   }
 
   /**
@@ -156,7 +122,7 @@ export class InvoiceService {
   async findById(id: string): Promise<Invoice> {
     const invoice = await this.repository.findOne({
       where: { id },
-      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes'],
+      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes', 'payments', 'payments.paymentMethod'],
     });
 
     if (!invoice) {
@@ -172,7 +138,7 @@ export class InvoiceService {
   async findByJobId(jobId: string): Promise<Invoice | null> {
     const invoice = await this.repository.findOne({
       where: { jobId },
-      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes'],
+      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes', 'payments', 'payments.paymentMethod'],
     });
 
     return invoice;

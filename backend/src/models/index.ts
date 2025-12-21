@@ -17,4 +17,6 @@ export * from './AuditLog';
 export * from './CommunicationTemplate';
 export * from './Invoice';
 export * from './CreditNote';
+export * from './PaymentMethod';
+export * from './Payment';
 

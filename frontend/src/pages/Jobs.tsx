@@ -68,6 +68,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
 import { api } from '../utils/api';
+import type { Payment } from '../stores/PaymentStore';
 import { EmailDialog } from '../components/jobs/EmailDialog';
 import type { JobStatus, LineItemType, CreateLineItemDto, LineItem, Job } from '../stores/JobStore';
 import type { Template } from '../stores/TemplateStore';
@@ -2010,7 +2011,7 @@ interface SelectedLineItem {
 
 const JobDetail: React.FC = observer(() => {
   const { id } = useParams<{ id: string }>();
-  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore } = useStore();
+  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore, paymentMethodStore, paymentStore } = useStore();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
@@ -2023,7 +2024,10 @@ const JobDetail: React.FC = observer(() => {
   const [vehicleJobs, setVehicleJobs] = useState<Job[]>([]);
   const [loadingVehicleJobs, setLoadingVehicleJobs] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentMethodId, setPaymentMethodId] = useState<string>('');
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentNote, setPaymentNote] = useState('');
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [creditNoteDialogOpen, setCreditNoteDialogOpen] = useState(false);
   const [creditNoteAmount, setCreditNoteAmount] = useState('');
   const [creditNoteTaxType, setCreditNoteTaxType] = useState<'pre-tax' | 'post-tax'>('post-tax');
@@ -2058,39 +2062,53 @@ const JobDetail: React.FC = observer(() => {
       auditLogStore.fetchByJob(id);
       // Fetch invoice for this job
       invoiceStore.fetchByJobId(id);
+      // Fetch payment methods
+      paymentMethodStore.fetchAll();
     }
 
     return () => {
       jobStore.clearSelectedJob();
       invoiceStore.clearSelectedInvoice();
       auditLogStore.clearAuditLogs();
+      paymentStore.clearPayments();
     };
-  }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore]);
+  }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore, paymentMethodStore, paymentStore]);
 
-  // Fetch credit notes and remaining balance when invoice is loaded
+  // Fetch payment methods when payment dialog opens
   useEffect(() => {
-    const fetchCreditInfo = async () => {
+    if (paymentDialogOpen) {
+      paymentMethodStore.fetchAll();
+    }
+  }, [paymentDialogOpen, paymentMethodStore]);
+
+  // Fetch credit notes, payments, and remaining balance when invoice is loaded
+  useEffect(() => {
+    const fetchInvoiceInfo = async () => {
       if (invoiceStore.selectedInvoice?.id) {
         try {
-          const [creditNotesData, balance] = await Promise.all([
+          const [creditNotesData, paymentsData, balance] = await Promise.all([
             invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+            paymentStore.fetchByInvoiceId(invoiceStore.selectedInvoice.id),
             invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
           ]);
           setCreditNotes(creditNotesData);
+          setPayments(paymentsData);
           setRemainingBalance(balance);
         } catch (error) {
-          console.error('Failed to fetch credit notes:', error);
+          console.error('Failed to fetch invoice info:', error);
           setCreditNotes([]);
+          setPayments([]);
           setRemainingBalance(null);
         }
       } else {
         setCreditNotes([]);
+        setPayments([]);
         setRemainingBalance(null);
       }
     };
 
-    fetchCreditInfo();
-  }, [invoiceStore.selectedInvoice?.id, invoiceStore]);
+    fetchInvoiceInfo();
+  }, [invoiceStore.selectedInvoice?.id, invoiceStore, paymentStore]);
 
   const job = jobStore.selectedJob;
 
@@ -2224,16 +2242,40 @@ const JobDetail: React.FC = observer(() => {
     }
   };
 
-  const handleMarkAsPaid = async () => {
-    if (invoiceStore.selectedInvoice) {
-      try {
-        await invoiceStore.markAsPaid(invoiceStore.selectedInvoice.id, paymentNote || undefined);
-        setPaymentDialogOpen(false);
-        setPaymentNote('');
-        await jobStore.fetchJobById(job?.id || ''); // Refresh job
-      } catch (error) {
-        // Error handling is done in the store
-      }
+  const handleAddPayment = async () => {
+    if (!invoiceStore.selectedInvoice || !paymentMethodId || !paymentAmount) return;
+
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      return;
+    }
+
+    try {
+      await paymentStore.create(invoiceStore.selectedInvoice.id, {
+        paymentMethodId,
+        amount,
+        paymentNote: paymentNote || undefined,
+      });
+      
+      // Refresh invoice info
+      const [creditNotesData, paymentsData, balance] = await Promise.all([
+        invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+        paymentStore.fetchByInvoiceId(invoiceStore.selectedInvoice.id),
+        invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
+      ]);
+      setCreditNotes(creditNotesData);
+      setPayments(paymentsData);
+      setRemainingBalance(balance);
+      
+      // Refresh invoice to get updated status
+      await invoiceStore.fetchById(invoiceStore.selectedInvoice.id);
+      
+      setPaymentDialogOpen(false);
+      setPaymentMethodId('');
+      setPaymentAmount('');
+      setPaymentNote('');
+    } catch (error) {
+      // Error handling is done in the store
     }
   };
 
@@ -2465,7 +2507,7 @@ const JobDetail: React.FC = observer(() => {
         
         {/* Print and Next Step Buttons */}
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {/* Download PDF Button */}
+          {/* Download PDF and Email Buttons */}
           {(job.status !== 'COMPLETED' || (job.status === 'COMPLETED' && job.invoiceId)) && (
             <>
               <Button
@@ -2956,27 +2998,95 @@ const JobDetail: React.FC = observer(() => {
                       >
                         Issue Credit Note
                       </Button>
-                      {invoiceStore.selectedInvoice.status === 'UNPAID' && (
+                      {remainingBalance !== null && remainingBalance > 0 && (
                         <Button
                           variant="contained"
                           color="success"
                           fullWidth
-                          onClick={() => setPaymentDialogOpen(true)}
+                          onClick={() => {
+                            setPaymentAmount(remainingBalance.toFixed(2));
+                            setPaymentDialogOpen(true);
+                          }}
                         >
-                          Mark as Paid
+                          Add Payment
                         </Button>
                       )}
                     </Box>
                     
-                    {invoiceStore.selectedInvoice.paymentNote && (
-                      <Box sx={{ mt: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          Payment Note
-                        </Typography>
-                        <Typography variant="body2" sx={{ mt: 0.5 }}>
-                          {invoiceStore.selectedInvoice.paymentNote}
-                        </Typography>
-                      </Box>
+                    {/* Payments */}
+                    {payments.length > 0 && (
+                      <>
+                        <Divider sx={{ my: 1 }} />
+                        <Box sx={{ mt: 1 }}>
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Payments
+                          </Typography>
+                          {payments.map((payment) => (
+                            <Box 
+                              key={payment.id} 
+                              sx={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                mb: 0.5 
+                              }}
+                            >
+                              <Box>
+                                <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                                  {formatDate(payment.paymentDate)} - {payment.paymentMethod?.name || 'Unknown'}
+                                </Typography>
+                                {payment.paymentNote && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', display: 'block' }}>
+                                    {payment.paymentNote}
+                                  </Typography>
+                                )}
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2" color="success.main" sx={{ fontSize: '0.875rem' }}>
+                                  {formatCurrency(parseFloat(String(payment.amount || 0)))}
+                                </Typography>
+                                <IconButton
+                                  size="small"
+                                  onClick={async () => {
+                                    if (!invoiceStore.selectedInvoice) return;
+                                    if (window.confirm(`Are you sure you want to delete this payment?`)) {
+                                      try {
+                                        await paymentStore.delete(invoiceStore.selectedInvoice.id, payment.id);
+                                        
+                                        // Refresh invoice info
+                                        const [creditNotesData, paymentsData, balance] = await Promise.all([
+                                          invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+                                          paymentStore.fetchByInvoiceId(invoiceStore.selectedInvoice.id),
+                                          invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
+                                        ]);
+                                        setCreditNotes(creditNotesData);
+                                        setPayments(paymentsData);
+                                        setRemainingBalance(balance);
+                                        
+                                        // Refresh invoice to get updated status
+                                        await invoiceStore.fetchById(invoiceStore.selectedInvoice.id);
+                                      } catch (error) {
+                                        // Error handling is done in the store
+                                      }
+                                    }
+                                  }}
+                                  sx={{ padding: 0.5 }}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
+                            </Box>
+                          ))}
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="body2" fontWeight={500}>
+                              Total Paid
+                            </Typography>
+                            <Typography variant="body2" fontWeight={500} color="success.main">
+                              {formatCurrency(payments.reduce((sum, p) => sum + parseFloat(String(p.amount || 0)), 0))}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </>
                     )}
                   </Box>
                 ) : (
@@ -3605,10 +3715,67 @@ const JobDetail: React.FC = observer(() => {
       </Dialog>
 
       {/* Payment Dialog */}
-      <Dialog open={paymentDialogOpen} onClose={() => { setPaymentDialogOpen(false); setPaymentNote(''); }} maxWidth="sm" fullWidth>
-        <DialogTitle>Mark Invoice as Paid</DialogTitle>
+      <Dialog 
+        open={paymentDialogOpen} 
+        onClose={() => { 
+          setPaymentDialogOpen(false); 
+          setPaymentMethodId('');
+          setPaymentAmount('');
+          setPaymentNote(''); 
+        }} 
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle>Add Payment</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Payment Amount"
+              type="number"
+              fullWidth
+              required
+              value={paymentAmount}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow empty, numbers, and one decimal point
+                if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                  setPaymentAmount(value);
+                }
+              }}
+              onBlur={(e) => {
+                const value = parseFloat(e.target.value);
+                if (!isNaN(value) && value > 0) {
+                  // Cap at remaining balance
+                  if (remainingBalance !== null && value > remainingBalance) {
+                    setPaymentAmount(remainingBalance.toFixed(2));
+                  } else {
+                    setPaymentAmount(value.toFixed(2));
+                  }
+                }
+              }}
+              helperText={
+                remainingBalance !== null
+                  ? `Remaining balance: ${formatCurrency(remainingBalance)}`
+                  : ''
+              }
+              InputProps={{
+                startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>,
+              }}
+            />
+            <FormControl fullWidth required>
+              <InputLabel>Payment Method</InputLabel>
+              <Select
+                value={paymentMethodId}
+                onChange={(e) => setPaymentMethodId(e.target.value)}
+                label="Payment Method"
+              >
+                {paymentMethodStore.paymentMethods.map((method) => (
+                  <MenuItem key={method.id} value={method.id}>
+                    {method.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <TextField
               label="Payment Note (Optional)"
               multiline
@@ -3616,15 +3783,35 @@ const JobDetail: React.FC = observer(() => {
               fullWidth
               value={paymentNote}
               onChange={(e) => setPaymentNote(e.target.value)}
-              placeholder="e.g., Paid via credit card, Check #1234, Bank transfer"
-              helperText="Add any notes about the payment method or details"
+              placeholder="e.g., Check #1234, Bank transfer reference"
+              helperText="Add any additional notes about the payment"
             />
+            {remainingBalance !== null && paymentAmount && !isNaN(parseFloat(paymentAmount)) && (
+              <Box sx={{ mt: 1, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  After this payment:
+                </Typography>
+                <Typography variant="body2" fontWeight={500} sx={{ mt: 0.5 }}>
+                  Remaining: {formatCurrency(Math.max(0, remainingBalance - parseFloat(paymentAmount)))}
+                </Typography>
+              </Box>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setPaymentDialogOpen(false); setPaymentNote(''); }}>Cancel</Button>
-          <Button onClick={handleMarkAsPaid} color="success" variant="contained" disabled={invoiceStore.isLoading}>
-            Mark as Paid
+          <Button onClick={() => { 
+            setPaymentDialogOpen(false); 
+            setPaymentMethodId('');
+            setPaymentAmount('');
+            setPaymentNote(''); 
+          }}>Cancel</Button>
+          <Button 
+            onClick={handleAddPayment} 
+            color="success" 
+            variant="contained" 
+            disabled={paymentStore.isLoading || !paymentMethodId || !paymentAmount || parseFloat(paymentAmount) <= 0 || (remainingBalance !== null && parseFloat(paymentAmount) > remainingBalance + 0.01)}
+          >
+            Add Payment
           </Button>
         </DialogActions>
       </Dialog>

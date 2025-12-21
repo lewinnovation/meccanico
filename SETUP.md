@@ -116,11 +116,22 @@ The seed data includes:
 
 ### Invoices (2)
 - 1 unpaid invoice (for completed job)
-- 1 paid invoice (with payment note)
+- 1 paid invoice (with partial payments: $50 cash, then remaining with card)
+
+### Payments (2)
+- Payment 1: $50.00 - CASH (for paid invoice)
+- Payment 2: Remaining balance - VISA/MASTER CARD (for paid invoice)
 
 ### Credit Notes (2)
 - 1 credit note for unpaid invoice ($25.00 - "Returned unused parts")
 - 1 credit note for paid invoice ($50.00 - "Warranty adjustment")
+
+### Payment Methods (11)
+- VISA, MASTER/BANK CARD, EFTPOS
+- DIRECT PAYMENT, MOTORCHARGE
+- CASH, CHEQUE RECEIVED
+- FLEET CARD, AMERICAN EXPRESS
+- BANK, CALTEX STARFLEET
 
 ### Settings
 - Shop information
