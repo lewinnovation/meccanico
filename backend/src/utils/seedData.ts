@@ -17,6 +17,7 @@ import { Invoice, InvoiceStatus } from '../models/Invoice';
 import { Settings } from '../models/Settings';
 import { CommunicationTemplate, CommunicationTemplateType, CommunicationTemplateAction } from '../models/CommunicationTemplate';
 import { InvoiceService } from '../services/InvoiceService';
+import { CreditNoteService } from '../services/CreditNoteService';
 import * as bcrypt from 'bcryptjs';
 import { generateCustomerCode, generateCode, CODE_PREFIXES } from './codeGenerator';
 
@@ -1357,19 +1358,22 @@ async function seedJobs(
 
   // Create invoices for completed jobs
   const invoiceService = new InvoiceService();
+  const creditNoteService = new CreditNoteService();
   const invoiceRepository = AppDataSource.getRepository(Invoice);
 
   // Create invoice for job3 (unpaid)
+  let invoice3: Invoice | null = null;
   try {
-    const invoice3 = await invoiceService.createFromJob(savedJob3.id);
+    invoice3 = await invoiceService.createFromJob(savedJob3.id);
     console.log(`  ✓ Created invoice ${invoice3.invoiceNumber} for job ${savedJob3.code}`);
   } catch (error) {
     console.error(`  ✗ Failed to create invoice for job ${savedJob3.code}:`, error);
   }
 
   // Create invoice for job4 (paid)
+  let invoice4: Invoice | null = null;
   try {
-    const invoice4 = await invoiceService.createFromJob(savedJob4.id);
+    invoice4 = await invoiceService.createFromJob(savedJob4.id);
     // Mark as paid
     await invoiceService.markAsPaid(invoice4.id, { paymentNote: 'Payment received via credit card' });
     console.log(`  ✓ Created and marked as paid invoice ${invoice4.invoiceNumber} for job ${savedJob4.code}`);
@@ -1377,8 +1381,52 @@ async function seedJobs(
     console.error(`  ✗ Failed to create invoice for job ${savedJob4.code}:`, error);
   }
 
+  // Create credit notes for invoices
+  if (invoice3) {
+    try {
+      // Get remaining balance first to ensure we don't exceed it
+      const remainingBalance = await creditNoteService.getRemainingBalance(invoice3.id);
+      // Use a reasonable credit amount (about 10-15% of remaining balance, or $10 minimum)
+      const creditAmount = Math.max(10.00, Math.min(remainingBalance * 0.15, remainingBalance));
+      
+      if (creditAmount > 0) {
+        const creditNote1 = await creditNoteService.create({
+          invoiceId: invoice3.id,
+          amount: parseFloat(creditAmount.toFixed(2)),
+          reason: 'Returned unused parts - Oil filter',
+          creditDate: new Date(),
+        });
+        console.log(`  ✓ Created credit note ${creditNote1.creditNoteNumber} for invoice ${invoice3.invoiceNumber} ($${creditAmount.toFixed(2)})`);
+      }
+    } catch (error) {
+      console.error(`  ✗ Failed to create credit note for invoice ${invoice3.invoiceNumber}:`, error);
+    }
+  }
+
+  if (invoice4) {
+    try {
+      // Get remaining balance first to ensure we don't exceed it
+      const remainingBalance = await creditNoteService.getRemainingBalance(invoice4.id);
+      // Use a reasonable credit amount (about 10-15% of remaining balance, or $5 minimum)
+      const creditAmount = Math.max(5.00, Math.min(remainingBalance * 0.15, remainingBalance));
+      
+      if (creditAmount > 0) {
+        const creditNote2 = await creditNoteService.create({
+          invoiceId: invoice4.id,
+          amount: parseFloat(creditAmount.toFixed(2)),
+          reason: 'Warranty adjustment - Brake service',
+          creditDate: new Date(),
+        });
+        console.log(`  ✓ Created credit note ${creditNote2.creditNoteNumber} for invoice ${invoice4.invoiceNumber} ($${creditAmount.toFixed(2)})`);
+      }
+    } catch (error) {
+      console.error(`  ✗ Failed to create credit note for invoice ${invoice4.invoiceNumber}:`, error);
+    }
+  }
+
   console.log('  ✓ Seeded 5 jobs in various statuses');
   console.log('  ✓ Created invoices for completed jobs');
+  console.log('  ✓ Created credit notes for invoices');
 }
 
 /**

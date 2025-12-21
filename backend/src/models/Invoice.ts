@@ -7,8 +7,10 @@ import {
   OneToOne,
   JoinColumn,
   ManyToOne,
+  OneToMany,
 } from 'typeorm';
 import { Job } from './Job';
+import { CreditNote } from './CreditNote';
 
 export enum InvoiceStatus {
   UNPAID = 'UNPAID',
@@ -54,5 +56,8 @@ export class Invoice {
   @OneToOne(() => Job, (job) => job.invoice)
   @JoinColumn({ name: 'job_id' })
   job: Job;
+
+  @OneToMany(() => CreditNote, (creditNote) => creditNote.invoice)
+  creditNotes: CreditNote[];
 }
 

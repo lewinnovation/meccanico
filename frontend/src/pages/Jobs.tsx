@@ -26,6 +26,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
   Alert,
   CircularProgress,
   Divider,
@@ -2021,6 +2024,13 @@ const JobDetail: React.FC = observer(() => {
   const [loadingVehicleJobs, setLoadingVehicleJobs] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentNote, setPaymentNote] = useState('');
+  const [creditNoteDialogOpen, setCreditNoteDialogOpen] = useState(false);
+  const [creditNoteAmount, setCreditNoteAmount] = useState('');
+  const [creditNoteTaxType, setCreditNoteTaxType] = useState<'pre-tax' | 'post-tax'>('post-tax');
+  const [creditNoteReason, setCreditNoteReason] = useState('');
+  const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().split('T')[0]);
+  const [creditNotes, setCreditNotes] = useState<Array<{ id: string; creditNoteNumber: string; amount: number; reason: string | null; creditDate: string; createdAt: string }>>([]);
+  const [remainingBalance, setRemainingBalance] = useState<number | null>(null);
   
   // Line item form state
   const [lineItemType, setLineItemType] = useState<LineItemType>('TEXT');
@@ -2046,6 +2056,8 @@ const JobDetail: React.FC = observer(() => {
       serviceStore.fetchItems();
       settingsStore.fetchSettings();
       auditLogStore.fetchByJob(id);
+      // Fetch invoice for this job
+      invoiceStore.fetchByJobId(id);
     }
 
     return () => {
@@ -2055,7 +2067,47 @@ const JobDetail: React.FC = observer(() => {
     };
   }, [id, jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore]);
 
+  // Fetch credit notes and remaining balance when invoice is loaded
+  useEffect(() => {
+    const fetchCreditInfo = async () => {
+      if (invoiceStore.selectedInvoice?.id) {
+        try {
+          const [creditNotesData, balance] = await Promise.all([
+            invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+            invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
+          ]);
+          setCreditNotes(creditNotesData);
+          setRemainingBalance(balance);
+        } catch (error) {
+          console.error('Failed to fetch credit notes:', error);
+          setCreditNotes([]);
+          setRemainingBalance(null);
+        }
+      } else {
+        setCreditNotes([]);
+        setRemainingBalance(null);
+      }
+    };
+
+    fetchCreditInfo();
+  }, [invoiceStore.selectedInvoice?.id, invoiceStore]);
+
   const job = jobStore.selectedJob;
+
+  // Calculate job totals helper
+  const calculateJobTotals = (job: Job) => {
+    const subtotal = job.lineItems?.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) || 0;
+    let discount = 0;
+    if (job.discountPercent && job.discountPercent > 0) {
+      discount = subtotal * (job.discountPercent / 100);
+    } else {
+      discount = job.discountAmount || 0;
+    }
+    const afterDiscount = Math.max(0, subtotal - discount);
+    const gst = afterDiscount * ((job.taxRate || 0) / 100);
+    const total = afterDiscount + gst;
+    return { subtotal: afterDiscount, gst, total };
+  };
 
   // Fetch vehicle jobs when vehicle dialog opens
   useEffect(() => {
@@ -2182,6 +2234,55 @@ const JobDetail: React.FC = observer(() => {
       } catch (error) {
         // Error handling is done in the store
       }
+    }
+  };
+
+  const handleCreateCreditNote = async () => {
+    if (!invoiceStore.selectedInvoice || !creditNoteAmount) return;
+
+    const enteredAmount = parseFloat(creditNoteAmount);
+    if (isNaN(enteredAmount) || enteredAmount <= 0) {
+      return;
+    }
+
+    // Convert to pre-tax amount if user entered post-tax
+    const taxRate = job?.taxRate || 0;
+    let preTaxAmount: number;
+    
+    if (creditNoteTaxType === 'post-tax') {
+      // Convert post-tax to pre-tax: preTax = postTax / (1 + taxRate/100)
+      preTaxAmount = enteredAmount / (1 + taxRate / 100);
+    } else {
+      // Already pre-tax
+      preTaxAmount = enteredAmount;
+    }
+
+    try {
+      await invoiceStore.createCreditNote(invoiceStore.selectedInvoice.id, {
+        amount: preTaxAmount, // Always send pre-tax amount to backend
+        reason: creditNoteReason || undefined,
+        creditDate: creditNoteDate || undefined,
+      });
+      setCreditNoteDialogOpen(false);
+      setCreditNoteAmount('');
+      setCreditNoteTaxType('post-tax');
+      setCreditNoteReason('');
+      setCreditNoteDate(new Date().toISOString().split('T')[0]);
+      
+      // Refresh invoice to get updated status (may have been auto-marked as paid)
+      if (job) {
+        await invoiceStore.fetchByJobId(job.id);
+      }
+      
+      // Refresh credit notes and balance
+      const [creditNotesData, balance] = await Promise.all([
+        invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+        invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
+      ]);
+      setCreditNotes(creditNotesData);
+      setRemainingBalance(balance);
+    } catch (error) {
+      // Error handling is done in the store
     }
   };
 
@@ -2750,17 +2851,123 @@ const JobDetail: React.FC = observer(() => {
                       </Typography>
                       <Typography variant="body2">{formatDate(invoiceStore.selectedInvoice.dueDate)}</Typography>
                     </Box>
-                    {invoiceStore.selectedInvoice.status === 'UNPAID' && (
-                      <Button
-                        variant="contained"
-                        color="success"
-                        fullWidth
-                        sx={{ mt: 2 }}
-                        onClick={() => setPaymentDialogOpen(true)}
-                      >
-                        Mark as Paid
-                      </Button>
+                    
+                    {/* Invoice Total */}
+                    {job && (
+                      <>
+                        <Divider sx={{ my: 1 }} />
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Invoice Total
+                          </Typography>
+                          <Typography variant="body2" fontWeight={500}>
+                            {formatCurrency(calculateJobTotals(job).total)}
+                          </Typography>
+                        </Box>
+                        
+                        {/* Credit Notes */}
+                        {creditNotes.length > 0 && (
+                          <>
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                Credit Notes
+                              </Typography>
+                              {creditNotes.map((cn) => {
+                                // Credit notes are stored as pre-tax, convert to post-tax for display
+                                const taxRate = job?.taxRate || 0;
+                                const postTaxAmount = cn.amount * (1 + taxRate / 100);
+                                return (
+                                  <Box 
+                                    key={cn.id} 
+                                    sx={{ 
+                                      display: 'flex', 
+                                      justifyContent: 'space-between', 
+                                      alignItems: 'center',
+                                      mb: 0.5 
+                                    }}
+                                  >
+                                    <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                                      {cn.creditNoteNumber} {cn.reason && `- ${cn.reason}`}
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography variant="body2" color="error" sx={{ fontSize: '0.875rem' }}>
+                                        -{formatCurrency(postTaxAmount)}
+                                      </Typography>
+                                      <IconButton
+                                        size="small"
+                                        onClick={async () => {
+                                          if (!invoiceStore.selectedInvoice) return;
+                                          if (window.confirm(`Are you sure you want to delete credit note ${cn.creditNoteNumber}?`)) {
+                                            try {
+                                              await invoiceStore.deleteCreditNote(
+                                                invoiceStore.selectedInvoice.id,
+                                                cn.id
+                                              );
+                                              // Refresh credit notes and balance
+                                              const [creditNotesData, balance] = await Promise.all([
+                                                invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+                                                invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
+                                              ]);
+                                              setCreditNotes(creditNotesData);
+                                              setRemainingBalance(balance);
+                                              // Refresh invoice to get updated status
+                                              if (job) {
+                                                await invoiceStore.fetchByJobId(job.id);
+                                              }
+                                            } catch (error) {
+                                              // Error handling is done in the store
+                                            }
+                                          }
+                                        }}
+                                        sx={{ padding: 0.5 }}
+                                      >
+                                        <DeleteIcon fontSize="small" />
+                                      </IconButton>
+                                    </Box>
+                                  </Box>
+                                );
+                              })}
+                            </Box>
+                            <Divider sx={{ my: 1 }} />
+                          </>
+                        )}
+                        
+                        {/* Remaining Balance */}
+                        {remainingBalance !== null && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2" fontWeight={600}>
+                              Remaining Balance
+                            </Typography>
+                            <Typography variant="body2" fontWeight={600} color={remainingBalance === 0 ? 'success.main' : 'text.primary'}>
+                              {formatCurrency(remainingBalance)}
+                            </Typography>
+                          </Box>
+                        )}
+                      </>
                     )}
+                    
+                    <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        fullWidth
+                        onClick={() => setCreditNoteDialogOpen(true)}
+                        disabled={invoiceStore.isLoading || (remainingBalance !== null && remainingBalance <= 0)}
+                      >
+                        Issue Credit Note
+                      </Button>
+                      {invoiceStore.selectedInvoice.status === 'UNPAID' && (
+                        <Button
+                          variant="contained"
+                          color="success"
+                          fullWidth
+                          onClick={() => setPaymentDialogOpen(true)}
+                        >
+                          Mark as Paid
+                        </Button>
+                      )}
+                    </Box>
+                    
                     {invoiceStore.selectedInvoice.paymentNote && (
                       <Box sx={{ mt: 1 }}>
                         <Typography variant="body2" color="text.secondary">
@@ -3173,6 +3380,226 @@ const JobDetail: React.FC = observer(() => {
           <Button onClick={() => setDeleteItemConfirm(null)}>Cancel</Button>
           <Button color="error" variant="contained" onClick={() => deleteItemConfirm && handleDeleteItem(deleteItemConfirm)}>
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Credit Note Dialog */}
+      <Dialog 
+        open={creditNoteDialogOpen} 
+        onClose={() => { 
+          setCreditNoteDialogOpen(false); 
+          setCreditNoteAmount(''); 
+          setCreditNoteTaxType('post-tax');
+          setCreditNoteReason(''); 
+          setCreditNoteDate(new Date().toISOString().split('T')[0]); 
+        }} 
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle>Issue Credit Note</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <FormControl component="fieldset">
+              <Typography variant="body2" sx={{ mb: 1 }}>Is this credit note amount pre-tax or post-tax?</Typography>
+              <RadioGroup
+                row
+                value={creditNoteTaxType}
+                onChange={(e) => setCreditNoteTaxType(e.target.value as 'pre-tax' | 'post-tax')}
+              >
+                <FormControlLabel value="pre-tax" control={<Radio />} label="Pre-tax" />
+                <FormControlLabel value="post-tax" control={<Radio />} label="Post-tax" />
+              </RadioGroup>
+            </FormControl>
+            
+            <TextField
+              label={`Amount (${creditNoteTaxType === 'pre-tax' ? 'Pre-tax' : 'Post-tax'})`}
+              type="number"
+              fullWidth
+              value={creditNoteAmount}
+              onChange={(e) => {
+                const inputValue = e.target.value;
+                // Allow empty string for clearing the field
+                if (inputValue === '') {
+                  setCreditNoteAmount('');
+                  return;
+                }
+                
+                const numValue = parseFloat(inputValue);
+                // If not a valid number, keep the input as-is (user might be typing)
+                if (isNaN(numValue)) {
+                  setCreditNoteAmount(inputValue);
+                  return;
+                }
+                
+                // Calculate the maximum allowed amount based on tax type
+                let maxAllowed = remainingBalance;
+                if (remainingBalance !== null && creditNoteTaxType === 'pre-tax' && job?.taxRate) {
+                  // If entering pre-tax, convert remaining balance (post-tax) to pre-tax
+                  maxAllowed = remainingBalance / (1 + (job.taxRate || 0) / 100);
+                }
+                
+                // Round to 2 decimal places for comparison
+                const maxAllowedRounded = maxAllowed !== null ? Math.round(maxAllowed * 100) / 100 : null;
+                const numValueRounded = Math.round(numValue * 100) / 100;
+                
+                // Cap the value at the maximum allowed (with 0.01 tolerance for floating point precision)
+                if (maxAllowedRounded !== null && numValueRounded > maxAllowedRounded + 0.01) {
+                  setCreditNoteAmount(maxAllowedRounded.toFixed(2));
+                } else if (numValue < 0) {
+                  // Prevent negative values
+                  setCreditNoteAmount('0');
+                } else {
+                  setCreditNoteAmount(inputValue);
+                }
+              }}
+              onBlur={(e) => {
+                // On blur, ensure the value is properly formatted and capped
+                const numValue = parseFloat(e.target.value);
+                if (!isNaN(numValue)) {
+                  let maxAllowed = remainingBalance;
+                  if (remainingBalance !== null && creditNoteTaxType === 'pre-tax' && job?.taxRate) {
+                    maxAllowed = remainingBalance / (1 + (job.taxRate || 0) / 100);
+                  }
+                  
+                  // Round to 2 decimal places for comparison
+                  const maxAllowedRounded = maxAllowed !== null ? Math.round(maxAllowed * 100) / 100 : null;
+                  const numValueRounded = Math.round(numValue * 100) / 100;
+                  
+                  // Cap the value at the maximum allowed (with 0.01 tolerance for floating point precision)
+                  if (maxAllowedRounded !== null && numValueRounded > maxAllowedRounded + 0.01) {
+                    setCreditNoteAmount(maxAllowedRounded.toFixed(2));
+                  } else if (numValue < 0) {
+                    setCreditNoteAmount('0');
+                  } else if (numValue > 0) {
+                    // Format to 2 decimal places
+                    setCreditNoteAmount(numValue.toFixed(2));
+                  }
+                }
+              }}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">{settingsStore.currencySettings.symbol || '$'}</InputAdornment>,
+                inputProps: {
+                  min: 0,
+                  step: 0.01,
+                },
+              }}
+              helperText={
+                (() => {
+                  if (!remainingBalance || !creditNoteAmount) {
+                  if (remainingBalance !== null) {
+                    const maxPreTax = job?.taxRate ? remainingBalance / (1 + (job.taxRate || 0) / 100) : remainingBalance;
+                    return `Maximum: ${formatCurrency(creditNoteTaxType === 'pre-tax' ? maxPreTax : remainingBalance)}`;
+                  }
+                  return '';
+                }
+                
+                const enteredAmount = parseFloat(creditNoteAmount || '0');
+                const taxRate = job?.taxRate || 0;
+                  
+                  // Calculate pre-tax and post-tax equivalents
+                  let preTaxAmount: number;
+                  let postTaxAmount: number;
+                  
+                  if (creditNoteTaxType === 'pre-tax') {
+                    preTaxAmount = enteredAmount;
+                    postTaxAmount = enteredAmount * (1 + taxRate / 100);
+                  } else {
+                    postTaxAmount = enteredAmount;
+                    preTaxAmount = enteredAmount / (1 + taxRate / 100);
+                  }
+                  
+                  // Calculate maximum allowed
+                  const maxPreTax = remainingBalance / (1 + taxRate / 100);
+                  const maxPostTax = remainingBalance;
+                  
+                  const exceedsMax = creditNoteTaxType === 'pre-tax' 
+                    ? enteredAmount > maxPreTax
+                    : enteredAmount > maxPostTax;
+                  
+                  if (exceedsMax) {
+                    return `Maximum allowed: ${formatCurrency(creditNoteTaxType === 'pre-tax' ? maxPreTax : maxPostTax)}. Value has been capped.`;
+                  }
+                  
+                  // Show conversion and remaining balance
+                  const remainingAfter = Math.max(0, remainingBalance - postTaxAmount);
+                  return (
+                    `Pre-tax: ${formatCurrency(preTaxAmount)}, Post-tax: ${formatCurrency(postTaxAmount)}. ` +
+                    `Remaining after credit: ${formatCurrency(remainingAfter)}`
+                  );
+                })()
+              }
+            />
+            <TextField
+              label="Credit Date"
+              type="date"
+              fullWidth
+              value={creditNoteDate}
+              onChange={(e) => setCreditNoteDate(e.target.value)}
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
+            <TextField
+              label="Reason (optional)"
+              multiline
+              rows={3}
+              fullWidth
+              value={creditNoteReason}
+              onChange={(e) => setCreditNoteReason(e.target.value)}
+              placeholder="e.g., Returned parts, Warranty claim, etc."
+            />
+            {remainingBalance !== null && job && (
+              <Alert severity="info">
+                Invoice total: {formatCurrency(calculateJobTotals(job).total)}<br />
+                Existing credits: {formatCurrency(
+                  creditNotes.reduce((sum, cn) => {
+                    // Credit notes are stored as pre-tax, convert to post-tax for display
+                    const taxRate = job?.taxRate || 0;
+                    return sum + (cn.amount * (1 + taxRate / 100));
+                  }, 0)
+                )}<br />
+                Remaining balance: {formatCurrency(remainingBalance)}
+              </Alert>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { 
+            setCreditNoteDialogOpen(false); 
+            setCreditNoteAmount(''); 
+            setCreditNoteTaxType('post-tax');
+            setCreditNoteReason(''); 
+            setCreditNoteDate(new Date().toISOString().split('T')[0]); 
+          }}>Cancel</Button>
+          <Button 
+            onClick={handleCreateCreditNote} 
+            variant="contained" 
+            disabled={
+              !creditNoteAmount || 
+              parseFloat(creditNoteAmount || '0') <= 0 || 
+              invoiceStore.isLoading ||
+              (() => {
+                if (!remainingBalance || !creditNoteAmount) return false;
+                const enteredAmount = parseFloat(creditNoteAmount || '0');
+                const taxRate = job?.taxRate || 0;
+                
+                // Calculate maximum allowed based on tax type
+                // Round to 2 decimal places to avoid floating point precision issues
+                const maxPreTax = Math.round((remainingBalance / (1 + taxRate / 100)) * 100) / 100;
+                const maxPostTax = Math.round(remainingBalance * 100) / 100;
+                const enteredAmountRounded = Math.round(enteredAmount * 100) / 100;
+                
+                // Allow values within 0.01 tolerance to account for floating point precision
+                const exceedsMax = creditNoteTaxType === 'pre-tax' 
+                  ? enteredAmountRounded > maxPreTax + 0.01
+                  : enteredAmountRounded > maxPostTax + 0.01;
+                
+                return exceedsMax;
+              })()
+            }
+          >
+            Issue Credit Note
           </Button>
         </DialogActions>
       </Dialog>

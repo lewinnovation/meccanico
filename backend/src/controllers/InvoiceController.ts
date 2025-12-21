@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Route,
   Path,
   Query,
@@ -13,7 +14,9 @@ import {
   SuccessResponse,
 } from 'tsoa';
 import { InvoiceService, CreateInvoiceFromJobDto, MarkInvoicePaidDto } from '../services/InvoiceService';
+import { CreditNoteService, CreateCreditNoteDto } from '../services/CreditNoteService';
 import { Invoice } from '../models/Invoice';
+import { CreditNote } from '../models/CreditNote';
 import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
 @Route('api/invoices')
@@ -21,6 +24,7 @@ import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
 @Security('jwt')
 export class InvoiceController extends Controller {
   private invoiceService = new InvoiceService();
+  private creditNoteService = new CreditNoteService();
 
   /**
    * Create an invoice from a completed job
@@ -79,6 +83,59 @@ export class InvoiceController extends Controller {
     @Query() status?: string
   ): Promise<{ data: Invoice[]; total: number; page: number; limit: number }> {
     return this.invoiceService.findAll(page, limit, status as any);
+  }
+
+  /**
+   * Create a credit note for an invoice
+   */
+  @Post('{id}/credit-notes')
+  @SuccessResponse('201', 'Credit note created')
+  @Response<NotFoundError>(404, 'Invoice not found')
+  @Response<BadRequestError>(400, 'Invalid credit note amount or exceeds invoice total')
+  public async createCreditNote(
+    @Path() id: string,
+    @Body() body: Omit<CreateCreditNoteDto, 'invoiceId'>
+  ): Promise<CreditNote> {
+    this.setStatus(201);
+    return this.creditNoteService.create({
+      ...body,
+      invoiceId: id,
+    });
+  }
+
+  /**
+   * Get all credit notes for an invoice
+   */
+  @Get('{id}/credit-notes')
+  @SuccessResponse('200', 'Credit notes retrieved')
+  @Response<NotFoundError>(404, 'Invoice not found')
+  public async getCreditNotes(@Path() id: string): Promise<CreditNote[]> {
+    return this.creditNoteService.findByInvoiceId(id);
+  }
+
+  /**
+   * Get remaining balance for an invoice (invoice total - credit notes)
+   */
+  @Get('{id}/remaining-balance')
+  @SuccessResponse('200', 'Remaining balance calculated')
+  @Response<NotFoundError>(404, 'Invoice not found')
+  public async getRemainingBalance(@Path() id: string): Promise<{ remainingBalance: number }> {
+    const remainingBalance = await this.creditNoteService.getRemainingBalance(id);
+    return { remainingBalance };
+  }
+
+  /**
+   * Delete a credit note
+   */
+  @Delete('{invoiceId}/credit-notes/{creditNoteId}')
+  @SuccessResponse('204', 'Credit note deleted')
+  @Response<NotFoundError>(404, 'Credit note not found')
+  public async deleteCreditNote(
+    @Path() invoiceId: string,
+    @Path() creditNoteId: string
+  ): Promise<void> {
+    this.setStatus(204);
+    await this.creditNoteService.delete(creditNoteId);
   }
 }
 

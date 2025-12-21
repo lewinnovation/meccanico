@@ -114,6 +114,14 @@ The seed data includes:
 - 1 PAID job (with 10% discount)
 - 1 ON_HOLD job
 
+### Invoices (2)
+- 1 unpaid invoice (for completed job)
+- 1 paid invoice (with payment note)
+
+### Credit Notes (2)
+- 1 credit note for unpaid invoice ($25.00 - "Returned unused parts")
+- 1 credit note for paid invoice ($50.00 - "Warranty adjustment")
+
 ### Settings
 - Shop information
 - Tax settings (10% GST)

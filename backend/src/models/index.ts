@@ -15,4 +15,6 @@ export * from './TemplateItem';
 export * from './Settings';
 export * from './AuditLog';
 export * from './CommunicationTemplate';
+export * from './Invoice';
+export * from './CreditNote';
 

@@ -109,10 +109,12 @@ export class Invoice {
 | Relation | Type | Entity | Description |
 |----------|------|--------|-------------|
 | job | 1:1 | Job | The completed job this invoice is for |
+| creditNotes | 1:Many | CreditNote | Credit notes issued against this invoice |
 
 ### Cascade Rules
 - Deleting a job: Prevents deletion if invoice exists (must delete invoice first)
 - Invoice deletion: Updates job's `invoiceId` to null
+- Credit note deletion: Cascades when invoice is deleted
 
 ---
 
@@ -163,6 +165,9 @@ export class Invoice {
 4. Invoice number is auto-generated on creation
 5. When marked as paid, `paidAt` timestamp is set
 6. Payment note is optional but recommended for audit trail
+7. Credit notes can be issued to reduce the invoice balance
+8. Remaining balance = Invoice total - Sum of all credit notes
+9. Credit notes cannot exceed the invoice total
 
 ---
 
@@ -203,6 +208,29 @@ Query: ?status=UNPAID|PAID&page=1&limit=50
 Response: { data: Invoice[], total: number, page: number, limit: number }
 ```
 
+### Create Credit Note
+```
+POST /api/invoices/:id/credit-notes
+Body: { amount: number, reason?: string, creditDate?: string }
+Response: CreditNote (201 Created)
+Error: 400 Bad Request if amount exceeds remaining balance
+Error: 404 Not Found if invoice doesn't exist
+```
+
+### Get Credit Notes for Invoice
+```
+GET /api/invoices/:id/credit-notes
+Response: CreditNote[]
+Error: 404 Not Found if invoice doesn't exist
+```
+
+### Get Remaining Balance
+```
+GET /api/invoices/:id/remaining-balance
+Response: { remainingBalance: number }
+Error: 404 Not Found if invoice doesn't exist
+```
+
 ---
 
 ## 🖥️ UI Components
@@ -211,6 +239,10 @@ Response: { data: Invoice[], total: number, page: number, limit: number }
 - Invoice number display
 - Status badge (UNPAID/PAID)
 - Invoice date and due date
+- Invoice total amount
+- Credit notes list (if any)
+- Remaining balance calculation
+- "Issue Credit Note" button
 - "Convert to Invoice" button (for completed jobs without invoice)
 - "Mark as Paid" button (for unpaid invoices)
 - Payment note display (if provided)
@@ -243,7 +275,17 @@ Response: { data: Invoice[], total: number, page: number, limit: number }
    - Status = UNPAID
 3. Job's `invoiceId` is updated to link to the invoice
 
-### Step 3: Payment Received
+### Step 3: Issue Credit Notes (Optional)
+1. Click "Issue Credit Note" button
+2. Credit note dialog opens
+3. Enter credit amount (cannot exceed remaining balance)
+4. Enter reason (optional, e.g., "Returned unused parts", "Warranty adjustment")
+5. Select credit date (defaults to today)
+6. Confirm
+7. Credit note is created and reduces remaining balance
+8. Can issue multiple credit notes until balance reaches zero
+
+### Step 4: Payment Received
 1. Click "Mark as Paid" button
 2. Payment dialog opens
 3. Enter payment note (optional, e.g., "Paid via credit card", "Check #1234")
@@ -279,15 +321,23 @@ Invoice Date: 2024-12-16
 Due Date: 2024-12-30 (14 days)
 Amount: $450.00
 
+↓ Issue Credit Note
+
+Credit Note: CN-241216-001
+Amount: $50.00
+Reason: "Returned unused parts"
+Remaining Balance: $400.00
+
 ↓ Payment Received
 
 Invoice: INV-241216-001
 Status: PAID
 Paid Date: 2024-12-18
 Payment Note: "Paid via credit card ending in 1234"
+Final Amount Paid: $400.00 (after credit note)
 ```
 
 ---
 
-*See also: [Job](./job.md) | [Settings](./settings.md)*
+*See also: [Job](./job.md) | [CreditNote](./credit-note.md) | [Settings](./settings.md)*
 

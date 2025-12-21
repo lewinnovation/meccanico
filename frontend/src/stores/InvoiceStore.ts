@@ -4,6 +4,17 @@ import { api } from '../utils/api';
 
 export type InvoiceStatus = 'UNPAID' | 'PAID';
 
+export interface CreditNote {
+  id: string;
+  creditNoteNumber: string;
+  invoiceId: string;
+  amount: number;
+  reason: string | null;
+  creditDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -15,6 +26,7 @@ export interface Invoice {
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;
+  creditNotes?: CreditNote[];
   job?: {
     id: string;
     code: string;
@@ -35,6 +47,12 @@ export interface CreateInvoiceFromJobDto {
 
 export interface MarkInvoicePaidDto {
   paymentNote?: string;
+}
+
+export interface CreateCreditNoteDto {
+  amount: number;
+  reason?: string;
+  creditDate?: string;
 }
 
 export class InvoiceStore {
@@ -185,6 +203,72 @@ export class InvoiceStore {
 
   clearSelectedInvoice(): void {
     this.selectedInvoice = null;
+  }
+
+  async createCreditNote(invoiceId: string, data: CreateCreditNoteDto): Promise<CreditNote> {
+    this.isLoading = true;
+    this.error = null;
+
+    try {
+      const response = await api.post(`/api/invoices/${invoiceId}/credit-notes`, data);
+
+      runInAction(() => {
+        // Refresh invoice to get updated credit notes
+        if (this.selectedInvoice?.id === invoiceId) {
+          this.fetchById(invoiceId);
+        }
+        this.isLoading = false;
+      });
+
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to create credit note';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
+
+  async fetchCreditNotes(invoiceId: string): Promise<CreditNote[]> {
+    try {
+      const response = await api.get(`/api/invoices/${invoiceId}/credit-notes`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async getRemainingBalance(invoiceId: string): Promise<number> {
+    try {
+      const response = await api.get(`/api/invoices/${invoiceId}/remaining-balance`);
+      return response.data.remainingBalance;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async deleteCreditNote(invoiceId: string, creditNoteId: string): Promise<void> {
+    this.isLoading = true;
+    this.error = null;
+
+    try {
+      await api.delete(`/api/invoices/${invoiceId}/credit-notes/${creditNoteId}`);
+
+      runInAction(() => {
+        // Refresh invoice to get updated credit notes and status
+        if (this.selectedInvoice?.id === invoiceId) {
+          this.fetchById(invoiceId);
+        }
+        this.isLoading = false;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to delete credit note';
+        this.isLoading = false;
+      });
+      throw error;
+    }
   }
 }
 

@@ -133,12 +133,30 @@ export class InvoiceService {
   }
 
   /**
+   * Mark an invoice as unpaid
+   */
+  async markAsUnpaid(invoiceId: string): Promise<Invoice> {
+    const invoice = await this.findById(invoiceId);
+
+    if (invoice.status === InvoiceStatus.UNPAID) {
+      return invoice; // Already unpaid, no change needed
+    }
+
+    invoice.status = InvoiceStatus.UNPAID;
+    invoice.paidAt = null;
+    // Keep payment note for audit trail, but status is unpaid
+
+    await this.repository.save(invoice);
+    return this.findById(invoiceId);
+  }
+
+  /**
    * Find invoice by ID
    */
   async findById(id: string): Promise<Invoice> {
     const invoice = await this.repository.findOne({
       where: { id },
-      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems'],
+      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes'],
     });
 
     if (!invoice) {
@@ -154,7 +172,7 @@ export class InvoiceService {
   async findByJobId(jobId: string): Promise<Invoice | null> {
     const invoice = await this.repository.findOne({
       where: { jobId },
-      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems'],
+      relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes'],
     });
 
     return invoice;
