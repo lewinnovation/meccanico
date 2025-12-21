@@ -186,6 +186,7 @@ interface AuditLog {
 - Jobs (all changes)
 - Customers (all changes)
 - Vehicles (all changes)
+- VehicleOdometerReading (all readings tracked with source and user)
 - Inventory (price changes)
 - Settings (all changes)
 

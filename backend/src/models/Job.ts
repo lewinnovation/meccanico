@@ -76,6 +76,12 @@ export class Job {
   @Column({ name: 'invoice_id', type: 'uuid', nullable: true })
   invoiceId: string | null;
 
+  @Column({ type: 'integer', nullable: true })
+  odometer: number | null;
+
+  @Column({ name: 'odometer_unit', type: 'varchar', length: 10, nullable: true })
+  odometerUnit: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

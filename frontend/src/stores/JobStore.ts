@@ -78,6 +78,8 @@ export interface Job {
   startedAt: string | null;
   completedAt: string | null;
   invoiceId: string | null;
+  odometer: number | null;
+  odometerUnit: string | null;
   createdAt: string;
   updatedAt: string;
   version?: number;
@@ -101,6 +103,8 @@ export interface CreateJobDto {
   assignedTo?: string;
   notes?: string;
   taxRate?: number;
+  odometer?: number;
+  odometerUnit?: string;
 }
 
 export interface UpdateJobDto {
@@ -113,6 +117,8 @@ export interface UpdateJobDto {
   discountAmount?: number;
   discountPercent?: number;
   dueDate?: string;
+  odometer?: number;
+  odometerUnit?: string;
 }
 
 export class JobStore {

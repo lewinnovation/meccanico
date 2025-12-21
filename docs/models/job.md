@@ -36,6 +36,8 @@ CREATE TABLE jobs (
   started_at TIMESTAMP WITH TIME ZONE,
   completed_at TIMESTAMP WITH TIME ZONE,
   invoice_id UUID REFERENCES invoices(id),
+  odometer INTEGER,
+  odometer_unit VARCHAR(10),
   version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -274,8 +276,10 @@ Once a job reaches `COMPLETED` status, it can be converted to an invoice for pay
 4. Customer and vehicle can only be changed when status is BOOKED
 5. Timestamps auto-set on status transitions (startedAt for IN_PROGRESS, completedAt for COMPLETED)
 6. Tax rate defaults to shop setting but can be overridden
-7. Jobs can be duplicated (creates new BOOKED job)
-8. Completed jobs can be converted to invoices
+7. Odometer reading can be recorded when creating/updating jobs (optional)
+8. When odometer is set on a job, a VehicleOdometerReading record is created with source='job'
+9. Jobs can be duplicated (creates new BOOKED job)
+10. Completed jobs can be converted to invoices
 
 ---
 
@@ -297,14 +301,14 @@ Response: Job (with customer, vehicle, lineItems, assignee)
 ### Create Job
 ```
 POST /api/jobs
-Body: { customerId, vehicleId, assignedTo?, notes?, taxRate? }
+Body: { customerId, vehicleId, assignedTo?, notes?, taxRate?, odometer?, odometerUnit? }
 Response: Job (201 Created)
 ```
 
 ### Update Job
 ```
 PATCH /api/jobs/:id
-Body: { assignedTo?, notes?, internalNotes?, taxRate?, discountAmount?, discountPercent?, dueDate?, version? }
+Body: { assignedTo?, notes?, internalNotes?, taxRate?, discountAmount?, discountPercent?, dueDate?, odometer?, odometerUnit?, version? }
 Response: Job
 Error: 409 Conflict if version mismatch (optimistic locking)
 ```

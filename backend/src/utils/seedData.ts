@@ -609,6 +609,10 @@ async function seedSettings(): Promise<void> {
       },
     },
     {
+      key: 'odometer.unit',
+      value: 'km',
+    },
+    {
       key: 'invoice.prefix',
       value: 'INV-',
     },
@@ -751,17 +755,17 @@ async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
   console.log('  Seeding vehicles...');
 
   const vehicleData = [
-    { customerIndex: 0, make: 'Toyota', model: 'Camry', year: 2020, licensePlate: 'ABC123', color: 'Silver', mileage: 45000 },
-    { customerIndex: 0, make: 'Honda', model: 'Civic', year: 2018, licensePlate: 'XYZ789', color: 'Blue', mileage: 62000 },
-    { customerIndex: 1, make: 'Ford', model: 'Ranger', year: 2021, licensePlate: 'DEF456', color: 'White', mileage: 28000 },
-    { customerIndex: 1, make: 'Mazda', model: 'CX-5', year: 2019, licensePlate: 'GHI789', color: 'Red', mileage: 55000 },
-    { customerIndex: 1, make: 'Hyundai', model: 'Tucson', year: 2022, licensePlate: 'JKL012', color: 'Black', mileage: 15000 },
-    { customerIndex: 2, make: 'Volkswagen', model: 'Golf', year: 2017, licensePlate: 'MNO345', color: 'Grey', mileage: 78000 },
-    { customerIndex: 3, make: 'BMW', model: '3 Series', year: 2023, licensePlate: 'PQR678', color: 'Black', mileage: 8000 },
-    { customerIndex: 4, make: 'Nissan', model: 'X-Trail', year: 2020, licensePlate: 'STU901', color: 'White', mileage: 42000 },
-    { customerIndex: 5, make: 'Subaru', model: 'Outback', year: 2019, licensePlate: 'VWX234', color: 'Green', mileage: 60000 },
-    { customerIndex: 6, make: 'Toyota', model: 'RAV4', year: 2021, licensePlate: 'YZA567', color: 'Blue', mileage: 35000 },
-    { customerIndex: 7, make: 'Kia', model: 'Sportage', year: 2022, licensePlate: 'BCD890', color: 'Silver', mileage: 20000 },
+    { customerIndex: 0, make: 'Toyota', model: 'Camry', year: 2020, licensePlate: 'ABC123', color: 'Silver', odometer: 45000 },
+    { customerIndex: 0, make: 'Honda', model: 'Civic', year: 2018, licensePlate: 'XYZ789', color: 'Blue', odometer: 62000 },
+    { customerIndex: 1, make: 'Ford', model: 'Ranger', year: 2021, licensePlate: 'DEF456', color: 'White', odometer: 28000 },
+    { customerIndex: 1, make: 'Mazda', model: 'CX-5', year: 2019, licensePlate: 'GHI789', color: 'Red', odometer: 55000 },
+    { customerIndex: 1, make: 'Hyundai', model: 'Tucson', year: 2022, licensePlate: 'JKL012', color: 'Black', odometer: 15000 },
+    { customerIndex: 2, make: 'Volkswagen', model: 'Golf', year: 2017, licensePlate: 'MNO345', color: 'Grey', odometer: 78000 },
+    { customerIndex: 3, make: 'BMW', model: '3 Series', year: 2023, licensePlate: 'PQR678', color: 'Black', odometer: 8000 },
+    { customerIndex: 4, make: 'Nissan', model: 'X-Trail', year: 2020, licensePlate: 'STU901', color: 'White', odometer: 42000 },
+    { customerIndex: 5, make: 'Subaru', model: 'Outback', year: 2019, licensePlate: 'VWX234', color: 'Green', odometer: 60000 },
+    { customerIndex: 6, make: 'Toyota', model: 'RAV4', year: 2021, licensePlate: 'YZA567', color: 'Blue', odometer: 35000 },
+    { customerIndex: 7, make: 'Kia', model: 'Sportage', year: 2022, licensePlate: 'BCD890', color: 'Silver', odometer: 20000 },
   ];
 
   const vehicles: Vehicle[] = [];
@@ -775,7 +779,7 @@ async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
       year: data.year,
       licensePlate: data.licensePlate,
       color: data.color,
-      mileage: data.mileage,
+      odometer: data.odometer,
     });
     const saved = await vehicleRepository.save(vehicle);
     

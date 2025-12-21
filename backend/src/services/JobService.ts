@@ -6,6 +6,7 @@ import { Vehicle } from '../models/Vehicle';
 import { Customer } from '../models/Customer';
 import { Invoice } from '../models/Invoice';
 import { VehicleOwner } from '../models/VehicleOwner';
+import { VehicleOdometerReading } from '../models/VehicleOdometerReading';
 import { generateJobCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, BadRequestError, VersionConflictError, UnauthorizedError } from '../middleware/errorHandler';
 import { OptimisticLockVersionMismatchError } from 'typeorm';
@@ -22,6 +23,8 @@ export interface CreateJobDto {
   assignedTo?: string;
   notes?: string;
   taxRate?: number;
+  odometer?: number;
+  odometerUnit?: string;
 }
 
 export interface UpdateJobDto {
@@ -34,6 +37,8 @@ export interface UpdateJobDto {
   discountAmount?: number;
   discountPercent?: number;
   dueDate?: string;
+  odometer?: number;
+  odometerUnit?: string;
   version?: number;
 }
 
@@ -63,8 +68,24 @@ export class JobService {
   private templateRepository = AppDataSource.getRepository(Template);
   private vehicleRepository = AppDataSource.getRepository(Vehicle);
   private vehicleOwnerRepository = AppDataSource.getRepository(VehicleOwner);
+  private odometerReadingRepository = AppDataSource.getRepository(VehicleOdometerReading);
   private pdfService = new PdfService();
   private settingsService = new SettingsService();
+
+  /**
+   * Convert odometer reading to base unit (km)
+   */
+  private convertToBaseUnit(value: number, unit: string): number {
+    switch (unit.toLowerCase()) {
+      case 'miles':
+        return Math.round(value * 1.60934); // Convert miles to km
+      case 'hours':
+        return value; // Hours are stored as-is (no conversion)
+      case 'km':
+      default:
+        return value;
+    }
+  }
 
   async findAll(
     page: number = 1,
@@ -263,9 +284,42 @@ export class JobService {
       notes: data.notes,
       taxRate: data.taxRate ?? 0,
       status: JobStatus.BOOKED,
+      odometer: data.odometer || null,
+      odometerUnit: data.odometerUnit || null,
     });
 
     const savedJob = await this.repository.save(job);
+    
+    // Handle odometer reading if provided
+    if (data.odometer !== undefined && data.odometer !== null && data.odometerUnit && savedJob.vehicleId) {
+      const readingInBaseUnit = this.convertToBaseUnit(data.odometer, data.odometerUnit);
+      
+      // Check for decreasing odometer
+      const vehicle = await this.vehicleRepository.findOne({
+        where: { id: savedJob.vehicleId },
+      });
+      
+      let warning: string | undefined;
+      if (vehicle && vehicle.odometer !== null && readingInBaseUnit < vehicle.odometer) {
+        warning = `Warning: Job odometer reading (${data.odometer} ${data.odometerUnit}) is less than current vehicle odometer (${vehicle.odometer} km).`;
+      }
+      
+      // Create odometer reading record
+      const odometerReading = this.odometerReadingRepository.create({
+        vehicleId: savedJob.vehicleId,
+        jobId: savedJob.id,
+        reading: readingInBaseUnit,
+        unit: data.odometerUnit,
+        source: 'job',
+        notes: null,
+        createdBy: userId || null,
+      });
+      
+      await this.odometerReadingRepository.save(odometerReading);
+      
+      // Note: We don't automatically update vehicle odometer from job readings
+      // The vehicle odometer is updated separately via ad-hoc entries
+    }
     
     // Create audit log
     await createAuditLog(
@@ -279,6 +333,8 @@ export class JobService {
         customerId: savedJob.customerId,
         vehicleId: savedJob.vehicleId,
         status: savedJob.status,
+        odometer: savedJob.odometer,
+        odometerUnit: savedJob.odometerUnit,
       }
     );
     
@@ -323,6 +379,8 @@ export class JobService {
       discountPercent: job.discountPercent,
       dueDate: job.dueDate,
       status: job.status,
+      odometer: job.odometer,
+      odometerUnit: job.odometerUnit,
     };
 
     // Check if both discount types are provided
@@ -399,6 +457,12 @@ export class JobService {
     if (data.dueDate !== undefined) {
       job.dueDate = data.dueDate ? new Date(data.dueDate) : null;
     }
+    if (data.odometer !== undefined) {
+      job.odometer = data.odometer || null;
+    }
+    if (data.odometerUnit !== undefined) {
+      job.odometerUnit = data.odometerUnit || null;
+    }
 
     console.log('DEBUG: Before save - job entity:', {
       id: job.id,
@@ -429,6 +493,55 @@ export class JobService {
       version: savedJob.version,
     });
     
+    // Handle odometer reading if provided and vehicle exists
+    if (data.odometer !== undefined && data.odometer !== null && data.odometerUnit && savedJob.vehicleId) {
+      const readingInBaseUnit = this.convertToBaseUnit(data.odometer, data.odometerUnit);
+      
+      // Check if odometer reading already exists for this job
+      const existingReading = await this.odometerReadingRepository.findOne({
+        where: { jobId: savedJob.id },
+      });
+      
+      if (existingReading) {
+        // Update existing reading
+        existingReading.reading = readingInBaseUnit;
+        existingReading.unit = data.odometerUnit;
+        await this.odometerReadingRepository.save(existingReading);
+      } else {
+        // Create new reading
+        const odometerReading = this.odometerReadingRepository.create({
+          vehicleId: savedJob.vehicleId,
+          jobId: savedJob.id,
+          reading: readingInBaseUnit,
+          unit: data.odometerUnit,
+          source: 'job',
+          notes: null,
+          createdBy: userId || null,
+        });
+        
+        await this.odometerReadingRepository.save(odometerReading);
+      }
+      
+      // Check for decreasing odometer warning
+      const vehicle = await this.vehicleRepository.findOne({
+        where: { id: savedJob.vehicleId },
+      });
+      
+      if (vehicle && vehicle.odometer !== null && readingInBaseUnit < vehicle.odometer) {
+        // Warning is logged but doesn't prevent save
+        console.warn(`Warning: Job ${savedJob.code} odometer reading (${data.odometer} ${data.odometerUnit}) is less than current vehicle odometer (${vehicle.odometer} km).`);
+      }
+    } else if (data.odometer === null && savedJob.vehicleId) {
+      // Remove odometer reading if explicitly set to null
+      const existingReading = await this.odometerReadingRepository.findOne({
+        where: { jobId: savedJob.id },
+      });
+      
+      if (existingReading) {
+        await this.odometerReadingRepository.remove(existingReading);
+      }
+    }
+    
     // Create audit log
     const newValue = {
       customerId: savedJob.customerId,
@@ -441,6 +554,8 @@ export class JobService {
       discountPercent: savedJob.discountPercent,
       dueDate: savedJob.dueDate,
       status: savedJob.status,
+      odometer: savedJob.odometer,
+      odometerUnit: savedJob.odometerUnit,
     };
     
     await createAuditLog(

@@ -102,7 +102,7 @@ Customer onboarding typically happens when creating a new job, but customers can
    ├─ License Plate
    ├─ VIN
    ├─ Color
-   └─ Mileage
+   └─ Odometer
 4. Submit → Vehicle added
 5. Code assigned (V001)
 ```

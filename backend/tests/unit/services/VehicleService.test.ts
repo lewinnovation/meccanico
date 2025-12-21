@@ -363,22 +363,22 @@ describe('VehicleService', () => {
     });
   });
 
-  describe('updateMileage', () => {
-    it('should update vehicle mileage', async () => {
+  describe('updateOdometer', () => {
+    it('should update vehicle odometer', async () => {
       const existingVehicle = {
         id: 'test-id',
         code: 'V001',
         make: 'Toyota',
         model: 'Camry',
-        mileage: 50000,
+        odometer: 50000,
         jobs: [],
       };
       mockVehicleRepository.findOne.mockResolvedValue(existingVehicle);
-      mockVehicleRepository.save.mockResolvedValue({ ...existingVehicle, mileage: 55000 });
+      mockVehicleRepository.save.mockResolvedValue({ ...existingVehicle, odometer: 55000 });
 
-      const result = await vehicleService.updateMileage('test-id', 55000);
+      const result = await vehicleService.updateOdometer('test-id', 55000);
 
-      expect(result.mileage).toBe(55000);
+      expect(result.odometer).toBe(55000);
     });
   });
 

@@ -11,6 +11,7 @@ import {
   Tags,
   Security,
   SuccessResponse,
+  Request,
 } from 'tsoa';
 import {
   VehicleService,
@@ -18,7 +19,9 @@ import {
   UpdateVehicleDto,
 } from '../services/VehicleService';
 import { Vehicle } from '../models/Vehicle';
+import { VehicleOdometerReading } from '../models/VehicleOdometerReading';
 import { PaginatedResult } from '../types/common';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 @Route('api/vehicles')
 @Tags('Vehicles')
@@ -109,15 +112,47 @@ export class VehicleController extends Controller {
   }
 
   /**
-   * Update vehicle mileage
+   * Update vehicle odometer
    */
-  @Patch('/{id}/mileage')
+  @Patch('/{id}/odometer')
   @Security('jwt', ['ADMIN', 'MECHANIC'])
-  public async updateMileage(
+  public async updateOdometer(
     @Path() id: string,
-    @Body() body: { mileage: number }
+    @Body() body: { odometer: number }
   ): Promise<Vehicle> {
-    return this.vehicleService.updateMileage(id, body.mileage);
+    return this.vehicleService.updateOdometer(id, body.odometer);
+  }
+
+  /**
+   * Add an odometer reading (ad-hoc entry)
+   */
+  @Post('/{id}/odometer-readings')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
+  @SuccessResponse(201, 'Created')
+  public async addOdometerReading(
+    @Request() request: AuthenticatedRequest,
+    @Path() id: string,
+    @Body() body: { reading: number; unit: string; notes?: string | null; updateVehicle?: boolean }
+  ): Promise<{ reading: VehicleOdometerReading; warning?: string }> {
+    this.setStatus(201);
+    return this.vehicleService.addOdometerReading(
+      id,
+      body.reading,
+      body.unit,
+      body.notes || null,
+      request.user?.id || null,
+      body.updateVehicle !== false // Default to true
+    );
+  }
+
+  /**
+   * Get odometer reading history for a vehicle
+   */
+  @Get('/{id}/odometer-readings')
+  public async getOdometerHistory(
+    @Path() id: string
+  ): Promise<VehicleOdometerReading[]> {
+    return this.vehicleService.getOdometerHistory(id);
   }
 
   /**

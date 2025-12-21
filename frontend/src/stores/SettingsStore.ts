@@ -26,6 +26,10 @@ export interface CurrencySettings {
   symbol: string;
 }
 
+export interface OdometerSettings {
+  unit: string; // 'km', 'miles', or 'hours'
+}
+
 export interface InvoiceSettings {
   prefix: string;
   terms: string;
@@ -76,6 +80,12 @@ export class SettingsStore {
       terms: (this.settings['invoice.terms']?.value as string) || '',
       footer: (this.settings['invoice.footer']?.value as string) || '',
       paymentTermsDays: (this.settings['invoice.payment_terms_days']?.value as number) || 14,
+    };
+  }
+
+  get odometerSettings(): OdometerSettings {
+    return {
+      unit: (this.settings['odometer.unit']?.value as string) || 'km',
     };
   }
 
@@ -139,11 +149,15 @@ export class SettingsStore {
     });
   }
 
-  async updateCurrencySettings(currency: CurrencySettings): Promise<boolean> {
-    return this.updateSettings({
+  async updateCurrencySettings(currency: CurrencySettings, odometer?: OdometerSettings): Promise<boolean> {
+    const settings: Record<string, unknown> = {
       'currency.code': currency.code,
       'currency.symbol': currency.symbol,
-    });
+    };
+    if (odometer) {
+      settings['odometer.unit'] = odometer.unit;
+    }
+    return this.updateSettings(settings);
   }
 
   async updateInvoiceSettings(invoice: InvoiceSettings): Promise<boolean> {
@@ -152,6 +166,12 @@ export class SettingsStore {
       'invoice.terms': invoice.terms,
       'invoice.footer': invoice.footer,
       'invoice.payment_terms_days': invoice.paymentTermsDays,
+    });
+  }
+
+  async updateOdometerSettings(odometer: OdometerSettings): Promise<boolean> {
+    return this.updateSettings({
+      'odometer.unit': odometer.unit,
     });
   }
 

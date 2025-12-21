@@ -40,7 +40,7 @@ export class Vehicle {
   color: string | null;
 
   @Column({ type: 'integer', nullable: true })
-  mileage: number | null;
+  odometer: number | null;
 
   @Column({ type: 'text', nullable: true })
   notes: string | null;

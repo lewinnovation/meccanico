@@ -42,7 +42,7 @@ export interface Vehicle {
   vin: string | null;
   licensePlate: string | null;
   color: string | null;
-  mileage: number | null;
+  odometer: number | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -70,7 +70,7 @@ export interface CreateVehicleDto {
   vin?: string;
   licensePlate?: string;
   color?: string;
-  mileage?: number;
+  odometer?: number;
   notes?: string;
 }
 
@@ -81,7 +81,7 @@ export interface UpdateVehicleDto {
   vin?: string;
   licensePlate?: string;
   color?: string;
-  mileage?: number;
+  odometer?: number;
   notes?: string;
 }
 
@@ -398,6 +398,114 @@ export class VehicleStore {
         this.isLoading = false;
       });
       throw error;
+    }
+  }
+
+  // ===================== ODOMETER READINGS =====================
+
+  odometerHistory: Array<{
+    id: string;
+    vehicleId: string;
+    jobId: string | null;
+    reading: number;
+    unit: string;
+    source: string;
+    notes: string | null;
+    createdAt: string;
+    createdBy: string | null;
+    job?: { code: string } | null;
+    user?: { name: string } | null;
+  }> = [];
+
+  /**
+   * Add an odometer reading (ad-hoc entry)
+   */
+  async addOdometerReading(
+    vehicleId: string,
+    reading: number,
+    unit: string,
+    notes?: string | null,
+    updateVehicle: boolean = true
+  ): Promise<{ reading: any; warning?: string }> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to add odometer readings');
+    }
+    this.isLoading = true;
+    this.error = null;
+    try {
+      const response = await api.post(`/api/vehicles/${vehicleId}/odometer-readings`, {
+        reading,
+        unit,
+        notes: notes || null,
+        updateVehicle,
+      });
+      
+      // Refresh vehicle to get updated odometer
+      if (updateVehicle) {
+        await this.fetchVehicleById(vehicleId);
+      }
+      
+      // Refresh history
+      await this.fetchOdometerHistory(vehicleId);
+      
+      runInAction(() => {
+        this.isLoading = false;
+      });
+      
+      return response.data;
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to add odometer reading';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch odometer reading history for a vehicle
+   */
+  async fetchOdometerHistory(vehicleId: string): Promise<void> {
+    try {
+      const response = await api.get(`/api/vehicles/${vehicleId}/odometer-readings`);
+      runInAction(() => {
+        this.odometerHistory = response.data;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.error = error instanceof Error ? error.message : 'Failed to fetch odometer history';
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Convert odometer reading to base unit (km)
+   */
+  convertToBaseUnit(value: number, unit: string): number {
+    switch (unit.toLowerCase()) {
+      case 'miles':
+        return Math.round(value * 1.60934);
+      case 'hours':
+        return value; // Hours are stored as-is
+      case 'km':
+      default:
+        return value;
+    }
+  }
+
+  /**
+   * Convert odometer reading from base unit (km) to target unit
+   */
+  convertFromBaseUnit(value: number, unit: string): number {
+    switch (unit.toLowerCase()) {
+      case 'miles':
+        return Math.round(value / 1.60934);
+      case 'hours':
+        return value; // Hours are stored as-is
+      case 'km':
+      default:
+        return value;
     }
   }
 }

@@ -39,9 +39,11 @@ import {
   DirectionsCar as VehicleIcon,
   ArrowBack as BackIcon,
   Person as PersonIcon,
-  Speed as MileageIcon,
+  Speed as OdometerIcon,
   Badge as LicensePlateIcon,
   Palette as ColorIcon,
+  History as HistoryIcon,
+  Visibility as ViewIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
@@ -59,7 +61,8 @@ interface VehicleFormData {
   vin: string;
   licensePlate: string;
   color: string;
-  mileage: string;
+  odometer: string;
+  odometerUnit: string;
   notes: string;
 }
 
@@ -71,7 +74,8 @@ const defaultFormData: VehicleFormData = {
   vin: '',
   licensePlate: '',
   color: '',
-  mileage: '',
+  odometer: '',
+  odometerUnit: 'km',
   notes: '',
 };
 
@@ -92,7 +96,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
   isLoading,
   preselectedCustomerId,
 }) => {
-  const { vehicleStore, customerStore } = useStore();
+  const { vehicleStore, customerStore, settingsStore } = useStore();
   const [formData, setFormData] = useState<VehicleFormData>(defaultFormData);
   const [error, setError] = useState<string | null>(null);
   const [selectedCustomers, setSelectedCustomers] = useState<Customer[]>([]);
@@ -128,7 +132,8 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
           vin: vehicle.vin || '',
           licensePlate: vehicle.licensePlate || '',
           color: vehicle.color || '',
-          mileage: vehicle.mileage?.toString() || '',
+          odometer: vehicle.odometer?.toString() || '',
+          odometerUnit: settingsStore.odometerSettings.unit,
           notes: vehicle.notes || '',
         });
         // Load full customer details for owners
@@ -168,6 +173,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
         setFormData({
           ...defaultFormData,
           customerIds: preselectedCustomerId ? [preselectedCustomerId] : [],
+          odometerUnit: settingsStore.odometerSettings.unit,
         });
         if (preselectedCustomerId) {
           const customer = customerStore.customers.find((c) => c.id === preselectedCustomerId);
@@ -309,7 +315,7 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
         vin: formData.vin || undefined,
         licensePlate: formData.licensePlate || undefined,
         color: formData.color || undefined,
-        mileage: formData.mileage ? parseInt(formData.mileage, 10) : undefined,
+        odometer: formData.odometer ? parseInt(formData.odometer, 10) : undefined,
         notes: formData.notes || undefined,
       };
 
@@ -521,19 +527,33 @@ const VehicleFormDialog: React.FC<VehicleFormDialogProps> = observer(({
               />
             </Grid>
 
-            {/* Mileage */}
+            {/* Odometer */}
             <Grid item xs={6}>
               <TextField
-                label="Mileage"
+                label="Odometer"
                 type="number"
                 fullWidth
-                value={formData.mileage}
-                onChange={(e) => setFormData({ ...formData, mileage: e.target.value })}
+                value={formData.odometer}
+                onChange={(e) => setFormData({ ...formData, odometer: e.target.value })}
                 InputProps={{
-                  endAdornment: <InputAdornment position="end">km</InputAdornment>,
+                  endAdornment: <InputAdornment position="end">{formData.odometerUnit}</InputAdornment>,
                 }}
-                inputProps={{ 'data-testid': 'vehicle-mileage' }}
+                inputProps={{ 'data-testid': 'vehicle-odometer' }}
               />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                select
+                label="Odometer Unit"
+                fullWidth
+                value={formData.odometerUnit}
+                onChange={(e) => setFormData({ ...formData, odometerUnit: e.target.value })}
+                inputProps={{ 'data-testid': 'vehicle-odometer-unit' }}
+              >
+                <MenuItem value="km">km</MenuItem>
+                <MenuItem value="miles">miles</MenuItem>
+                <MenuItem value="hours">hours</MenuItem>
+              </TextField>
             </Grid>
           </Grid>
 
@@ -695,7 +715,7 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
 
 // ==================== VEHICLE LIST ====================
 const VehicleList: React.FC = observer(() => {
-  const { vehicleStore, authStore } = useStore();
+  const { vehicleStore, authStore, settingsStore } = useStore();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -755,10 +775,6 @@ const VehicleList: React.FC = observer(() => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleRowClick = (vehicle: Vehicle) => {
-    navigate(`/vehicles/${vehicle.id}`);
   };
 
   const handleChangePage = (_: unknown, newPage: number) => {
@@ -844,7 +860,7 @@ const VehicleList: React.FC = observer(() => {
                   <TableCell>Vehicle</TableCell>
                   <TableCell>License Plate</TableCell>
                   <TableCell>Customer</TableCell>
-                  <TableCell>Mileage</TableCell>
+                  <TableCell>Odometer</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -853,8 +869,6 @@ const VehicleList: React.FC = observer(() => {
                   <TableRow
                     key={vehicle.id}
                     hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleRowClick(vehicle)}
                     data-testid="vehicle-row"
                   >
                     <TableCell>
@@ -908,37 +922,72 @@ const VehicleList: React.FC = observer(() => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Typography color="text.secondary">
-                        {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} km` : '-'}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {vehicle.odometer ? (
+                          <>
+                            <OdometerIcon fontSize="small" color="action" />
+                            <Typography fontWeight={500}>
+                              {vehicle.odometer.toLocaleString()} {settingsStore.odometerSettings.unit}
+                            </Typography>
+                          </>
+                        ) : (
+                          <Typography color="text.secondary">-</Typography>
+                        )}
+                      </Box>
                     </TableCell>
                     <TableCell align="right">
-                      {authStore.canEdit && (
-                        <>
-                          <Tooltip title="Edit">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleOpenEdit(vehicle, e)}
-                              data-testid="edit-vehicle"
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteVehicle(vehicle);
-                              }}
-                              data-testid="delete-vehicle"
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </>
-                      )}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
+                        <Tooltip title="View Details">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/vehicles/${vehicle.id}`);
+                            }}
+                            data-testid="view-vehicle"
+                          >
+                            <ViewIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Odometer History">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/vehicles/${vehicle.id}#odometer-history`);
+                            }}
+                            data-testid="odometer-history"
+                          >
+                            <HistoryIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {authStore.canEdit && (
+                          <>
+                            <Tooltip title="Edit">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleOpenEdit(vehicle, e)}
+                                data-testid="edit-vehicle"
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteVehicle(vehicle);
+                                }}
+                                data-testid="delete-vehicle"
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -981,7 +1030,7 @@ const VehicleList: React.FC = observer(() => {
 
 // ==================== VEHICLE DETAIL ====================
 const VehicleDetail: React.FC = observer(() => {
-  const { vehicleStore, authStore } = useStore();
+  const { vehicleStore, authStore, settingsStore } = useStore();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [formOpen, setFormOpen] = useState(false);
@@ -990,6 +1039,13 @@ const VehicleDetail: React.FC = observer(() => {
   const [error, setError] = useState<string | null>(null);
   const [vehicleJobs, setVehicleJobs] = useState<Job[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
+  const [odometerDialogOpen, setOdometerDialogOpen] = useState(false);
+  const [odometerReading, setOdometerReading] = useState('');
+  const [odometerUnit, setOdometerUnit] = useState('km');
+  const [odometerNotes, setOdometerNotes] = useState('');
+  const [odometerWarning, setOdometerWarning] = useState<string | null>(null);
+  const [odometerHistory, setOdometerHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -998,6 +1054,18 @@ const VehicleDetail: React.FC = observer(() => {
       });
     }
   }, [id, vehicleStore]);
+
+  // Handle hash navigation to scroll to odometer history
+  useEffect(() => {
+    if (window.location.hash === '#odometer-history') {
+      setTimeout(() => {
+        const element = document.getElementById('odometer-history');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
+  }, [id]);
 
   // Fetch service history when vehicle is loaded
   useEffect(() => {
@@ -1028,6 +1096,73 @@ const VehicleDetail: React.FC = observer(() => {
       fetchVehicleJobs();
     }
   }, [id]);
+
+  // Fetch odometer history when vehicle is loaded
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!id) return;
+      setLoadingHistory(true);
+      try {
+        await vehicleStore.fetchOdometerHistory(id);
+        setOdometerHistory(vehicleStore.odometerHistory);
+      } catch (err) {
+        console.error('Failed to fetch odometer history:', err);
+        setOdometerHistory([]);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    if (id) {
+      fetchHistory();
+    }
+  }, [id, vehicleStore]);
+
+  // Set default unit from settings when dialog opens
+  useEffect(() => {
+    if (odometerDialogOpen) {
+      setOdometerUnit(settingsStore.odometerSettings.unit);
+      setOdometerReading('');
+      setOdometerNotes('');
+      setOdometerWarning(null);
+    }
+  }, [odometerDialogOpen, settingsStore.odometerSettings.unit]);
+
+  const handleAddOdometerReading = async () => {
+    if (!id || !odometerReading.trim()) return;
+    
+    const reading = parseFloat(odometerReading);
+    if (isNaN(reading) || reading < 0) {
+      setError('Please enter a valid odometer reading');
+      return;
+    }
+
+    try {
+      const result = await vehicleStore.addOdometerReading(
+        id,
+        reading,
+        odometerUnit,
+        odometerNotes || null,
+        true // Update vehicle odometer
+      );
+      
+      if (result.warning) {
+        setOdometerWarning(result.warning);
+        // Still close dialog and refresh
+        setOdometerDialogOpen(false);
+        await vehicleStore.fetchVehicleById(id);
+        await vehicleStore.fetchOdometerHistory(id);
+        setOdometerHistory(vehicleStore.odometerHistory);
+      } else {
+        setOdometerDialogOpen(false);
+        await vehicleStore.fetchVehicleById(id);
+        await vehicleStore.fetchOdometerHistory(id);
+        setOdometerHistory(vehicleStore.odometerHistory);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add odometer reading');
+    }
+  };
 
   const vehicle = vehicleStore.selectedVehicle;
 
@@ -1173,13 +1308,13 @@ const VehicleDetail: React.FC = observer(() => {
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <MileageIcon color="action" />
+                  <OdometerIcon color="action" />
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Current Mileage
+                      Current Odometer
                     </Typography>
                     <Typography>
-                      {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} km` : <em style={{ color: 'gray' }}>Not recorded</em>}
+                      {vehicle.odometer ? `${vehicle.odometer.toLocaleString()} ${settingsStore.odometerSettings.unit}` : <em style={{ color: 'gray' }}>Not recorded</em>}
                     </Typography>
                   </Box>
                 </Box>
@@ -1246,6 +1381,98 @@ const VehicleDetail: React.FC = observer(() => {
               <Typography color={vehicle.notes ? 'text.primary' : 'text.secondary'}>
                 {vehicle.notes || <em>No notes</em>}
               </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Odometer History */}
+        <Grid item xs={12}>
+          <Card id="odometer-history">
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">Odometer History</Typography>
+                {authStore.canEdit && (
+                  <Button 
+                    variant="outlined" 
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={() => setOdometerDialogOpen(true)}
+                  >
+                    Add Reading
+                  </Button>
+                )}
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              {loadingHistory ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : odometerHistory.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <OdometerIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                  <Typography color="text.secondary">
+                    No odometer readings yet
+                  </Typography>
+                </Box>
+              ) : (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Reading</TableCell>
+                        <TableCell>Source</TableCell>
+                        <TableCell>Job</TableCell>
+                        <TableCell>User</TableCell>
+                        <TableCell>Notes</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {odometerHistory.map((reading) => (
+                        <TableRow key={reading.id}>
+                          <TableCell>
+                            {new Date(reading.createdAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Typography fontWeight={500}>
+                              {reading.reading.toLocaleString()} {reading.unit}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={reading.source === 'job' ? 'Job' : 'Ad-hoc'} 
+                              size="small" 
+                              color={reading.source === 'job' ? 'primary' : 'default'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {reading.job ? (
+                              <Link 
+                                href={`/jobs/${reading.jobId}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  navigate(`/jobs/${reading.jobId}`);
+                                }}
+                                sx={{ textDecoration: 'none' }}
+                              >
+                                {reading.job.code}
+                              </Link>
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {reading.user?.name || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {reading.notes || '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -1406,6 +1633,92 @@ const VehicleDetail: React.FC = observer(() => {
         onConfirm={handleDelete}
         isLoading={isSubmitting}
       />
+
+      {/* Odometer Reading Dialog */}
+      <Dialog open={odometerDialogOpen} onClose={() => setOdometerDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Odometer Reading</DialogTitle>
+        <DialogContent>
+          {odometerWarning && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {odometerWarning}
+            </Alert>
+          )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Odometer Reading"
+              type="number"
+              fullWidth
+              value={odometerReading}
+              onChange={(e) => {
+                setOdometerReading(e.target.value);
+                // Check for decreasing odometer
+                const reading = parseFloat(e.target.value);
+                if (!isNaN(reading) && vehicle.odometer !== null) {
+                  const readingInBaseUnit = vehicleStore.convertToBaseUnit(reading, odometerUnit);
+                  if (readingInBaseUnit < vehicle.odometer) {
+                    setOdometerWarning(`Warning: New reading (${reading} ${odometerUnit}) is less than current odometer (${vehicle.odometer} ${settingsStore.odometerSettings.unit}). This may indicate an odometer reset or data entry error.`);
+                  } else {
+                    setOdometerWarning(null);
+                  }
+                } else {
+                  setOdometerWarning(null);
+                }
+              }}
+              InputProps={{
+                endAdornment: <InputAdornment position="end">{odometerUnit}</InputAdornment>,
+              }}
+              autoFocus
+            />
+            <TextField
+              select
+              label="Unit"
+              fullWidth
+              value={odometerUnit}
+              onChange={(e) => {
+                setOdometerUnit(e.target.value);
+                // Re-check warning with new unit
+                const reading = parseFloat(odometerReading);
+                if (!isNaN(reading) && vehicle.odometer !== null) {
+                  const readingInBaseUnit = vehicleStore.convertToBaseUnit(reading, e.target.value);
+                  if (readingInBaseUnit < vehicle.odometer) {
+                    setOdometerWarning(`Warning: New reading (${reading} ${e.target.value}) is less than current odometer (${vehicle.odometer} ${settingsStore.odometerSettings.unit}). This may indicate an odometer reset or data entry error.`);
+                  } else {
+                    setOdometerWarning(null);
+                  }
+                }
+              }}
+            >
+              <MenuItem value="km">km</MenuItem>
+              <MenuItem value="miles">miles</MenuItem>
+              <MenuItem value="hours">hours</MenuItem>
+            </TextField>
+            <TextField
+              label="Notes (optional)"
+              fullWidth
+              multiline
+              rows={3}
+              value={odometerNotes}
+              onChange={(e) => setOdometerNotes(e.target.value)}
+              placeholder="Add any notes about this reading..."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOdometerDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAddOdometerReading}
+            disabled={!odometerReading.trim() || vehicleStore.isLoading}
+          >
+            {vehicleStore.isLoading ? <CircularProgress size={20} /> : 'Add Reading'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 });

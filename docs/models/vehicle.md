@@ -30,7 +30,7 @@ CREATE TABLE vehicles (
   vin VARCHAR(17),
   license_plate VARCHAR(20),
   color VARCHAR(50),
-  mileage INTEGER,
+  odometer INTEGER,
   notes TEXT,
   version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -143,7 +143,7 @@ export class Vehicle {
 | vin | Optional, exactly 17 characters if provided |
 | licensePlate | Optional, 1-20 characters |
 | color | Optional, 1-50 characters |
-| mileage | Optional, non-negative integer |
+| odometer | Optional, non-negative integer |
 | notes | Optional, max 5000 characters |
 
 ### Code Generation
@@ -155,7 +155,7 @@ export class Vehicle {
 ### Business Logic
 1. VIN must be unique if provided
 2. License plate should be unique if provided
-3. Mileage should only increase over time (warn on decrease)
+3. Odometer should only increase over time (warn on decrease)
 4. Vehicle cannot be deleted if it has jobs in progress
 5. Vehicle can be transferred to different customer (with audit trail)
 
@@ -186,7 +186,7 @@ Response: Vehicle (201 Created)
 ### Update Vehicle
 ```
 PATCH /api/vehicles/:id
-Body: { make?, model?, year?, vin?, licensePlate?, color?, mileage?, notes?, version? }
+Body: { make?, model?, year?, vin?, licensePlate?, color?, odometer?, notes?, version? }
 Response: Vehicle
 Error: 409 Conflict if version mismatch (optimistic locking)
 ```
@@ -212,6 +212,26 @@ Body: { newCustomerId }
 Response: Vehicle
 ```
 
+### Update Vehicle Odometer
+```
+PATCH /api/vehicles/:id/odometer
+Body: { odometer: number }
+Response: Vehicle
+```
+
+### Add Odometer Reading (Ad-hoc)
+```
+POST /api/vehicles/:id/odometer-readings
+Body: { reading: number, unit: string, notes?: string, updateVehicle?: boolean }
+Response: { reading: VehicleOdometerReading, warning?: string }
+```
+
+### Get Odometer History
+```
+GET /api/vehicles/:id/odometer-readings
+Response: VehicleOdometerReading[]
+```
+
 ---
 
 ## 🖥️ UI Components
@@ -232,13 +252,13 @@ Response: Vehicle
 - Create/Edit form
 - VIN validation and lookup
 - Year selector
-- Mileage input with validation
+- Odometer input with validation and unit selector
 
 ### VehicleDetail
 - Full vehicle specifications
 - Customer info link
 - Complete service history
-- Mileage tracking graph
+- Odometer tracking graph and history
 
 ### VehicleSelector
 - Dropdown/search for selecting vehicle
@@ -276,10 +296,45 @@ Response: Vehicle
 
 - Vehicle list export (CSV)
 - Service history by vehicle
-- Mileage tracking report
+- Odometer tracking report
 - Vehicles by make/model statistics
 
 ---
+
+---
+
+## 📊 Odometer Reading System
+
+The system tracks historical odometer readings for vehicles, supporting multiple units (km, miles, hours) and maintaining a clear audit trail.
+
+### VehicleOdometerReading Entity
+
+Each odometer reading is stored as a separate record, allowing full historical tracking:
+
+- **reading**: Value in base unit (km for distance, stored as-is for hours)
+- **unit**: Unit used when reading was entered ('km', 'miles', or 'hours')
+- **source**: Either 'job' (recorded as part of a job) or 'adhoc' (manual entry)
+- **jobId**: Reference to job if source is 'job', null for ad-hoc entries
+- **notes**: Optional notes about the reading
+- **createdBy**: User who created the reading
+
+### Unit Conversion
+
+- **km ↔ miles**: 1 mile = 1.60934 km (converted when stored)
+- **hours**: Stored as-is (no conversion, used for equipment/machinery)
+
+### Odometer Reading Workflow
+
+1. **From Job**: When creating/updating a job with an odometer reading, a VehicleOdometerReading record is automatically created with source='job'
+2. **Ad-hoc Entry**: Users can manually add odometer readings from the vehicle detail screen
+3. **Vehicle Update**: The vehicle's current odometer can be updated directly or via ad-hoc readings
+4. **History**: All readings are preserved in the odometer history, showing source, date, user, and associated job (if applicable)
+
+### Validation
+
+- Warning (not blocking) if new reading is less than current vehicle odometer
+- Units are preselected from system default setting but can be changed
+- All readings are stored in base unit (km) for consistency
 
 *See also: [Customer](./customer.md) | [Job](./job.md)*
 

@@ -2,6 +2,7 @@ export * from './User';
 export * from './Customer';
 export * from './Vehicle';
 export * from './VehicleOwner';
+export * from './VehicleOdometerReading';
 export * from './VehicleMake';
 export * from './VehicleModel';
 export * from './Job';

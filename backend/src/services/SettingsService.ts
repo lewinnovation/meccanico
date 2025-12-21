@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   'tax.name': 'GST',
   'currency.code': 'USD',
   'currency.symbol': '$',
+  'odometer.unit': 'km',
   'invoice.prefix': 'INV-',
   'invoice.terms': 'Payment due within 30 days',
   'invoice.footer': 'Thank you for your business!',

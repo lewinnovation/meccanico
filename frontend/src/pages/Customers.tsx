@@ -27,6 +27,10 @@ import {
   Divider,
   Grid,
   Tooltip,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -475,7 +479,7 @@ const CustomerList: React.FC = observer(() => {
 
 // ==================== CUSTOMER DETAIL ====================
 const CustomerDetail: React.FC = observer(() => {
-  const { customerStore, vehicleStore, authStore } = useStore();
+  const { customerStore, vehicleStore, authStore, settingsStore } = useStore();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [formOpen, setFormOpen] = useState(false);
@@ -725,7 +729,7 @@ const CustomerDetail: React.FC = observer(() => {
                         <TableCell>Year</TableCell>
                         <TableCell>License Plate</TableCell>
                         <TableCell>Color</TableCell>
-                        <TableCell align="right">Mileage</TableCell>
+                        <TableCell align="right">Odometer</TableCell>
                         <TableCell align="right">Actions</TableCell>
                       </TableRow>
                     </TableHead>
@@ -768,7 +772,7 @@ const CustomerDetail: React.FC = observer(() => {
                           </TableCell>
                           <TableCell>{vehicle.color || '-'}</TableCell>
                           <TableCell align="right">
-                            {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} km` : '-'}
+                            {vehicle.odometer ? `${vehicle.odometer.toLocaleString()} ${settingsStore.odometerSettings.unit}` : '-'}
                           </TableCell>
                           <TableCell align="right">
                             <Tooltip title="View Details">
@@ -840,7 +844,7 @@ const AddVehicleDialog: React.FC<AddVehicleDialogProps> = observer(({
   customerId,
   customerName,
 }) => {
-  const { vehicleStore } = useStore();
+  const { vehicleStore, settingsStore } = useStore();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     make: '',
@@ -849,7 +853,8 @@ const AddVehicleDialog: React.FC<AddVehicleDialogProps> = observer(({
     vin: '',
     licensePlate: '',
     color: '',
-    mileage: '',
+    odometer: '',
+    odometerUnit: 'km',
     notes: '',
   });
   const [error, setError] = useState<string | null>(null);
@@ -864,7 +869,8 @@ const AddVehicleDialog: React.FC<AddVehicleDialogProps> = observer(({
         vin: '',
         licensePlate: '',
         color: '',
-        mileage: '',
+        odometer: '',
+        odometerUnit: settingsStore.odometerSettings.unit,
         notes: '',
       });
       setError(null);
@@ -889,7 +895,7 @@ const AddVehicleDialog: React.FC<AddVehicleDialogProps> = observer(({
         vin: formData.vin || undefined,
         licensePlate: formData.licensePlate || undefined,
         color: formData.color || undefined,
-        mileage: formData.mileage ? parseInt(formData.mileage, 10) : undefined,
+        odometer: formData.odometer ? parseInt(formData.odometer, 10) : undefined,
         notes: formData.notes || undefined,
       });
       
@@ -983,15 +989,29 @@ const AddVehicleDialog: React.FC<AddVehicleDialogProps> = observer(({
             </Grid>
             <Grid item xs={6}>
               <TextField
-                label="Mileage"
+                label="Odometer"
                 type="number"
                 fullWidth
-                value={formData.mileage}
-                onChange={(e) => setFormData({ ...formData, mileage: e.target.value })}
+                value={formData.odometer}
+                onChange={(e) => setFormData({ ...formData, odometer: e.target.value })}
                 InputProps={{
-                  endAdornment: <InputAdornment position="end">km</InputAdornment>,
+                  endAdornment: <InputAdornment position="end">{formData.odometerUnit}</InputAdornment>,
                 }}
               />
+            </Grid>
+            <Grid item xs={6}>
+              <FormControl fullWidth>
+                <InputLabel>Odometer Unit</InputLabel>
+                <Select
+                  value={formData.odometerUnit}
+                  onChange={(e) => setFormData({ ...formData, odometerUnit: e.target.value })}
+                  label="Odometer Unit"
+                >
+                  <MenuItem value="km">km</MenuItem>
+                  <MenuItem value="miles">miles</MenuItem>
+                  <MenuItem value="hours">hours</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
           </Grid>
 

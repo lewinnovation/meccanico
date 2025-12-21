@@ -2,11 +2,14 @@ import { AppDataSource } from '../config/database';
 import { Vehicle } from '../models/Vehicle';
 import { Customer } from '../models/Customer';
 import { VehicleOwner } from '../models/VehicleOwner';
+import { VehicleOdometerReading } from '../models/VehicleOdometerReading';
 import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, BadRequestError, VersionConflictError } from '../middleware/errorHandler';
 import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 import { In } from 'typeorm';
+import { createAuditLog } from '../utils/auditLogger';
+import { AuditAction } from '../models/AuditLog';
 
 export interface CreateVehicleDto {
   customerIds: string[];
@@ -16,7 +19,7 @@ export interface CreateVehicleDto {
   vin?: string;
   licensePlate?: string;
   color?: string;
-  mileage?: number;
+  odometer?: number;
   notes?: string;
 }
 
@@ -27,7 +30,7 @@ export interface UpdateVehicleDto {
   vin?: string;
   licensePlate?: string;
   color?: string;
-  mileage?: number;
+  odometer?: number;
   notes?: string;
   version?: number;
 }
@@ -36,6 +39,37 @@ export class VehicleService {
   private vehicleRepository = AppDataSource.getRepository(Vehicle);
   private customerRepository = AppDataSource.getRepository(Customer);
   private vehicleOwnerRepository = AppDataSource.getRepository(VehicleOwner);
+  private odometerReadingRepository = AppDataSource.getRepository(VehicleOdometerReading);
+
+  /**
+   * Convert odometer reading to base unit (km)
+   */
+  private convertToBaseUnit(value: number, unit: string): number {
+    switch (unit.toLowerCase()) {
+      case 'miles':
+        return Math.round(value * 1.60934); // Convert miles to km
+      case 'hours':
+        return value; // Hours are stored as-is (no conversion)
+      case 'km':
+      default:
+        return value;
+    }
+  }
+
+  /**
+   * Convert odometer reading from base unit (km) to target unit
+   */
+  private convertFromBaseUnit(value: number, unit: string): number {
+    switch (unit.toLowerCase()) {
+      case 'miles':
+        return Math.round(value / 1.60934); // Convert km to miles
+      case 'hours':
+        return value; // Hours are stored as-is
+      case 'km':
+      default:
+        return value;
+    }
+  }
 
   async findAll(
     page: number = 1,
@@ -269,10 +303,101 @@ export class VehicleService {
     }
   }
 
-  async updateMileage(id: string, mileage: number): Promise<Vehicle> {
+  async updateOdometer(id: string, odometer: number): Promise<Vehicle> {
     const vehicle = await this.findById(id);
-    vehicle.mileage = mileage;
-    return this.vehicleRepository.save(vehicle);
+    const oldValue = vehicle.odometer;
+    vehicle.odometer = odometer;
+    const saved = await this.vehicleRepository.save(vehicle);
+    
+    // Create audit log
+    await createAuditLog(
+      null, // userId will be set by controller
+      AuditAction.UPDATE,
+      'Vehicle',
+      vehicle.id,
+      { odometer: oldValue },
+      { odometer }
+    );
+    
+    return saved;
+  }
+
+  /**
+   * Add an odometer reading (ad-hoc entry)
+   */
+  async addOdometerReading(
+    id: string,
+    reading: number,
+    unit: string,
+    notes: string | null,
+    userId: string | null,
+    updateVehicle: boolean = true
+  ): Promise<{ reading: VehicleOdometerReading; warning?: string }> {
+    const vehicle = await this.findById(id);
+    
+    // Convert to base unit (km)
+    const readingInBaseUnit = this.convertToBaseUnit(reading, unit);
+    
+    // Check for decreasing odometer
+    let warning: string | undefined;
+    if (vehicle.odometer !== null && readingInBaseUnit < vehicle.odometer) {
+      warning = `Warning: New reading (${reading} ${unit}) is less than current odometer (${vehicle.odometer} km). This may indicate an odometer reset or data entry error.`;
+    }
+    
+    // Create odometer reading record
+    const odometerReading = this.odometerReadingRepository.create({
+      vehicleId: id,
+      jobId: null,
+      reading: readingInBaseUnit,
+      unit,
+      source: 'adhoc',
+      notes,
+      createdBy: userId,
+    });
+    
+    const savedReading = await this.odometerReadingRepository.save(odometerReading);
+    
+    // Update vehicle odometer if requested
+    if (updateVehicle) {
+      const oldValue = vehicle.odometer;
+      vehicle.odometer = readingInBaseUnit;
+      await this.vehicleRepository.save(vehicle);
+      
+      // Create audit log
+      await createAuditLog(
+        userId,
+        AuditAction.UPDATE,
+        'Vehicle',
+        vehicle.id,
+        { odometer: oldValue },
+        { odometer: readingInBaseUnit, source: 'adhoc', readingId: savedReading.id }
+      );
+    } else {
+      // Still create audit log for the reading
+      await createAuditLog(
+        userId,
+        AuditAction.CREATE,
+        'VehicleOdometerReading',
+        savedReading.id,
+        null,
+        { vehicleId: id, reading: readingInBaseUnit, unit, source: 'adhoc' }
+      );
+    }
+    
+    return { reading: savedReading, warning };
+  }
+
+  /**
+   * Get odometer reading history for a vehicle
+   */
+  async getOdometerHistory(id: string): Promise<VehicleOdometerReading[]> {
+    await this.findById(id); // Verify vehicle exists
+    
+    return this.odometerReadingRepository.find({
+      where: { vehicleId: id },
+      relations: ['job', 'user'],
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async delete(id: string): Promise<void> {

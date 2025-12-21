@@ -43,6 +43,7 @@ CREATE INDEX idx_settings_key ON settings(key);
 | `tax.name` | string | Tax label (e.g., "GST") |
 | `currency.code` | string | Currency code (e.g., "USD") |
 | `currency.symbol` | string | Currency symbol (e.g., "$") |
+| `odometer.unit` | string | Default odometer unit: 'km', 'miles', or 'hours' |
 | `invoice.prefix` | string | Invoice number prefix |
 | `invoice.terms` | string | Default invoice terms |
 | `invoice.footer` | string | Invoice footer text |

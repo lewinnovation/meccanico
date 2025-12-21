@@ -280,6 +280,7 @@ const CurrencySettings: React.FC = observer(() => {
   const [formData, setFormData] = useState({
     code: '',
     symbol: '',
+    odometerUnit: 'km',
   });
 
   useEffect(() => {
@@ -300,7 +301,10 @@ const CurrencySettings: React.FC = observer(() => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await settingsStore.updateCurrencySettings(formData);
+    await settingsStore.updateCurrencySettings(
+      { code: formData.code, symbol: formData.symbol },
+      { unit: formData.odometerUnit }
+    );
   };
 
   const isReadOnly = !authStore.isAdmin;
@@ -341,6 +345,21 @@ const CurrencySettings: React.FC = observer(() => {
                   disabled={isReadOnly}
                   data-testid="currency-symbol-input"
                 />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth disabled={isReadOnly}>
+                  <InputLabel>Odometer Unit</InputLabel>
+                  <Select
+                    value={formData.odometerUnit}
+                    onChange={(e) => setFormData({ ...formData, odometerUnit: e.target.value })}
+                    label="Odometer Unit"
+                    data-testid="odometer-unit-input"
+                  >
+                    <MenuItem value="km">km</MenuItem>
+                    <MenuItem value="miles">miles</MenuItem>
+                    <MenuItem value="hours">hours</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
               {authStore.isAdmin && (
                 <Grid item xs={12}>
