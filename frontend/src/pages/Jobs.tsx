@@ -2874,7 +2874,17 @@ const JobDetail: React.FC = observer(() => {
               <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
                 Customer
               </Typography>
-              <Typography fontWeight={500}>{job.customer?.name}</Typography>
+              {job.customer ? (
+                <Typography 
+                  fontWeight={500}
+                  sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                  onClick={() => navigate(`/customers/${job.customer!.id}`)}
+                >
+                  {job.customer.name}
+                </Typography>
+              ) : (
+                <Typography fontWeight={500}>Unknown</Typography>
+              )}
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {job.customer?.code}
               </Typography>

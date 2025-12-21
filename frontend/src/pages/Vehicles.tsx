@@ -1193,34 +1193,40 @@ const VehicleDetail: React.FC = observer(() => {
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Owners
+                Vehicles
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
               {vehicle.owners && vehicle.owners.length > 0 ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                  {vehicle.owners.map((owner, index) => {
-                    const isPrimary = vehicle.vehicleOwners?.find(vo => vo.customerId === owner.id)?.isPrimary || index === 0;
-                    return (
-                      <Box key={owner.id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <PersonIcon color="action" sx={{ fontSize: 40 }} />
-                        <Box sx={{ flex: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography fontWeight={500}>{owner.name}</Typography>
-                            {isPrimary && (
-                              <Chip label="Primary" size="small" color="primary" />
-                            )}
+                  {(() => {
+                    // Find the owner who lodged the most recent job
+                    const mostRecentJob = vehicleJobs.length > 0 ? vehicleJobs[0] : null;
+                    const mostRecentOwnerId = mostRecentJob?.customer?.id || null;
+                    
+                    return vehicle.owners.map((owner) => {
+                      const isMostRecent = owner.id === mostRecentOwnerId;
+                      return (
+                        <Box key={owner.id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <PersonIcon color="action" sx={{ fontSize: 40 }} />
+                          <Box sx={{ flex: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography fontWeight={500}>{owner.name}</Typography>
+                              {isMostRecent && (
+                                <Chip label="Most Recent" size="small" color="primary" />
+                              )}
+                            </Box>
+                            <Chip
+                              label={owner.code}
+                              size="small"
+                              sx={{ fontFamily: 'monospace', mt: 0.5 }}
+                              onClick={() => navigate(`/customers/${owner.id}`)}
+                            />
                           </Box>
-                          <Chip
-                            label={owner.code}
-                            size="small"
-                            sx={{ fontFamily: 'monospace', mt: 0.5 }}
-                            onClick={() => navigate(`/customers/${owner.id}`)}
-                          />
                         </Box>
-                      </Box>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </Box>
               ) : (
                 <Typography color="text.secondary">No owners assigned</Typography>
