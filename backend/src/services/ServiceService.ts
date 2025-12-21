@@ -2,7 +2,8 @@ import { AppDataSource } from '../config/database';
 import { Service } from '../models/Service';
 import { ServiceItem, ServiceItemType } from '../models/ServiceItem';
 import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
-import { NotFoundError } from '../middleware/errorHandler';
+import { NotFoundError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 
 export interface ServiceItemDto {
@@ -26,6 +27,7 @@ export interface UpdateServiceDto {
   category?: string;
   isActive?: boolean;
   items?: ServiceItemDto[];
+  version?: number;
 }
 
 export { PaginatedResult };
@@ -128,6 +130,13 @@ export class ServiceService {
   async update(id: string, data: UpdateServiceDto): Promise<Service> {
     const service = await this.findById(id);
 
+    // Check version if provided
+    if (data.version !== undefined && data.version !== service.version) {
+      throw new VersionConflictError(
+        'This service has been modified by another user. Please refresh and try again.'
+      );
+    }
+
     // Update service items if provided
     if (data.items !== undefined) {
       // Remove existing items
@@ -150,7 +159,17 @@ export class ServiceService {
     // Update service fields
     const { items, ...serviceData } = data;
     Object.assign(service, serviceData);
-    await this.repository.save(service);
+    
+    try {
+      await this.repository.save(service);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This service has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
 
     return this.findById(id);
   }

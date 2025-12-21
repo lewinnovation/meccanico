@@ -2420,10 +2420,17 @@ const JobDetail: React.FC = observer(() => {
 
   const handleUpdateLineItem = async (itemId: string, data: { description?: string; quantity?: number; unitPrice?: number }) => {
     if (job) {
-      await jobStore.updateLineItem(job.id, itemId, data);
-      // Refetch audit logs after updating line item
-      if (id) {
-        await auditLogStore.fetchByJob(id);
+      try {
+        await jobStore.updateLineItem(job.id, itemId, data);
+        // Refetch audit logs after updating line item
+        if (id) {
+          await auditLogStore.fetchByJob(id);
+        }
+      } catch (err) {
+        // Version conflict error is already handled by the store
+        // The store refreshes the job data automatically
+        // Just show a notification or let the store error message be displayed
+        console.error('Failed to update line item:', err);
       }
     }
   };
@@ -4059,7 +4066,14 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
       await auditLogStore.fetchByJob(job.id);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update job');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update job';
+      setError(errorMessage);
+      
+      // If it's a version conflict, the store already refreshed the data
+      // Keep the dialog open so user can review changes and retry
+      if (errorMessage.includes('modified by another user')) {
+        // Dialog stays open, error message is already set
+      }
     } finally {
       setSaving(false);
     }

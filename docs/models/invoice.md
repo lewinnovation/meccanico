@@ -27,6 +27,7 @@ CREATE TABLE invoices (
   status VARCHAR(20) NOT NULL DEFAULT 'UNPAID',
   invoice_date TIMESTAMP WITH TIME ZONE NOT NULL,
   due_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -90,6 +91,10 @@ export class Invoice {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column({ type: 'int', default: 0 })
+  @Version()
+  version: number;
 
   @OneToOne(() => Job, (job) => job.invoice)
   @JoinColumn({ name: 'job_id' })

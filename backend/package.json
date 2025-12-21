@@ -16,6 +16,7 @@
     "db:seed": "ts-node src/utils/seedData.ts",
     "db:setup": "ts-node src/utils/resetAndSeed.ts",
     "db:migrate-templates": "ts-node src/utils/migrateCommunicationTemplates.ts",
+    "db:add-versions": "ts-node src/utils/addVersionColumns.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

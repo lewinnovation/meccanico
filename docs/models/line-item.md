@@ -30,6 +30,7 @@ CREATE TABLE line_items (
   unit_price DECIMAL(10,2) NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   notes TEXT,
+  version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -203,8 +204,9 @@ Response: LineItem (201 Created)
 ### Update Line Item
 ```
 PATCH /api/jobs/:jobId/line-items/:id
-Body: { description?, quantity?, unitPrice?, notes? }
+Body: { description?, quantity?, unitPrice?, notes?, version? }
 Response: LineItem
+Error: 409 Conflict if version mismatch (optimistic locking)
 ```
 
 ### Delete Line Item

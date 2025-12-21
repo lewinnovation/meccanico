@@ -95,12 +95,22 @@ interface BaseEntity {
   id: string;           // UUID primary key
   createdAt: Date;      // Record creation timestamp
   updatedAt: Date;      // Last update timestamp
+  version: number;       // Optimistic locking version (default: 0)
 }
 
 interface CodedEntity extends BaseEntity {
   code: string;         // Human-readable code (I001, J002, etc.)
 }
 ```
+
+### Optimistic Locking
+
+All entities that support updates include a `version` column for optimistic locking. This prevents concurrent edit conflicts:
+
+- **Version Column**: Integer field that increments automatically on each update
+- **Conflict Detection**: When updating, the system checks if the version matches
+- **Error Handling**: If versions don't match, a `VersionConflictError` (409) is returned
+- **User Experience**: Frontend automatically refreshes data and shows a user-friendly message
 
 ---
 

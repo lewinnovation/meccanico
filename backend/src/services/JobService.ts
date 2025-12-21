@@ -7,7 +7,8 @@ import { Customer } from '../models/Customer';
 import { Invoice } from '../models/Invoice';
 import { VehicleOwner } from '../models/VehicleOwner';
 import { generateJobCode } from '../utils/codeGenerator';
-import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
+import { NotFoundError, ConflictError, BadRequestError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 import { createAuditLog } from '../utils/auditLogger';
 import { AuditAction } from '../models/AuditLog';
@@ -33,6 +34,7 @@ export interface UpdateJobDto {
   discountAmount?: number;
   discountPercent?: number;
   dueDate?: string;
+  version?: number;
 }
 
 export interface CreateLineItemDto {
@@ -50,6 +52,7 @@ export interface UpdateLineItemDto {
   quantity?: number;
   unitPrice?: number;
   notes?: string;
+  version?: number;
 }
 
 export { PaginatedResult };
@@ -285,7 +288,14 @@ export class JobService {
       throw new NotFoundError('Job not found');
     }
     
-    console.log('DEBUG: found job (no relations):', { id: job.id, customerId: job.customerId, vehicleId: job.vehicleId });
+    console.log('DEBUG: found job (no relations):', { id: job.id, customerId: job.customerId, vehicleId: job.vehicleId, version: job.version });
+    
+    // Check version if provided
+    if (data.version !== undefined && data.version !== job.version) {
+      throw new VersionConflictError(
+        'This job has been modified by another user. Please refresh and try again.'
+      );
+    }
     
     // Prevent editing cancelled jobs
     if (job.status === JobStatus.CANCELLED) {
@@ -389,26 +399,25 @@ export class JobService {
     });
 
     // Save using TypeORM entity save method
-    // Explicitly mark the entity as changed to ensure all fields are updated
-    const savedJob = await this.repository.save(job);
+    // TypeORM will automatically increment version on save
+    let savedJob: Job;
+    try {
+      savedJob = await this.repository.save(job);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This job has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
     
     console.log('DEBUG: After save - saved job:', {
       id: savedJob.id,
       customerId: savedJob.customerId,
       vehicleId: savedJob.vehicleId,
       taxRate: savedJob.taxRate,
-    });
-    
-    // Verify the save actually persisted the changes by checking the database directly
-    const verifyJob = await this.repository.findOne({
-      where: { id },
-      select: ['id', 'customerId', 'vehicleId', 'taxRate'],
-    });
-    console.log('DEBUG: Verification query - job from DB:', {
-      id: verifyJob?.id,
-      customerId: verifyJob?.customerId,
-      vehicleId: verifyJob?.vehicleId,
-      taxRate: verifyJob?.taxRate,
+      version: savedJob.version,
     });
     
     // Create audit log
@@ -620,6 +629,13 @@ export class JobService {
       throw new NotFoundError('Line item not found');
     }
 
+    // Check version if provided
+    if (data.version !== undefined && data.version !== lineItem.version) {
+      throw new VersionConflictError(
+        'This line item has been modified by another user. Please refresh and try again.'
+      );
+    }
+
     // Store old values for audit log
     const oldValue = {
       jobId: lineItem.jobId,
@@ -630,7 +646,18 @@ export class JobService {
     };
 
     Object.assign(lineItem, data);
-    const savedItem = await this.lineItemRepository.save(lineItem);
+    
+    let savedItem: LineItem;
+    try {
+      savedItem = await this.lineItemRepository.save(lineItem);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This line item has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
     
     // Create audit log
     await createAuditLog(

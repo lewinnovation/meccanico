@@ -22,6 +22,7 @@ export interface LineItem {
   unitPrice: number;
   notes: string | null;
   sortOrder: number;
+  version?: number;
 }
 
 export interface CreateLineItemDto {
@@ -48,6 +49,7 @@ export interface Customer {
   email: string | null;
   phone: string | null;
   address: string | null;
+  version?: number;
 }
 
 export interface Vehicle {
@@ -78,6 +80,7 @@ export interface Job {
   invoiceId: string | null;
   createdAt: string;
   updatedAt: string;
+  version?: number;
   customer?: Customer;
   vehicle?: Vehicle;
   assignee?: { id: string; name: string };
@@ -250,7 +253,13 @@ export class JobStore {
     this.error = null;
 
     try {
-      const response = await api.patch(`/api/jobs/${id}`, data);
+      // Include current version from selectedJob if available
+      const updateData = {
+        ...data,
+        version: this.selectedJob?.version,
+      };
+
+      const response = await api.patch(`/api/jobs/${id}`, updateData);
 
       runInAction(() => {
         const index = this.jobs.findIndex((j) => j.id === id);
@@ -264,7 +273,18 @@ export class JobStore {
       });
 
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle version conflict (409)
+      if (error.response?.status === 409 && error.response?.data?.message?.includes('modified by another user')) {
+        // Refresh the job data to get latest version
+        await this.fetchJobById(id);
+        runInAction(() => {
+          this.error = 'This job was modified by another user. The page has been refreshed with the latest data.';
+          this.isLoading = false;
+        });
+        throw new Error('This job was modified by another user. The page has been refreshed with the latest data.');
+      }
+      
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Failed to update job';
         this.isLoading = false;
@@ -400,7 +420,14 @@ export class JobStore {
 
   async updateLineItem(jobId: string, lineItemId: string, data: UpdateLineItemDto): Promise<LineItem | null> {
     try {
-      const response = await api.patch(`/api/jobs/${jobId}/line-items/${lineItemId}`, data);
+      // Include current version from lineItem if available
+      const lineItem = this.selectedJob?.lineItems?.find((li) => li.id === lineItemId);
+      const updateData = {
+        ...data,
+        version: lineItem?.version,
+      };
+
+      const response = await api.patch(`/api/jobs/${jobId}/line-items/${lineItemId}`, updateData);
 
       runInAction(() => {
         if (this.selectedJob?.id === jobId && this.selectedJob.lineItems) {
@@ -412,7 +439,17 @@ export class JobStore {
       });
 
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle version conflict (409)
+      if (error.response?.status === 409 && error.response?.data?.message?.includes('modified by another user')) {
+        // Refresh the job data to get latest version
+        await this.fetchJobById(jobId);
+        runInAction(() => {
+          this.error = 'This line item was modified by another user. The page has been refreshed with the latest data.';
+        });
+        throw new Error('This line item was modified by another user. The page has been refreshed with the latest data.');
+      }
+      
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Failed to update line item';
       });

@@ -7,6 +7,7 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  VersionColumn,
 } from 'typeorm';
 import { User } from './User';
 import { TemplateItem } from './TemplateItem';
@@ -36,6 +37,9 @@ export class Template {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'created_by' })

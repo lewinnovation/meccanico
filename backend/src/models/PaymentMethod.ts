@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  VersionColumn,
 } from 'typeorm';
 
 @Entity('payment_methods')
@@ -22,4 +23,7 @@ export class PaymentMethod {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 }

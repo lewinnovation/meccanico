@@ -1,7 +1,8 @@
 import { AppDataSource } from '../config/database';
 import { Inventory } from '../models/Inventory';
 import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
-import { NotFoundError, ConflictError } from '../middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 
 export interface CreateInventoryDto {
@@ -26,6 +27,7 @@ export interface UpdateInventoryDto {
   category?: string;
   unit?: string;
   isActive?: boolean;
+  version?: number;
 }
 
 export interface AdjustStockDto {
@@ -126,6 +128,13 @@ export class InventoryService {
   async update(id: string, data: UpdateInventoryDto): Promise<Inventory> {
     const item = await this.findById(id);
 
+    // Check version if provided
+    if (data.version !== undefined && data.version !== item.version) {
+      throw new VersionConflictError(
+        'This inventory item has been modified by another user. Please refresh and try again.'
+      );
+    }
+
     // Check for duplicate SKU if being updated
     if (data.sku && data.sku !== item.sku) {
       const existing = await this.repository.findOne({
@@ -137,7 +146,17 @@ export class InventoryService {
     }
 
     Object.assign(item, data);
-    return this.repository.save(item);
+    
+    try {
+      return await this.repository.save(item);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This inventory item has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
   }
 
   async delete(id: string): Promise<void> {

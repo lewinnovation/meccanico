@@ -12,6 +12,7 @@ export interface Customer {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  version?: number;
 }
 
 export class CustomerStore {
@@ -82,19 +83,35 @@ export class CustomerStore {
   }
 
   async updateCustomer(id: string, data: Partial<Customer>): Promise<Customer> {
-    const response = await api.patch(`/api/customers/${id}`, data);
-    
-    runInAction(() => {
-      const index = this.customers.findIndex((c) => c.id === id);
-      if (index !== -1) {
-        this.customers[index] = response.data;
-      }
-      if (this.selectedCustomer?.id === id) {
-        this.selectedCustomer = response.data;
-      }
-    });
+    try {
+      // Include current version from selectedCustomer if available
+      const updateData = {
+        ...data,
+        version: this.selectedCustomer?.version,
+      };
 
-    return response.data;
+      const response = await api.patch(`/api/customers/${id}`, updateData);
+      
+      runInAction(() => {
+        const index = this.customers.findIndex((c) => c.id === id);
+        if (index !== -1) {
+          this.customers[index] = response.data;
+        }
+        if (this.selectedCustomer?.id === id) {
+          this.selectedCustomer = response.data;
+        }
+      });
+
+      return response.data;
+    } catch (error: any) {
+      // Handle version conflict (409)
+      if (error.response?.status === 409 && error.response?.data?.message?.includes('modified by another user')) {
+        // Refresh the customer data
+        await this.fetchCustomerById(id);
+        throw new Error('This customer was modified by another user. The page has been refreshed with the latest data.');
+      }
+      throw error;
+    }
   }
 
   async deleteCustomer(id: string): Promise<void> {

@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToMany,
   OneToMany,
+  VersionColumn,
 } from 'typeorm';
 import { Vehicle } from './Vehicle';
 import { VehicleOwner } from './VehicleOwner';
@@ -38,6 +39,9 @@ export class Customer {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 
   @ManyToMany(() => Vehicle, (vehicle) => vehicle.owners)
   vehicles: Vehicle[];

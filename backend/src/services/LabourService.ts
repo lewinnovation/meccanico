@@ -1,7 +1,8 @@
 import { AppDataSource } from '../config/database';
 import { Labour } from '../models/Labour';
 import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
-import { NotFoundError } from '../middleware/errorHandler';
+import { NotFoundError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 
 export interface CreateLabourDto {
@@ -21,6 +22,7 @@ export interface UpdateLabourDto {
   isFlatRate?: boolean;
   category?: string;
   isActive?: boolean;
+  version?: number;
 }
 
 export { PaginatedResult };
@@ -98,8 +100,26 @@ export class LabourService {
 
   async update(id: string, data: UpdateLabourDto): Promise<Labour> {
     const item = await this.findById(id);
+    
+    // Check version if provided
+    if (data.version !== undefined && data.version !== item.version) {
+      throw new VersionConflictError(
+        'This labour item has been modified by another user. Please refresh and try again.'
+      );
+    }
+    
     Object.assign(item, data);
-    return this.repository.save(item);
+    
+    try {
+      return await this.repository.save(item);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This labour item has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
   }
 
   async delete(id: string): Promise<void> {

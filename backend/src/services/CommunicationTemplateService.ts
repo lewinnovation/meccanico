@@ -4,7 +4,8 @@ import {
   CommunicationTemplateType,
   CommunicationTemplateAction,
 } from '../models/CommunicationTemplate';
-import { NotFoundError, ConflictError } from '../middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { getAvailableTemplateVariables } from '../utils/templateRenderer';
 
 export interface CreateCommunicationTemplateDto {
@@ -21,6 +22,7 @@ export interface UpdateCommunicationTemplateDto {
   subject?: string | null;
   body?: string;
   isActive?: boolean;
+  version?: number;
 }
 
 export class CommunicationTemplateService {
@@ -97,6 +99,13 @@ export class CommunicationTemplateService {
   async update(id: string, data: UpdateCommunicationTemplateDto): Promise<CommunicationTemplate> {
     const template = await this.findById(id);
 
+    // Check version if provided
+    if (data.version !== undefined && data.version !== template.version) {
+      throw new VersionConflictError(
+        'This communication template has been modified by another user. Please refresh and try again.'
+      );
+    }
+
     if (data.name !== undefined) {
       template.name = data.name;
     }
@@ -110,7 +119,16 @@ export class CommunicationTemplateService {
       template.isActive = data.isActive;
     }
 
-    return this.repository.save(template);
+    try {
+      return await this.repository.save(template);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This communication template has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
   }
 
   /**

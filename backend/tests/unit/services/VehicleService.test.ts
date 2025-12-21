@@ -268,6 +268,7 @@ describe('VehicleService', () => {
         year: 2023,
         vin: null,
         licensePlate: null,
+        version: 0,
         jobs: [],
       };
       mockVehicleRepository.findOne.mockResolvedValue(existingVehicle);
@@ -290,6 +291,39 @@ describe('VehicleService', () => {
       await expect(vehicleService.update('non-existent', { make: 'Honda' })).rejects.toThrow(NotFoundError);
     });
 
+    it('should throw VersionConflictError when version mismatch', async () => {
+      const existingVehicle = {
+        id: 'test-id',
+        code: 'V001',
+        make: 'Toyota',
+        model: 'Camry',
+        version: 1,
+        jobs: [],
+      };
+      mockVehicleRepository.findOne.mockResolvedValue(existingVehicle);
+
+      await expect(vehicleService.update('test-id', { make: 'Honda', version: 0 }))
+        .rejects
+        .toThrow(VersionConflictError);
+    });
+
+    it('should handle OptimisticLockVersionMismatchError from TypeORM', async () => {
+      const existingVehicle = {
+        id: 'test-id',
+        code: 'V001',
+        make: 'Toyota',
+        model: 'Camry',
+        version: 0,
+        jobs: [],
+      };
+      mockVehicleRepository.findOne.mockResolvedValue(existingVehicle);
+      mockVehicleRepository.save.mockRejectedValue(new OptimisticLockVersionMismatchError('', ''));
+
+      await expect(vehicleService.update('test-id', { make: 'Honda' }))
+        .rejects
+        .toThrow(VersionConflictError);
+    });
+
     it('should throw ConflictError when updating to existing VIN', async () => {
       const existingVehicle = {
         id: 'test-id',
@@ -298,6 +332,7 @@ describe('VehicleService', () => {
         model: 'Camry',
         vin: 'OLD123456789DEF01',
         licensePlate: null,
+        version: 0,
         jobs: [],
       };
       mockVehicleRepository.findOne

@@ -1,6 +1,7 @@
 import { CustomerService, CreateCustomerDto, UpdateCustomerDto } from '../../../src/services/CustomerService';
 import { Customer } from '../../../src/models/Customer';
-import { NotFoundError, ConflictError } from '../../../src/middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError } from '../../../src/middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { generateCustomerCode } from '../../../src/utils/codeGenerator';
 
 // Mock dependencies
@@ -272,6 +273,7 @@ describe('CustomerService', () => {
       name: 'John Smith',
       email: 'john@example.com',
       phone: '555-1234',
+      version: 0,
       vehicles: [],
     };
 
@@ -312,6 +314,23 @@ describe('CustomerService', () => {
       const result = await customerService.update('123', { email: 'john@example.com' });
 
       expect(result.email).toBe('john@example.com');
+    });
+
+    it('should throw VersionConflictError when version mismatch', async () => {
+      mockRepository.findOne.mockResolvedValue({ ...existingCustomer, version: 1 });
+
+      await expect(customerService.update('123', { name: 'John Updated', version: 0 }))
+        .rejects
+        .toThrow(VersionConflictError);
+    });
+
+    it('should handle OptimisticLockVersionMismatchError from TypeORM', async () => {
+      mockRepository.findOne.mockResolvedValue(existingCustomer);
+      mockRepository.save.mockRejectedValue(new OptimisticLockVersionMismatchError('', ''));
+
+      await expect(customerService.update('123', { name: 'John Updated' }))
+        .rejects
+        .toThrow(VersionConflictError);
     });
 
     it('should update multiple fields at once', async () => {

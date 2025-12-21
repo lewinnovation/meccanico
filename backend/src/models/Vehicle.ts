@@ -7,6 +7,7 @@ import {
   ManyToMany,
   OneToMany,
   JoinTable,
+  VersionColumn,
 } from 'typeorm';
 import { Customer } from './Customer';
 import { Job } from './Job';
@@ -49,6 +50,9 @@ export class Vehicle {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 
   @ManyToMany(() => Customer, (customer) => customer.vehicles)
   @JoinTable({

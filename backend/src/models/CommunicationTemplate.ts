@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  VersionColumn,
 } from 'typeorm';
 
 export enum CommunicationTemplateType {
@@ -57,4 +58,7 @@ export class CommunicationTemplate {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 }

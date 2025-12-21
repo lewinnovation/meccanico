@@ -32,6 +32,7 @@ CREATE TABLE vehicles (
   color VARCHAR(50),
   mileage INTEGER,
   notes TEXT,
+  version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -100,6 +101,10 @@ export class Vehicle {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column({ type: 'int', default: 0 })
+  @Version()
+  version: number;
 
   // Relations
   @ManyToOne(() => Customer, (customer) => customer.vehicles)
@@ -181,8 +186,9 @@ Response: Vehicle (201 Created)
 ### Update Vehicle
 ```
 PATCH /api/vehicles/:id
-Body: { make?, model?, year?, vin?, licensePlate?, color?, mileage?, notes? }
+Body: { make?, model?, year?, vin?, licensePlate?, color?, mileage?, notes?, version? }
 Response: Vehicle
+Error: 409 Conflict if version mismatch (optimistic locking)
 ```
 
 ### Delete Vehicle

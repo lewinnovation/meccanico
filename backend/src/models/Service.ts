@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  VersionColumn,
 } from 'typeorm';
 import { ServiceItem } from './ServiceItem';
 
@@ -36,6 +37,9 @@ export class Service {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 
   @OneToMany(() => ServiceItem, (item) => item.service, { cascade: true })
   items: ServiceItem[];

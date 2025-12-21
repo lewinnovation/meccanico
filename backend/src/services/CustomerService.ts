@@ -2,7 +2,8 @@ import { AppDataSource } from '../config/database';
 import { Customer } from '../models/Customer';
 import { VehicleOwner } from '../models/VehicleOwner';
 import { generateCustomerCode } from '../utils/codeGenerator';
-import { NotFoundError, ConflictError } from '../middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 
 export interface CreateCustomerDto {
@@ -19,6 +20,7 @@ export interface UpdateCustomerDto {
   phone?: string;
   address?: string;
   notes?: string;
+  version?: number;
 }
 
 export { PaginatedResult };
@@ -106,6 +108,13 @@ export class CustomerService {
   async update(id: string, data: UpdateCustomerDto): Promise<Customer> {
     const customer = await this.findById(id);
 
+    // Check version if provided
+    if (data.version !== undefined && data.version !== customer.version) {
+      throw new VersionConflictError(
+        'This customer has been modified by another user. Please refresh and try again.'
+      );
+    }
+
     // Check for duplicate email if being updated
     if (data.email && data.email !== customer.email) {
       const existing = await this.repository.findOne({
@@ -117,7 +126,17 @@ export class CustomerService {
     }
 
     Object.assign(customer, data);
-    return this.repository.save(customer);
+    
+    try {
+      return await this.repository.save(customer);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This customer has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
   }
 
   async delete(id: string): Promise<void> {

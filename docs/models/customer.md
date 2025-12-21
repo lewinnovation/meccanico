@@ -28,6 +28,7 @@ CREATE TABLE customers (
   phone VARCHAR(50),
   address TEXT,
   notes TEXT,
+  version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -81,6 +82,10 @@ export class Customer {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column({ type: 'int', default: 0 })
+  @Version()
+  version: number;
 
   // Relations
   @OneToMany(() => Vehicle, (vehicle) => vehicle.customer)
@@ -165,8 +170,9 @@ Response: Customer (201 Created)
 ### Update Customer
 ```
 PATCH /api/customers/:id
-Body: { name?, email?, phone?, address?, notes? }
+Body: { name?, email?, phone?, address?, notes?, version? }
 Response: Customer
+Error: 409 Conflict if version mismatch (optimistic locking)
 ```
 
 ### Delete Customer

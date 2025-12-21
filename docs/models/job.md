@@ -36,6 +36,7 @@ CREATE TABLE jobs (
   started_at TIMESTAMP WITH TIME ZONE,
   completed_at TIMESTAMP WITH TIME ZONE,
   invoice_id UUID REFERENCES invoices(id),
+  version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -303,8 +304,9 @@ Response: Job (201 Created)
 ### Update Job
 ```
 PATCH /api/jobs/:id
-Body: { assignedTo?, notes?, internalNotes?, taxRate?, discountAmount?, discountPercent?, dueDate? }
+Body: { assignedTo?, notes?, internalNotes?, taxRate?, discountAmount?, discountPercent?, dueDate?, version? }
 Response: Job
+Error: 409 Conflict if version mismatch (optimistic locking)
 ```
 
 ### Update Job Status

@@ -6,7 +6,8 @@ import {
 } from '../../../src/services/JobService';
 import { Job, JobStatus } from '../../../src/models/Job';
 import { LineItem, LineItemType } from '../../../src/models/LineItem';
-import { NotFoundError, ConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
+import { NotFoundError, ConflictError, BadRequestError, VersionConflictError } from '../../../src/middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { generateJobCode, CODE_PREFIXES } from '../../../src/utils/codeGenerator';
 
 // Mock dependencies
@@ -52,6 +53,7 @@ describe('JobService', () => {
     quantity: 2,
     unitPrice: 50,
     sortOrder: 0,
+    version: 0,
   };
 
   beforeEach(() => {
@@ -438,12 +440,22 @@ describe('JobService', () => {
     it('should update line item on non-COMPLETED job', async () => {
       const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
       mockJobRepository.findOne.mockResolvedValue(bookedJob);
-      mockLineItemRepository.findOne.mockResolvedValue(mockLineItem);
-      mockLineItemRepository.save.mockResolvedValue({ ...mockLineItem, quantity: 5 });
+      mockLineItemRepository.findOne.mockResolvedValue({ ...mockLineItem, version: 0 });
+      mockLineItemRepository.save.mockResolvedValue({ ...mockLineItem, quantity: 5, version: 1 });
 
       const result = await jobService.updateLineItem('job-1', 'item-1', { quantity: 5 });
 
       expect(mockLineItemRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw VersionConflictError when line item version mismatch', async () => {
+      const bookedJob = { ...mockJob, status: JobStatus.BOOKED };
+      mockJobRepository.findOne.mockResolvedValue(bookedJob);
+      mockLineItemRepository.findOne.mockResolvedValue({ ...mockLineItem, version: 1 });
+
+      await expect(jobService.updateLineItem('job-1', 'item-1', { quantity: 5, version: 0 }))
+        .rejects
+        .toThrow(VersionConflictError);
     });
 
     it('should throw ConflictError when updating item on COMPLETED job', async () => {

@@ -24,6 +24,7 @@ export interface Template {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+  version?: number;
   items: TemplateItem[];
 }
 
@@ -132,7 +133,13 @@ export class TemplateStore {
     this.isLoading = true;
     this.error = null;
     try {
-      const response = await api.patch(`/api/templates/${id}`, data);
+      // Include current version from selectedItem if available
+      const updateData = {
+        ...data,
+        version: this.selectedItem?.version,
+      };
+
+      const response = await api.patch(`/api/templates/${id}`, updateData);
       runInAction(() => {
         const index = this.items.findIndex((i) => i.id === id);
         if (index >= 0) {
@@ -144,7 +151,18 @@ export class TemplateStore {
         this.isLoading = false;
       });
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle version conflict (409)
+      if (error.response?.status === 409 && error.response?.data?.message?.includes('modified by another user')) {
+        // Refresh the template data
+        await this.fetchById(id);
+        runInAction(() => {
+          this.error = 'This template was modified by another user. The page has been refreshed with the latest data.';
+          this.isLoading = false;
+        });
+        throw new Error('This template was modified by another user. The page has been refreshed with the latest data.');
+      }
+      
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Failed to update template';
         this.isLoading = false;

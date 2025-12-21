@@ -39,6 +39,7 @@ export interface Invoice {
   dueDate: string;
   createdAt: string;
   updatedAt: string;
+  version?: number;
   creditNotes?: CreditNote[];
   payments?: Payment[];
   job?: {

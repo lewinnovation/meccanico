@@ -8,6 +8,7 @@ export interface PaymentMethod {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  version?: number;
 }
 
 export interface CreatePaymentMethodDto {
@@ -97,7 +98,14 @@ export class PaymentMethodStore {
     this.error = null;
 
     try {
-      const response = await api.put(`/api/payment-methods/${id}`, data);
+      // Include current version from payment method if available
+      const paymentMethod = this.allPaymentMethods.find((pm) => pm.id === id);
+      const updateData = {
+        ...data,
+        version: paymentMethod?.version,
+      };
+
+      const response = await api.put(`/api/payment-methods/${id}`, updateData);
 
       runInAction(() => {
         const index = this.allPaymentMethods.findIndex((pm) => pm.id === id);
@@ -118,7 +126,18 @@ export class PaymentMethodStore {
       });
 
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle version conflict (409)
+      if (error.response?.status === 409 && error.response?.data?.message?.includes('modified by another user')) {
+        // Refresh the payment methods data
+        await this.fetchAllIncludingInactive();
+        runInAction(() => {
+          this.error = 'This payment method was modified by another user. The page has been refreshed with the latest data.';
+          this.isLoading = false;
+        });
+        throw new Error('This payment method was modified by another user. The page has been refreshed with the latest data.');
+      }
+      
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Failed to update payment method';
         this.isLoading = false;

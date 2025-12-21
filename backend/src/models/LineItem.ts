@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  VersionColumn,
 } from 'typeorm';
 import { Job } from './Job';
 
@@ -50,6 +51,9 @@ export class LineItem {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 
   @ManyToOne(() => Job, (job) => job.lineItems, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'job_id' })

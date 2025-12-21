@@ -33,6 +33,7 @@ CREATE TABLE inventory (
   category VARCHAR(100),
   unit VARCHAR(50) DEFAULT 'each',
   is_active BOOLEAN DEFAULT true,
+  version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -184,8 +185,9 @@ Response: Inventory (201 Created)
 ### Update Inventory Item
 ```
 PATCH /api/inventory/:id
-Body: { name?, description?, sku?, unitPrice?, costPrice?, minimumStock?, category?, unit?, isActive? }
+Body: { name?, description?, sku?, unitPrice?, costPrice?, minimumStock?, category?, unit?, isActive?, version? }
 Response: Inventory
+Error: 409 Conflict if version mismatch (optimistic locking)
 ```
 
 ### Delete Inventory Item

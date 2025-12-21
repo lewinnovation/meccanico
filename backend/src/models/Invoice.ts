@@ -7,6 +7,7 @@ import {
   OneToOne,
   JoinColumn,
   OneToMany,
+  VersionColumn,
 } from 'typeorm';
 import { Job } from './Job';
 import { CreditNote } from './CreditNote';
@@ -46,6 +47,9 @@ export class Invoice {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 
   @OneToOne(() => Job, (job) => job.invoice)
   @JoinColumn({ name: 'job_id' })

@@ -46,6 +46,7 @@ export interface Vehicle {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  version?: number;
   owners?: Array<{
     id: string;
     code: string;
@@ -213,7 +214,13 @@ export class VehicleStore {
     this.isLoading = true;
     this.error = null;
     try {
-      const response = await api.patch(`/api/vehicles/${id}`, data);
+      // Include current version from selectedVehicle if available
+      const updateData = {
+        ...data,
+        version: this.selectedVehicle?.version,
+      };
+
+      const response = await api.patch(`/api/vehicles/${id}`, updateData);
       runInAction(() => {
         const index = this.vehicles.findIndex((v) => v.id === id);
         if (index !== -1) {
@@ -225,7 +232,18 @@ export class VehicleStore {
         this.isLoading = false;
       });
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle version conflict (409)
+      if (error.response?.status === 409 && error.response?.data?.message?.includes('modified by another user')) {
+        // Refresh the vehicle data
+        await this.fetchVehicleById(id);
+        runInAction(() => {
+          this.error = 'This vehicle was modified by another user. The page has been refreshed with the latest data.';
+          this.isLoading = false;
+        });
+        throw new Error('This vehicle was modified by another user. The page has been refreshed with the latest data.');
+      }
+      
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Failed to update vehicle';
         this.isLoading = false;

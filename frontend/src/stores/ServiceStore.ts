@@ -22,6 +22,7 @@ export interface Service {
   items: ServiceItem[];
   createdAt: string;
   updatedAt: string;
+  version?: number;
 }
 
 export interface CreateServiceItemDto {
@@ -143,7 +144,13 @@ export class ServiceStore {
     this.isLoading = true;
     this.error = null;
     try {
-      const response = await api.patch(`/api/services/${id}`, data);
+      // Include current version from selectedItem if available
+      const updateData = {
+        ...data,
+        version: this.selectedItem?.version,
+      };
+
+      const response = await api.patch(`/api/services/${id}`, updateData);
       runInAction(() => {
         const index = this.items.findIndex((i) => i.id === id);
         if (index >= 0) {
@@ -155,7 +162,18 @@ export class ServiceStore {
         this.isLoading = false;
       });
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle version conflict (409)
+      if (error.response?.status === 409 && error.response?.data?.message?.includes('modified by another user')) {
+        // Refresh the service data
+        await this.fetchById(id);
+        runInAction(() => {
+          this.error = 'This service was modified by another user. The page has been refreshed with the latest data.';
+          this.isLoading = false;
+        });
+        throw new Error('This service was modified by another user. The page has been refreshed with the latest data.');
+      }
+      
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Failed to update service';
         this.isLoading = false;

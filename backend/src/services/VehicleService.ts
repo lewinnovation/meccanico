@@ -3,7 +3,8 @@ import { Vehicle } from '../models/Vehicle';
 import { Customer } from '../models/Customer';
 import { VehicleOwner } from '../models/VehicleOwner';
 import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
-import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
+import { NotFoundError, ConflictError, BadRequestError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 import { In } from 'typeorm';
 
@@ -28,6 +29,7 @@ export interface UpdateVehicleDto {
   color?: string;
   mileage?: number;
   notes?: string;
+  version?: number;
 }
 
 export class VehicleService {
@@ -226,6 +228,13 @@ export class VehicleService {
   async update(id: string, data: UpdateVehicleDto): Promise<Vehicle> {
     const vehicle = await this.findById(id);
 
+    // Check version if provided
+    if (data.version !== undefined && data.version !== vehicle.version) {
+      throw new VersionConflictError(
+        'This vehicle has been modified by another user. Please refresh and try again.'
+      );
+    }
+
     // Check for duplicate VIN if being updated
     if (data.vin && data.vin !== vehicle.vin) {
       const existing = await this.vehicleRepository.findOne({
@@ -247,7 +256,17 @@ export class VehicleService {
     }
 
     Object.assign(vehicle, data);
-    return this.vehicleRepository.save(vehicle);
+    
+    try {
+      return await this.vehicleRepository.save(vehicle);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This vehicle has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
   }
 
   async updateMileage(id: string, mileage: number): Promise<Vehicle> {

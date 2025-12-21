@@ -26,6 +26,7 @@ export interface CommunicationTemplate {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  version?: number;
 }
 
 export interface TemplateVariable {
@@ -150,7 +151,14 @@ export class CommunicationTemplateStore {
     this.successMessage = null;
 
     try {
-      const response = await api.put(`/api/communication-templates/${id}`, data);
+      // Include current version from template if available
+      const template = this.templates.find((t) => t.id === id);
+      const updateData = {
+        ...data,
+        version: template?.version,
+      };
+
+      const response = await api.put(`/api/communication-templates/${id}`, updateData);
       runInAction(() => {
         const index = this.templates.findIndex((t) => t.id === id);
         if (index !== -1) {
@@ -160,7 +168,18 @@ export class CommunicationTemplateStore {
         this.successMessage = 'Template updated successfully';
       });
       return true;
-    } catch (err) {
+    } catch (err: any) {
+      // Handle version conflict (409)
+      if (err.response?.status === 409 && err.response?.data?.message?.includes('modified by another user')) {
+        // Refresh templates
+        await this.fetchTemplates();
+        runInAction(() => {
+          this.error = 'This template was modified by another user. The page has been refreshed with the latest data.';
+          this.isSaving = false;
+        });
+        return false;
+      }
+      
       runInAction(() => {
         this.error = err instanceof Error ? err.message : 'Failed to update template';
         this.isSaving = false;

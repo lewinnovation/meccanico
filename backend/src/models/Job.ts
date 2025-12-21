@@ -8,6 +8,7 @@ import {
   OneToMany,
   OneToOne,
   JoinColumn,
+  VersionColumn,
 } from 'typeorm';
 import { Customer } from './Customer';
 import { Vehicle } from './Vehicle';
@@ -80,6 +81,9 @@ export class Job {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @VersionColumn()
+  version: number;
 
   @ManyToOne(() => Customer)
   @JoinColumn({ name: 'customer_id' })

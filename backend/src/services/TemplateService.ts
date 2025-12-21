@@ -3,7 +3,8 @@ import { Template } from '../models/Template';
 import { TemplateItem } from '../models/TemplateItem';
 import { LineItemType } from '../models/LineItem';
 import { generateCode, CODE_PREFIXES } from '../utils/codeGenerator';
-import { NotFoundError } from '../middleware/errorHandler';
+import { NotFoundError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 
 export interface TemplateItemDto {
@@ -28,6 +29,7 @@ export interface UpdateTemplateDto {
   description?: string;
   isGlobal?: boolean;
   items?: TemplateItemDto[];
+  version?: number;
 }
 
 export { PaginatedResult };
@@ -131,8 +133,19 @@ export class TemplateService {
   }
 
   async update(id: string, data: UpdateTemplateDto): Promise<Template> {
-    // First verify template exists
-    await this.findById(id);
+    // Load template to check version
+    const template = await this.repository.findOne({ where: { id } });
+    
+    if (!template) {
+      throw new NotFoundError('Template not found');
+    }
+
+    // Check version if provided
+    if (data.version !== undefined && data.version !== template.version) {
+      throw new VersionConflictError(
+        'This template has been modified by another user. Please refresh and try again.'
+      );
+    }
 
     // Update template items if provided
     if (data.items !== undefined) {
@@ -156,10 +169,19 @@ export class TemplateService {
       }
     }
 
-    // Update template fields directly via update query to avoid cascade issues
+    // Update template fields using entity save to support version checking
     const { items, ...templateData } = data;
-    if (Object.keys(templateData).length > 0) {
-      await this.repository.update(id, templateData);
+    Object.assign(template, templateData);
+    
+    try {
+      await this.repository.save(template);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This template has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
     }
 
     return this.findById(id);

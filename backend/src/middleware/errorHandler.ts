@@ -47,6 +47,13 @@ export class ConflictError extends ApiError {
   }
 }
 
+export class VersionConflictError extends ApiError {
+  constructor(message: string = 'This record has been modified by another user. Please refresh and try again.') {
+    super(409, message);
+    this.name = 'VersionConflictError';
+  }
+}
+
 export class BadRequestError extends ApiError {
   constructor(message: string = 'Bad request') {
     super(400, message);

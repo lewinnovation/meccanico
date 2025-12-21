@@ -1,7 +1,8 @@
 import { AppDataSource } from '../config/database';
 import { PaymentMethod } from '../models/PaymentMethod';
 import { Payment } from '../models/Payment';
-import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { NotFoundError, BadRequestError, VersionConflictError } from '../middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 
 export interface CreatePaymentMethodDto {
   name: string;
@@ -10,6 +11,7 @@ export interface CreatePaymentMethodDto {
 export interface UpdatePaymentMethodDto {
   name?: string;
   isActive?: boolean;
+  version?: number;
 }
 
 export class PaymentMethodService {
@@ -77,6 +79,13 @@ export class PaymentMethodService {
   async update(id: string, data: UpdatePaymentMethodDto): Promise<PaymentMethod> {
     const paymentMethod = await this.findById(id);
 
+    // Check version if provided
+    if (data.version !== undefined && data.version !== paymentMethod.version) {
+      throw new VersionConflictError(
+        'This payment method has been modified by another user. Please refresh and try again.'
+      );
+    }
+
     // If updating name, check for duplicates
     if (data.name && data.name !== paymentMethod.name) {
       const existing = await this.repository.findOne({
@@ -94,7 +103,16 @@ export class PaymentMethodService {
       paymentMethod.isActive = data.isActive;
     }
 
-    return await this.repository.save(paymentMethod);
+    try {
+      return await this.repository.save(paymentMethod);
+    } catch (error) {
+      if (error instanceof OptimisticLockVersionMismatchError) {
+        throw new VersionConflictError(
+          'This payment method has been modified by another user. Please refresh and try again.'
+        );
+      }
+      throw error;
+    }
   }
 
   /**
