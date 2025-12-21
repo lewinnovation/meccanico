@@ -2005,6 +2005,7 @@ interface SelectedLineItem {
   id: string;
   name: string;
   code: string;
+  sku?: string | null;
   unitPrice: number;
   type: 'INVENTORY' | 'LABOUR' | 'SERVICE';
 }
@@ -2163,6 +2164,7 @@ const JobDetail: React.FC = observer(() => {
           id: item.id,
           name: item.name,
           code: item.code,
+          sku: item.sku,
           unitPrice: item.unitPrice,
           type: 'INVENTORY' as const,
         }));
@@ -2359,10 +2361,16 @@ const JobDetail: React.FC = observer(() => {
         unitPrice: 0,
       };
     } else if (selectedLineItem) {
+      // For inventory items, use SKU if available, otherwise fallback to code
+      // For labour and service items, use code (they don't have SKU)
+      const identifier = selectedLineItem.type === 'INVENTORY' && selectedLineItem.sku
+        ? selectedLineItem.sku
+        : selectedLineItem.code;
+      
       itemData = {
         type: lineItemType,
         referenceId: selectedLineItem.id,
-        description: `${selectedLineItem.name} (${selectedLineItem.code})`,
+        description: `${selectedLineItem.name} (${identifier})`,
         quantity: parseFloat(lineItemQuantity) || 1,
         unitPrice: parseFloat(lineItemPrice) || selectedLineItem.unitPrice,
       };
@@ -3215,7 +3223,14 @@ const JobDetail: React.FC = observer(() => {
               <>
                 <Autocomplete
                   options={getLineItemOptions()}
-                  getOptionLabel={(option) => `${option.name} (${option.code})`}
+                  getOptionLabel={(option) => {
+                    // For inventory items, show SKU if available, otherwise code
+                    // For labour and service items, show code
+                    const identifier = option.type === 'INVENTORY' && option.sku
+                      ? option.sku
+                      : option.code;
+                    return `${option.name} (${identifier})`;
+                  }}
                   value={selectedLineItem}
                   onChange={(_, value) => {
                     setSelectedLineItem(value);
@@ -3231,19 +3246,26 @@ const JobDetail: React.FC = observer(() => {
                       placeholder="Search..."
                     />
                   )}
-                  renderOption={(props, option) => (
-                    <li {...props} key={option.id}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                        <Box>
-                          <Typography variant="body2" fontWeight={500}>{option.name}</Typography>
-                          <Typography variant="caption" color="text.secondary">{option.code}</Typography>
+                  renderOption={(props, option) => {
+                    // For inventory items, show SKU if available, otherwise code
+                    // For labour and service items, show code
+                    const identifier = option.type === 'INVENTORY' && option.sku
+                      ? option.sku
+                      : option.code;
+                    return (
+                      <li {...props} key={option.id}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                          <Box>
+                            <Typography variant="body2" fontWeight={500}>{option.name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{identifier}</Typography>
+                          </Box>
+                          <Typography variant="body2" color="primary">
+                            {settingsStore.currencySettings.symbol || '$'}{Number(option.unitPrice).toFixed(2)}
+                          </Typography>
                         </Box>
-                        <Typography variant="body2" color="primary">
-                          {settingsStore.currencySettings.symbol || '$'}{Number(option.unitPrice).toFixed(2)}
-                        </Typography>
-                      </Box>
-                    </li>
-                  )}
+                      </li>
+                    );
+                  }}
                   isOptionEqualToValue={(option, value) => option.id === value.id}
                   loading={
                     lineItemType === 'INVENTORY'
