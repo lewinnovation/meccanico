@@ -274,7 +274,18 @@ export class JobService {
   }
 
   async update(id: string, data: UpdateJobDto, userId?: string | null): Promise<Job> {
-    const job = await this.findById(id);
+    console.log('DEBUG: update called with:', { id, data });
+    // Load job WITHOUT relations first to ensure TypeORM tracks changes to foreign key columns
+    // If we load with relations, TypeORM might not detect changes to customerId/vehicleId
+    const job = await this.repository.findOne({
+      where: { id },
+    });
+    
+    if (!job) {
+      throw new NotFoundError('Job not found');
+    }
+    
+    console.log('DEBUG: found job (no relations):', { id: job.id, customerId: job.customerId, vehicleId: job.vehicleId });
     
     // Prevent editing cancelled jobs
     if (job.status === JobStatus.CANCELLED) {
@@ -301,15 +312,15 @@ export class JobService {
     }
 
     // Customer and vehicle can only be changed in BOOKED status
-    const isChangingCustomer = data.customerId && data.customerId !== job.customerId;
-    const isChangingVehicle = data.vehicleId && data.vehicleId !== job.vehicleId;
+    const isChangingCustomer = data.customerId !== undefined && data.customerId !== job.customerId;
+    const isChangingVehicle = data.vehicleId !== undefined && data.vehicleId !== (job.vehicleId || null);
 
     if ((isChangingCustomer || isChangingVehicle) && job.status !== JobStatus.BOOKED) {
       throw new ConflictError('Customer and vehicle can only be changed when job is in BOOKED status');
     }
 
-    // If changing customer, verify customer exists
-    if (isChangingCustomer) {
+    // Verify customer exists if provided
+    if (data.customerId !== undefined) {
       const customerRepository = AppDataSource.getRepository(Customer);
       const customer = await customerRepository.findOne({
         where: { id: data.customerId },
@@ -320,56 +331,31 @@ export class JobService {
       }
     }
 
-    // If changing vehicle, verify it exists and customer is an owner
-    if (isChangingVehicle) {
+    // Verify vehicle exists if provided
+    if (data.vehicleId !== undefined && data.vehicleId !== null) {
       const vehicle = await this.vehicleRepository.findOne({
         where: { id: data.vehicleId },
-        relations: ['vehicleOwners'],
       });
 
       if (!vehicle) {
         throw new NotFoundError('Vehicle not found');
       }
-
-      const targetCustomerId = data.customerId || job.customerId;
-      const isOwner = vehicle.vehicleOwners?.some(
-        vo => vo.customerId === targetCustomerId
-      );
-
-      if (!isOwner) {
-        throw new BadRequestError('Customer must be an owner of the selected vehicle');
-      }
     }
 
-    // If changing customer and vehicle is set, verify customer is an owner
-    if (isChangingCustomer && job.vehicleId) {
-      const vehicle = await this.vehicleRepository.findOne({
-        where: { id: job.vehicleId },
-        relations: ['vehicleOwners'],
-      });
-
-      if (vehicle) {
-        const isOwner = vehicle.vehicleOwners?.some(
-          vo => vo.customerId === data.customerId
-        );
-
-        if (!isOwner) {
-          throw new BadRequestError('Customer must be an owner of the vehicle');
-        }
-      }
-    }
-
-    // If only changing customer (no vehicle specified), clear vehicle
-    if (isChangingCustomer && !data.vehicleId) {
-      job.vehicleId = null;
-    }
-
+    // Update the job entity using TypeORM entity methods
     // Explicitly set customer and vehicle IDs if provided
     if (data.customerId !== undefined) {
+      console.log('DEBUG: Setting customerId from', job.customerId, 'to', data.customerId);
       job.customerId = data.customerId;
     }
     if (data.vehicleId !== undefined) {
+      console.log('DEBUG: Setting vehicleId from', job.vehicleId, 'to', data.vehicleId);
       job.vehicleId = data.vehicleId;
+    }
+
+    // If only changing customer (no vehicle specified), clear vehicle
+    if (isChangingCustomer && data.vehicleId === undefined && !isChangingVehicle) {
+      job.vehicleId = null;
     }
 
     // Update other fields
@@ -395,20 +381,48 @@ export class JobService {
       job.dueDate = data.dueDate ? new Date(data.dueDate) : null;
     }
 
-    await this.repository.save(job);
+    console.log('DEBUG: Before save - job entity:', {
+      id: job.id,
+      customerId: job.customerId,
+      vehicleId: job.vehicleId,
+      taxRate: job.taxRate,
+    });
+
+    // Save using TypeORM entity save method
+    // Explicitly mark the entity as changed to ensure all fields are updated
+    const savedJob = await this.repository.save(job);
+    
+    console.log('DEBUG: After save - saved job:', {
+      id: savedJob.id,
+      customerId: savedJob.customerId,
+      vehicleId: savedJob.vehicleId,
+      taxRate: savedJob.taxRate,
+    });
+    
+    // Verify the save actually persisted the changes by checking the database directly
+    const verifyJob = await this.repository.findOne({
+      where: { id },
+      select: ['id', 'customerId', 'vehicleId', 'taxRate'],
+    });
+    console.log('DEBUG: Verification query - job from DB:', {
+      id: verifyJob?.id,
+      customerId: verifyJob?.customerId,
+      vehicleId: verifyJob?.vehicleId,
+      taxRate: verifyJob?.taxRate,
+    });
     
     // Create audit log
     const newValue = {
-      customerId: job.customerId,
-      vehicleId: job.vehicleId,
-      assignedTo: job.assignedTo,
-      notes: job.notes,
-      internalNotes: job.internalNotes,
-      taxRate: job.taxRate,
-      discountAmount: job.discountAmount,
-      discountPercent: job.discountPercent,
-      dueDate: job.dueDate,
-      status: job.status,
+      customerId: savedJob.customerId,
+      vehicleId: savedJob.vehicleId,
+      assignedTo: savedJob.assignedTo,
+      notes: savedJob.notes,
+      internalNotes: savedJob.internalNotes,
+      taxRate: savedJob.taxRate,
+      discountAmount: savedJob.discountAmount,
+      discountPercent: savedJob.discountPercent,
+      dueDate: savedJob.dueDate,
+      status: savedJob.status,
     };
     
     await createAuditLog(
@@ -420,7 +434,32 @@ export class JobService {
       newValue
     );
     
-    return this.findById(id);
+    // Reload the job with all relations to ensure we return fresh data
+    // Use query builder to bypass any potential caching issues
+    const updatedJob = await this.repository
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.customer', 'customer')
+      .leftJoinAndSelect('job.vehicle', 'vehicle')
+      .leftJoinAndSelect('job.assignee', 'assignee')
+      .leftJoinAndSelect('job.lineItems', 'lineItems')
+      .leftJoinAndSelect('job.invoice', 'invoice')
+      .where('job.id = :id', { id })
+      .orderBy('lineItems.sortOrder', 'ASC')
+      .getOne();
+
+    if (!updatedJob) {
+      throw new NotFoundError('Job not found after update');
+    }
+
+    console.log('DEBUG: After reload - updated job:', {
+      id: updatedJob.id,
+      customerId: updatedJob.customerId,
+      vehicleId: updatedJob.vehicleId,
+      customer: updatedJob.customer ? { id: updatedJob.customer.id, name: updatedJob.customer.name } : null,
+      vehicle: updatedJob.vehicle ? { id: updatedJob.vehicle.id, make: updatedJob.vehicle.make, model: updatedJob.vehicle.model } : null,
+    });
+
+    return updatedJob;
   }
 
   async updateStatus(id: string, newStatus: JobStatus, userId?: string | null): Promise<Job> {

@@ -4108,18 +4108,21 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
                   />
                 )}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
-                renderOption={(props, option) => (
-                  <li {...props}>
-                    <Box>
-                      <Typography fontWeight={500}>
-                        {option.year} {option.make} {option.model}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {option.code}{option.licensePlate && ` • ${option.licensePlate}`}
-                      </Typography>
-                    </Box>
-                  </li>
-                )}
+                renderOption={(props, option) => {
+                  const { key, ...otherProps } = props;
+                  return (
+                    <li key={key} {...otherProps}>
+                      <Box>
+                        <Typography fontWeight={500}>
+                          {option.year} {option.make} {option.model}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.code}{option.licensePlate && ` • ${option.licensePlate}`}
+                        </Typography>
+                      </Box>
+                    </li>
+                  );
+                }}
               />
               <Divider sx={{ my: 1 }} />
             </>
