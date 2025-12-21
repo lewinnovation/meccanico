@@ -21,6 +21,8 @@ import { CreditNoteService } from '../services/CreditNoteService';
 import { PaymentMethod } from '../models/PaymentMethod';
 import { PaymentMethodService } from '../services/PaymentMethodService';
 import { PaymentService } from '../services/PaymentService';
+import { Payment } from '../models/Payment';
+import { CreditNote } from '../models/CreditNote';
 import * as bcrypt from 'bcryptjs';
 import { generateCustomerCode, generateCode, CODE_PREFIXES } from './codeGenerator';
 
@@ -395,6 +397,49 @@ export const vehicleMakesWithModels = [
  */
 export async function seedDatabase(): Promise<void> {
   console.log('🌱 Starting comprehensive database seeding...');
+  console.log('  Clearing existing seed data...');
+
+  // Clear all seed data first to ensure clean state
+  // Use DELETE instead of TRUNCATE to avoid foreign key constraint issues
+  // DELETE respects foreign keys and will work correctly when done in order
+  // Since this is a development reset, we can safely delete all data
+  // Using raw SQL DELETE to avoid TRUNCATE foreign key constraint issues
+  const queryRunner = AppDataSource.createQueryRunner();
+  
+  try {
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    
+    // Use TRUNCATE CASCADE to handle circular foreign key dependencies
+    // CASCADE automatically deletes dependent rows, handling the jobs<->invoices circular reference
+    await queryRunner.query('TRUNCATE TABLE communication_templates CASCADE');
+    await queryRunner.query('TRUNCATE TABLE payments CASCADE');
+    await queryRunner.query('TRUNCATE TABLE credit_notes CASCADE');
+    await queryRunner.query('TRUNCATE TABLE payment_methods CASCADE');
+    await queryRunner.query('TRUNCATE TABLE template_items CASCADE');
+    await queryRunner.query('TRUNCATE TABLE templates CASCADE');
+    await queryRunner.query('TRUNCATE TABLE line_items CASCADE');
+    await queryRunner.query('TRUNCATE TABLE invoices CASCADE');
+    await queryRunner.query('TRUNCATE TABLE jobs CASCADE');
+    await queryRunner.query('TRUNCATE TABLE service_items CASCADE');
+    await queryRunner.query('TRUNCATE TABLE services CASCADE');
+    await queryRunner.query('TRUNCATE TABLE labour CASCADE');
+    await queryRunner.query('TRUNCATE TABLE inventory CASCADE');
+    await queryRunner.query('TRUNCATE TABLE vehicle_owners CASCADE');
+    await queryRunner.query('TRUNCATE TABLE vehicles CASCADE');
+    await queryRunner.query('TRUNCATE TABLE vehicle_models CASCADE');
+    await queryRunner.query('TRUNCATE TABLE vehicle_makes CASCADE');
+    await queryRunner.query('TRUNCATE TABLE customers CASCADE');
+    
+    await queryRunner.commitTransaction();
+  } catch (error) {
+    await queryRunner.rollbackTransaction();
+    throw error;
+  } finally {
+    await queryRunner.release();
+  }
+
+  console.log('  ✓ Cleared all existing seed data');
 
   // Seed vehicle makes and models
   await seedVehicleMakesAndModels();
@@ -444,13 +489,6 @@ async function seedVehicleMakesAndModels(): Promise<void> {
   const makeRepository = AppDataSource.getRepository(VehicleMake);
   const modelRepository = AppDataSource.getRepository(VehicleModel);
 
-  // Check if makes already exist
-  const existingMakesCount = await makeRepository.count();
-  if (existingMakesCount > 0) {
-    console.log('  Vehicle makes already seeded, skipping...');
-    return;
-  }
-
   console.log('  Seeding vehicle makes and models...');
 
   let sortOrder = 0;
@@ -482,13 +520,13 @@ async function seedVehicleMakesAndModels(): Promise<void> {
 async function seedDefaultUsers(): Promise<void> {
   const userRepository = AppDataSource.getRepository(User);
 
-  // Check if admin exists
+  // Check if admin exists (don't recreate if exists to preserve admin account)
   const existingAdmin = await userRepository.findOne({
     where: { email: 'admin@meccanico.dev' },
   });
 
   if (existingAdmin) {
-    console.log('  Default users already exist, skipping...');
+    console.log('  Default admin user already exists, skipping...');
     return;
   }
 
@@ -618,12 +656,7 @@ async function seedSettings(): Promise<void> {
 async function seedCustomers(): Promise<Customer[]> {
   const customerRepository = AppDataSource.getRepository(Customer);
 
-  // Check if customers already exist
-  const existingCount = await customerRepository.count();
-  if (existingCount > 0) {
-    console.log('  Customers already seeded, skipping...');
-    return await customerRepository.find();
-  }
+  // Data is already cleared in seedDatabase
 
   console.log('  Seeding customers...');
 
@@ -713,12 +746,7 @@ async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
   const vehicleRepository = AppDataSource.getRepository(Vehicle);
   const vehicleOwnerRepository = AppDataSource.getRepository(VehicleOwner);
 
-  // Check if vehicles already exist
-  const existingCount = await vehicleRepository.count();
-  if (existingCount > 0) {
-    console.log('  Vehicles already seeded, skipping...');
-    return await vehicleRepository.find();
-  }
+  // Data is already cleared in seedDatabase
 
   console.log('  Seeding vehicles...');
 
@@ -772,12 +800,7 @@ async function seedVehicles(customers: Customer[]): Promise<Vehicle[]> {
 async function seedInventory(): Promise<Inventory[]> {
   const inventoryRepository = AppDataSource.getRepository(Inventory);
 
-  // Check if inventory already exists
-  const existingCount = await inventoryRepository.count();
-  if (existingCount > 0) {
-    console.log('  Inventory already seeded, skipping...');
-    return await inventoryRepository.find();
-  }
+  // Data is already cleared in seedDatabase
 
   console.log('  Seeding inventory items...');
 
@@ -830,12 +853,7 @@ async function seedInventory(): Promise<Inventory[]> {
 async function seedLabour(): Promise<Labour[]> {
   const labourRepository = AppDataSource.getRepository(Labour);
 
-  // Check if labour already exists
-  const existingCount = await labourRepository.count();
-  if (existingCount > 0) {
-    console.log('  Labour already seeded, skipping...');
-    return await labourRepository.find();
-  }
+  // Data is already cleared in seedDatabase
 
   console.log('  Seeding labour rates...');
 
@@ -879,12 +897,7 @@ async function seedServices(inventoryItems: Inventory[], labourItems: Labour[]):
   const serviceRepository = AppDataSource.getRepository(Service);
   const serviceItemRepository = AppDataSource.getRepository(ServiceItem);
 
-  // Check if services already exist
-  const existingCount = await serviceRepository.count();
-  if (existingCount > 0) {
-    console.log('  Services already seeded, skipping...');
-    return await serviceRepository.find({ relations: ['items'] });
-  }
+  // Data is already cleared in seedDatabase
 
   console.log('  Seeding services...');
 
@@ -996,12 +1009,7 @@ async function seedTemplates(inventoryItems: Inventory[], labourItems: Labour[],
   const templateItemRepository = AppDataSource.getRepository(TemplateItem);
   const userRepository = AppDataSource.getRepository(User);
 
-  // Check if templates already exist
-  const existingCount = await templateRepository.count();
-  if (existingCount > 0) {
-    console.log('  Templates already seeded, skipping...');
-    return;
-  }
+  // Data is already cleared in seedDatabase
 
   console.log('  Seeding templates...');
 
@@ -1160,12 +1168,7 @@ async function seedJobs(
   const lineItemRepository = AppDataSource.getRepository(LineItem);
   const userRepository = AppDataSource.getRepository(User);
 
-  // Check if jobs already exist
-  const existingCount = await jobRepository.count();
-  if (existingCount > 0) {
-    console.log('  Jobs already seeded, skipping...');
-    return;
-  }
+  // Data is already cleared in seedDatabase
 
   console.log('  Seeding jobs...');
 
@@ -1494,12 +1497,9 @@ async function seedJobs(
 async function seedCommunicationTemplates(): Promise<void> {
   const templateRepository = AppDataSource.getRepository(CommunicationTemplate);
 
-  // Check if templates already exist
-  const existingCount = await templateRepository.count();
-  if (existingCount > 0) {
-    console.log('  Communication templates already seeded, skipping...');
-    return;
-  }
+  // Remove all existing templates to ensure clean state
+  console.log('  Removing existing communication templates...');
+  await templateRepository.clear();
 
   console.log('  Seeding communication templates...');
 
@@ -1649,6 +1649,76 @@ Best regards,
 {shop_name}`,
       isActive: true,
     },
+    {
+      name: 'New Account',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.EMAIL_NEW_ACCOUNT,
+      subject: 'Welcome to {shop_name} - Your Account Details',
+      body: `<p>Hi {user_name},</p>
+
+<p>Your account has been created for {shop_name}.</p>
+
+<p><strong>Email:</strong> {user_email}</p>
+<p><strong>Temporary Password:</strong> {password}</p>
+
+<p>Please log in at <a href="{login_url}">{login_url}</a> and change your password as soon as possible.</p>
+
+<p>If you have any questions, please contact us.</p>
+
+<p><strong>Phone:</strong> {shop_phone}<br>
+<strong>Email:</strong> {shop_email}</p>
+
+<p>Welcome aboard!</p>
+
+<p>Best regards,<br>
+{shop_name}</p>`,
+      isActive: true,
+    },
+    {
+      name: 'Password Reset',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.EMAIL_PASSWORD_RESET,
+      subject: 'Password Reset - {shop_name}',
+      body: `<p>Hi {user_name},</p>
+
+<p>Your password has been reset for your {shop_name} account.</p>
+
+<p><strong>Email:</strong> {user_email}</p>
+<p><strong>New Password:</strong> {password}</p>
+
+<p>Please log in at <a href="{login_url}">{login_url}</a> and change your password as soon as possible.</p>
+
+<p>If you did not request this password reset, please contact us immediately.</p>
+
+<p><strong>Phone:</strong> {shop_phone}<br>
+<strong>Email:</strong> {shop_email}</p>
+
+<p>Best regards,<br>
+{shop_name}</p>`,
+      isActive: true,
+    },
+    {
+      name: 'Account Suspended',
+      type: CommunicationTemplateType.EMAIL,
+      action: CommunicationTemplateAction.EMAIL_ACCOUNT_SUSPENDED,
+      subject: 'Account Suspended - {shop_name}',
+      body: `<p>Hi {user_name},</p>
+
+<p>Your account for {shop_name} has been suspended.</p>
+
+<p><strong>Email:</strong> {user_email}</p>
+
+<p>You will not be able to access the system until your account is reactivated by an administrator.</p>
+
+<p>If you believe this is an error or have any questions, please contact us.</p>
+
+<p><strong>Phone:</strong> {shop_phone}<br>
+<strong>Email:</strong> {shop_email}</p>
+
+<p>Best regards,<br>
+{shop_name}</p>`,
+      isActive: true,
+    },
   ];
 
   for (const templateData of defaultTemplates) {
@@ -1681,18 +1751,12 @@ async function seedPaymentMethods(): Promise<void> {
   ];
 
   for (const methodName of defaultPaymentMethods) {
-    // Check if payment method already exists
-    const existing = await paymentMethodRepository.findOne({
-      where: { name: methodName },
-    });
-
-    if (!existing) {
-      try {
-        await paymentMethodService.create({ name: methodName });
-        console.log(`  ✓ Created payment method: ${methodName}`);
-      } catch (error) {
-        console.error(`  ✗ Failed to create payment method ${methodName}:`, error);
-      }
+    // Data is already cleared in seedDatabase, so just create
+    try {
+      await paymentMethodService.create({ name: methodName });
+      console.log(`  ✓ Created payment method: ${methodName}`);
+    } catch (error) {
+      console.error(`  ✗ Failed to create payment method ${methodName}:`, error);
     }
   }
 

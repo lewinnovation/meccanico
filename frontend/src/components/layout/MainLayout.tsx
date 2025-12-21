@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, Button, useTheme } from '@mui/material';
 import { Menu as MenuIcon, Search as SearchIcon, Add as AddIcon, People } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +6,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '../../stores/RootStore';
 import { Sidebar } from './Sidebar';
 import { CommandPalette } from '../common/CommandPalette';
+import { ProfileDialog } from '../profile/ProfileDialog';
 
 const SIDEBAR_WIDTH = 240;
 
@@ -17,6 +18,18 @@ export const MainLayout: React.FC<MainLayoutProps> = observer(({ children }) => 
   const theme = useTheme();
   const navigate = useNavigate();
   const { uiStore } = useStore();
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenProfile = () => {
+      setProfileDialogOpen(true);
+    };
+
+    window.addEventListener('openProfile', handleOpenProfile);
+    return () => {
+      window.removeEventListener('openProfile', handleOpenProfile);
+    };
+  }, []);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -145,6 +158,9 @@ export const MainLayout: React.FC<MainLayoutProps> = observer(({ children }) => 
 
       {/* Command Palette */}
       <CommandPalette />
+
+      {/* Profile Dialog */}
+      <ProfileDialog open={profileDialogOpen} onClose={() => setProfileDialogOpen(false)} />
     </Box>
   );
 });

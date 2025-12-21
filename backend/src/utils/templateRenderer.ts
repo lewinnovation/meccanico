@@ -5,25 +5,29 @@ import { SettingsService } from '../services/SettingsService';
 import { LineItem, LineItemType } from '../models/LineItem';
 
 export interface TemplateVariables {
-  customer_name: string;
-  customer_email: string | null;
-  customer_phone: string | null;
-  job_code: string;
-  job_status: string;
-  vehicle_year: string | null;
-  vehicle_make: string | null;
-  vehicle_model: string | null;
-  vehicle_vin: string | null;
-  vehicle_license_plate: string | null;
-  rego: string | null;
-  car_information: string;
+  customer_name?: string;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  job_code?: string;
+  job_status?: string;
+  vehicle_year?: string | null;
+  vehicle_make?: string | null;
+  vehicle_model?: string | null;
+  vehicle_vin?: string | null;
+  vehicle_license_plate?: string | null;
+  rego?: string | null;
+  car_information?: string;
   shop_name: string;
   shop_phone: string;
   shop_email: string;
   shop_address: string;
-  line_items: string;
+  line_items?: string;
   invoice_total?: string;
   estimate_total?: string;
+  user_name?: string;
+  user_email?: string;
+  password?: string;
+  login_url?: string;
 }
 
 /**
@@ -191,5 +195,41 @@ export function getAvailableTemplateVariables(): Array<{ key: string; descriptio
     { key: 'line_items', description: 'Formatted HTML table of job line items' },
     { key: 'invoice_total', description: 'Invoice total amount with thousand separators (for invoices only)' },
     { key: 'estimate_total', description: 'Estimate total amount with thousand separators (for estimates only)' },
+    { key: 'user_name', description: 'User full name' },
+    { key: 'user_email', description: 'User email address' },
+    { key: 'password', description: 'Temporary password (for new account/reset)' },
+    { key: 'login_url', description: 'URL to login page' },
   ];
+}
+
+/**
+ * Build template variables for user-related emails
+ */
+export async function buildUserTemplateVariables(
+  userName: string,
+  userEmail: string,
+  password: string | null,
+  settingsService: SettingsService
+): Promise<TemplateVariables> {
+  // Get shop settings
+  const shopName = ((await settingsService.findByKey('shop.name')).value as string) || 'Meccanico';
+  const shopAddress = ((await settingsService.findByKey('shop.address')).value as string) || '';
+  const shopPhone = ((await settingsService.findByKey('shop.phone')).value as string) || '';
+  const shopEmail = ((await settingsService.findByKey('shop.email')).value as string) || '';
+
+  // Get login URL from environment or use default
+  const loginUrl = process.env.FRONTEND_URL 
+    ? `${process.env.FRONTEND_URL}/login`
+    : 'http://localhost:3000/login';
+
+  return {
+    user_name: userName,
+    user_email: userEmail,
+    password: password || '',
+    login_url: loginUrl,
+    shop_name: shopName,
+    shop_phone: shopPhone,
+    shop_email: shopEmail,
+    shop_address: shopAddress,
+  };
 }

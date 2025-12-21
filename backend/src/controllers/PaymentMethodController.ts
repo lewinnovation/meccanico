@@ -36,10 +36,9 @@ export class PaymentMethodController extends Controller {
   }
 
   /**
-   * Get all payment methods including inactive (Admin only)
+   * Get all payment methods including inactive (read-only for all authenticated users)
    */
   @Get('/all')
-  @Security('jwt', ['ADMIN'])
   @SuccessResponse('200', 'All payment methods retrieved')
   public async getAllPaymentMethods(): Promise<PaymentMethod[]> {
     return this.paymentMethodService.findAllIncludingInactive();
@@ -99,10 +98,9 @@ export class PaymentMethodController extends Controller {
   }
 
   /**
-   * Get usage counts for all payment methods (Admin only)
+   * Get usage counts for all payment methods (read-only for all authenticated users)
    */
   @Get('/usage-counts')
-  @Security('jwt', ['ADMIN'])
   @SuccessResponse('200', 'Usage counts retrieved')
   public async getUsageCounts(): Promise<Record<string, number>> {
     const methods = await this.paymentMethodService.findAllIncludingInactive();

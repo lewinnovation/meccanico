@@ -53,7 +53,7 @@ export class VehicleMakeController extends Controller {
    */
   @Post('/')
   @SuccessResponse(201, 'Created')
-  @Security('jwt', ['ADMIN'])
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async createMake(@Body() body: CreateVehicleMakeDto): Promise<VehicleMake> {
     this.setStatus(201);
     return this.service.createMake(body);
@@ -63,7 +63,7 @@ export class VehicleMakeController extends Controller {
    * Update a vehicle make
    */
   @Patch('/{id}')
-  @Security('jwt', ['ADMIN'])
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateMake(
     @Path() id: string,
     @Body() body: UpdateVehicleMakeDto
@@ -76,7 +76,7 @@ export class VehicleMakeController extends Controller {
    */
   @Delete('/{id}')
   @SuccessResponse(204, 'Deleted')
-  @Security('jwt', ['ADMIN'])
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async deleteMake(@Path() id: string): Promise<void> {
     this.setStatus(204);
     return this.service.deleteMake(id);
@@ -129,7 +129,7 @@ export class VehicleMakeController extends Controller {
    * Update a vehicle model
    */
   @Patch('/models/{id}')
-  @Security('jwt', ['ADMIN'])
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateModel(
     @Path() id: string,
     @Body() body: UpdateVehicleModelDto
@@ -142,7 +142,7 @@ export class VehicleMakeController extends Controller {
    */
   @Delete('/models/{id}')
   @SuccessResponse(204, 'Deleted')
-  @Security('jwt', ['ADMIN'])
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async deleteModel(@Path() id: string): Promise<void> {
     this.setStatus(204);
     return this.service.deleteModel(id);

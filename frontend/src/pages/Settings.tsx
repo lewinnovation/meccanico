@@ -48,6 +48,7 @@ import {
   CheckCircle as CheckIcon,
   Cancel as CancelIcon,
   Payment as PaymentIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
@@ -59,6 +60,7 @@ import {
 } from '../stores/CommunicationTemplateStore';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import UserManagement from './UserManagement';
 // VehicleMake type is used from vehicleStore.makes
 
 // Shop Information Settings
@@ -503,7 +505,9 @@ const VehicleMakesSettings: React.FC = observer(() => {
     vehicleStore.fetchMakes();
   }, [vehicleStore]);
 
-  const isReadOnly = !authStore.isAdmin;
+  // Allow both ADMIN and MECHANIC to manage vehicle makes/models
+  const canEdit = authStore.isAdmin || authStore.user?.role === 'MECHANIC';
+  const isReadOnly = !canEdit;
 
   const handleToggleMake = (makeId: string) => {
     setExpandedMake(expandedMake === makeId ? null : makeId);
@@ -1413,7 +1417,7 @@ const PaymentMethodsSettings: React.FC = observer(() => {
 
 // Settings Menu (main settings page)
 const SettingsMenu: React.FC = observer(() => {
-  const { settingsStore } = useStore();
+  const { settingsStore, authStore } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -1460,6 +1464,12 @@ const SettingsMenu: React.FC = observer(() => {
       description: 'Manage payment methods for invoices',
       path: '/settings/payment-methods',
     },
+    ...(authStore.isAdmin ? [{
+      icon: PeopleIcon,
+      label: 'User Management',
+      description: 'Create, suspend, and manage user accounts',
+      path: '/settings/users',
+    }] : []),
   ];
 
   const handleSnackbarClose = () => {
@@ -1544,6 +1554,7 @@ const SettingsContainer: React.FC = observer(() => {
         <Route path="/vehicles" element={<VehicleMakesSettings />} />
         <Route path="/communication-templates" element={<CommunicationTemplatesSettings />} />
         <Route path="/payment-methods" element={<PaymentMethodsSettings />} />
+        <Route path="/users" element={<UserManagement />} />
       </Routes>
 
       <Snackbar

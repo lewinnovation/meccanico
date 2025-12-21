@@ -14,6 +14,7 @@ import { AuditLogStore } from './AuditLogStore';
 import { CommunicationTemplateStore } from './CommunicationTemplateStore';
 import { PaymentMethodStore } from './PaymentMethodStore';
 import { PaymentStore } from './PaymentStore';
+import { UserStore } from './UserStore';
 
 class RootStore {
   authStore: AuthStore;
@@ -31,6 +32,7 @@ class RootStore {
   communicationTemplateStore: CommunicationTemplateStore;
   paymentMethodStore: PaymentMethodStore;
   paymentStore: PaymentStore;
+  userStore: UserStore;
 
   constructor() {
     this.authStore = new AuthStore(this);
@@ -48,6 +50,7 @@ class RootStore {
     this.communicationTemplateStore = new CommunicationTemplateStore(this);
     this.paymentMethodStore = new PaymentMethodStore(this);
     this.paymentStore = new PaymentStore(this);
+    this.userStore = new UserStore(this);
   }
 }
 

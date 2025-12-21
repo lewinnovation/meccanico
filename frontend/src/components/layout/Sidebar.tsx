@@ -136,7 +136,23 @@ export const Sidebar: React.FC = observer(() => {
       </List>
 
       {/* User Info */}
-      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+      <Box
+        sx={{
+          p: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+          cursor: 'pointer',
+          '&:hover': {
+            bgcolor: 'action.hover',
+            borderRadius: 1,
+          },
+        }}
+        onClick={() => {
+          // This will be handled by parent component that has ProfileDialog
+          const event = new CustomEvent('openProfile');
+          window.dispatchEvent(event);
+        }}
+      >
         <Typography variant="body2" fontWeight={500}>
           {authStore.user?.name}
         </Typography>

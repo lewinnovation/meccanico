@@ -99,5 +99,27 @@ export class AuthStore {
       return false;
     }
   }
+
+  async updateProfile(data: { name?: string; currentPassword?: string; newPassword?: string }): Promise<void> {
+    this.isLoading = true;
+    this.error = null;
+
+    try {
+      const response = await api.put('/api/users/profile', data);
+      
+      runInAction(() => {
+        this.user = response.data;
+        this.isLoading = false;
+      });
+
+      this.saveToStorage();
+    } catch (error: any) {
+      runInAction(() => {
+        this.error = error.response?.data?.message || 'Failed to update profile';
+        this.isLoading = false;
+      });
+      throw error;
+    }
+  }
 }
 
