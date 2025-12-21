@@ -110,6 +110,9 @@ export class TemplateStore {
   }
 
   async create(data: CreateTemplateDto): Promise<Template | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to create templates');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -130,6 +133,9 @@ export class TemplateStore {
   }
 
   async update(id: string, data: UpdateTemplateDto): Promise<Template | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to update templates');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -172,6 +178,9 @@ export class TemplateStore {
   }
 
   async delete(id: string): Promise<void> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to delete templates');
+    }
     this.isLoading = true;
     this.error = null;
     try {

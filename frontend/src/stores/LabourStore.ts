@@ -109,6 +109,9 @@ export class LabourStore {
   }
 
   async create(data: CreateLabourDto): Promise<Labour | null> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to create labour items');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -129,6 +132,9 @@ export class LabourStore {
   }
 
   async update(id: string, data: UpdateLabourDto): Promise<Labour | null> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to update labour items');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -171,6 +177,9 @@ export class LabourStore {
   }
 
   async delete(id: string): Promise<void> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to delete labour items');
+    }
     this.isLoading = true;
     this.error = null;
     try {

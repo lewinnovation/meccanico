@@ -112,7 +112,12 @@ export const Dashboard: React.FC = observer(() => {
       setLoading(true);
       try {
         // Fetch all jobs (we need all for accurate stats)
+        // Set high limit to get all jobs for dashboard
+        const originalLimit = jobStore.limit;
+        jobStore.setLimit(1000);
         await jobStore.fetchJobs();
+        // Restore original limit
+        jobStore.setLimit(originalLimit);
         
         // Fetch all invoices
         await invoiceStore.fetchAll();

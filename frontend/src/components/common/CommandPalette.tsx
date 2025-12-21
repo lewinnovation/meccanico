@@ -48,7 +48,7 @@ type ResultItem = Command | SearchResult;
 
 export const CommandPalette: React.FC = observer(() => {
   const navigate = useNavigate();
-  const { uiStore, customerStore, vehicleStore } = useStore();
+  const { uiStore, customerStore, vehicleStore, authStore } = useStore();
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -57,7 +57,7 @@ export const CommandPalette: React.FC = observer(() => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const commands: Command[] = [
-    {
+    ...(authStore.canEdit ? [{
       id: 'new-job',
       label: 'New Job',
       description: 'Create a new job/estimate',
@@ -68,7 +68,7 @@ export const CommandPalette: React.FC = observer(() => {
       },
       keywords: ['create', 'estimate', 'work order'],
       type: 'command',
-    },
+    }] : []),
     {
       id: 'jobs',
       label: 'Go to Jobs',
@@ -89,7 +89,7 @@ export const CommandPalette: React.FC = observer(() => {
       },
       type: 'command',
     },
-    {
+    ...(authStore.canEdit ? [{
       id: 'new-customer',
       label: 'New Customer',
       description: 'Add a new customer',
@@ -100,7 +100,7 @@ export const CommandPalette: React.FC = observer(() => {
       },
       keywords: ['create', 'client'],
       type: 'command',
-    },
+    }] : []),
     {
       id: 'inventory',
       label: 'Go to Inventory',

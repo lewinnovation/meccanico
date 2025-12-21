@@ -68,6 +68,7 @@ export class LabourController extends Controller {
    * Create a new labour item
    */
   @Post('/')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(201, 'Created')
   public async createLabourItem(@Body() body: CreateLabourDto): Promise<Labour> {
     this.setStatus(201);
@@ -78,6 +79,7 @@ export class LabourController extends Controller {
    * Update a labour item
    */
   @Patch('/{id}')
+  @Security('jwt', ['ADMIN'])
   public async updateLabourItem(
     @Path() id: string,
     @Body() body: UpdateLabourDto
@@ -89,6 +91,7 @@ export class LabourController extends Controller {
    * Delete a labour item
    */
   @Delete('/{id}')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(204, 'Deleted')
   public async deleteLabourItem(@Path() id: string): Promise<void> {
     this.setStatus(204);

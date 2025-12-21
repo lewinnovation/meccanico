@@ -226,6 +226,9 @@ export class JobStore {
   }
 
   async createJob(data: CreateJobDto): Promise<Job | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to create jobs');
+    }
     this.isLoading = true;
     this.error = null;
 
@@ -249,6 +252,9 @@ export class JobStore {
   }
 
   async updateJob(id: string, data: UpdateJobDto): Promise<Job | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to update jobs');
+    }
     this.isLoading = true;
     this.error = null;
 
@@ -294,6 +300,9 @@ export class JobStore {
   }
 
   async updateJobStatus(id: string, status: JobStatus): Promise<Job | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to update job status');
+    }
     try {
       const response = await api.post(`/api/jobs/${id}/status`, { status });
 
@@ -317,6 +326,9 @@ export class JobStore {
   }
 
   async deleteJob(id: string): Promise<void> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to delete jobs');
+    }
     this.isLoading = true;
     this.error = null;
 
@@ -341,6 +353,9 @@ export class JobStore {
   }
 
   async duplicateJob(id: string): Promise<Job | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to duplicate jobs');
+    }
     try {
       const response = await api.post(`/api/jobs/${id}/duplicate`);
 
@@ -359,6 +374,9 @@ export class JobStore {
   }
 
   async applyTemplate(jobId: string, templateId: string): Promise<Job | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to apply templates');
+    }
     try {
       const response = await api.post(`/api/jobs/${jobId}/apply-template/${templateId}`);
 
@@ -379,6 +397,9 @@ export class JobStore {
 
   // Line Item Methods
   async addLineItem(jobId: string, item: CreateLineItemDto): Promise<LineItem | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to add line items');
+    }
     try {
       const response = await api.post(`/api/jobs/${jobId}/line-items`, item);
 
@@ -419,6 +440,9 @@ export class JobStore {
   }
 
   async updateLineItem(jobId: string, lineItemId: string, data: UpdateLineItemDto): Promise<LineItem | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to update line items');
+    }
     try {
       // Include current version from lineItem if available
       const lineItem = this.selectedJob?.lineItems?.find((li) => li.id === lineItemId);
@@ -458,6 +482,9 @@ export class JobStore {
   }
 
   async deleteLineItem(jobId: string, lineItemId: string): Promise<void> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to delete line items');
+    }
     try {
       await api.delete(`/api/jobs/${jobId}/line-items/${lineItemId}`);
 

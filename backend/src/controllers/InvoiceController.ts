@@ -29,6 +29,7 @@ export class InvoiceController extends Controller {
    * Create an invoice from a completed job
    */
   @Post('from-job/{jobId}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('201', 'Invoice created')
   @Response<NotFoundError>(404, 'Job not found')
   @Response<BadRequestError>(400, 'Job is not completed')
@@ -74,6 +75,7 @@ export class InvoiceController extends Controller {
    * Create a credit note for an invoice
    */
   @Post('{id}/credit-notes')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('201', 'Credit note created')
   @Response<NotFoundError>(404, 'Invoice not found')
   @Response<BadRequestError>(400, 'Invalid credit note amount or exceeds invoice total')
@@ -113,6 +115,7 @@ export class InvoiceController extends Controller {
    * Delete a credit note
    */
   @Delete('{invoiceId}/credit-notes/{creditNoteId}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('204', 'Credit note deleted')
   @Response<NotFoundError>(404, 'Credit note not found')
   public async deleteCreditNote(

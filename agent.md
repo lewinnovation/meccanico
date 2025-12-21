@@ -534,14 +534,14 @@ echo "✅ All builds and tests pass"
 ### Roles
 | Role | Capabilities |
 |------|--------------|
-| **Admin (Head Mechanic)** | Full access: settings, pricing, mechanic management, all jobs |
-| **Mechanic** | Own jobs, view inventory, create estimates/invoices |
-| **Viewer** | Read-only access to assigned jobs |
+| **Admin (Head Mechanic)** | Full access: settings, pricing, mechanic management, all jobs, all resources |
+| **Mechanic** | Own jobs, view inventory, create estimates/invoices, manage customers/vehicles/templates |
+| **Viewer** | Read-only access to assigned jobs only |
 
 ### Permission Matrix
 | Resource | Admin | Mechanic | Viewer |
 |----------|-------|----------|--------|
-| Jobs (own) | CRUD | CRUD | R |
+| Jobs (assigned) | CRUD | CRUD | R (assigned only) |
 | Jobs (all) | CRUD | R | - |
 | Customers | CRUD | CR | R |
 | Vehicles | CRUD | CR | R |
@@ -549,9 +549,22 @@ echo "✅ All builds and tests pass"
 | Labour Rates | CRUD | R | R |
 | Services | CRUD | R | R |
 | Templates | CRUD | CRUD | R |
-| Settings | CRUD | - | - |
-| Mechanics | CRUD | R (self) | - |
-| Reports | CRUD | R (own) | - |
+| Invoices | CRUD | CR | R |
+| Payments | CRUD | CR | R |
+| Credit Notes | CRUD | CR | R |
+| Settings | CRUD | - | R |
+| Communication Templates | CRUD | R | R |
+| Payment Methods | CRUD | R | R |
+| Vehicle Makes/Models | CRUD | CRUD | R |
+| Users | CRUD | - | - |
+| Audit Logs | R | R | R |
+
+**Notes:**
+- VIEWER can only see jobs assigned to them (`assignedTo = userId`)
+- VIEWER cannot create, update, or delete any resources (read-only)
+- MECHANIC can create/edit customers, vehicles, jobs, templates, invoices, payments, credit notes
+- MECHANIC cannot edit inventory, labour, services, communication templates, settings (admin only)
+- All API endpoints require JWT authentication (except `/api/auth/login` and `/api/auth/register`)
 
 ---
 

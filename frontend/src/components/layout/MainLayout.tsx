@@ -17,7 +17,7 @@ interface MainLayoutProps {
 export const MainLayout: React.FC<MainLayoutProps> = observer(({ children }) => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { uiStore } = useStore();
+  const { uiStore, authStore } = useStore();
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -96,24 +96,28 @@ export const MainLayout: React.FC<MainLayoutProps> = observer(({ children }) => 
                 ⌘K
               </Typography>
             </Box>
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/jobs/new')}
-              sx={{ minWidth: 'auto', px: 1.5 }}
-            >
-              New Job
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<People />}
-              onClick={() => navigate('/customers')}
-              sx={{ minWidth: 'auto', px: 1.5 }}
-            >
-              New Customer
-            </Button>
+            {authStore.canEdit && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/jobs/new')}
+                sx={{ minWidth: 'auto', px: 1.5 }}
+              >
+                New Job
+              </Button>
+            )}
+            {authStore.canEdit && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<People />}
+                onClick={() => navigate('/customers')}
+                sx={{ minWidth: 'auto', px: 1.5 }}
+              >
+                New Customer
+              </Button>
+            )}
           </Box>
 
           <Box sx={{ width: 48 }} /> {/* Spacer for balance */}

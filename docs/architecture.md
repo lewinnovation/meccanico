@@ -251,7 +251,9 @@ frontend/src/
 
 ---
 
-## 🔐 Authentication Flow
+## 🔐 Authentication & Authorization
+
+### Authentication Flow
 
 ```
 ┌─────────┐         ┌─────────┐         ┌─────────┐
@@ -288,6 +290,51 @@ frontend/src/
 - **Access Token:** Short-lived (15 min), used for API requests
 - **Refresh Token:** Long-lived (7 days), used to obtain new access tokens
 - **Storage:** Access token in memory, refresh token in httpOnly cookie
+
+### Authorization (Role-Based Access Control)
+
+All API endpoints require JWT authentication (except `/api/auth/login` and `/api/auth/register`). Role-based access control is enforced at multiple levels:
+
+#### Backend Authorization
+- **Controller Level:** All controllers have `@Security('jwt')` decorator at class level
+- **Endpoint Level:** Specific endpoints have role restrictions using `@Security('jwt', ['ADMIN', 'MECHANIC'])` or `@Security('jwt', ['ADMIN'])`
+- **Service Level:** Business logic enforces role-based filtering (e.g., VIEWER can only see assigned jobs)
+- **Middleware:** `expressAuthentication()` validates JWT and checks role permissions
+
+#### Frontend Authorization
+- **UI Restrictions:** Buttons and forms are hidden/disabled based on user role
+- **Store Level:** Stores prevent unauthorized mutations (throw errors if VIEWER tries to create/edit/delete)
+- **Route Protection:** Routes may be restricted based on role (future enhancement)
+
+#### Role Permissions
+
+| Resource | ADMIN | MECHANIC | VIEWER |
+|----------|-------|----------|--------|
+| Jobs (assigned) | CRUD | CRUD | R (assigned only) |
+| Jobs (all) | CRUD | R | - |
+| Customers | CRUD | CR | R |
+| Vehicles | CRUD | CR | R |
+| Inventory | CRUD | R | R |
+| Labour | CRUD | R | R |
+| Services | CRUD | R | R |
+| Templates | CRUD | CRUD | R |
+| Invoices | CRUD | CR | R |
+| Payments | CRUD | CR | R |
+| Credit Notes | CRUD | CR | R |
+| Settings | CRUD | - | R |
+| Communication Templates | CRUD | R | R |
+| Payment Methods | CRUD | R | R |
+| Vehicle Makes/Models | CRUD | CRUD | R |
+| Users | CRUD | - | - |
+| Audit Logs | R | R | R |
+
+**Legend:** C = Create, R = Read, U = Update, D = Delete, - = No access
+
+**Key Restrictions:**
+- VIEWER can only access jobs where `assignedTo = userId`
+- VIEWER cannot create, update, or delete any resources
+- MECHANIC cannot edit inventory, labour, services, communication templates, or settings (admin only)
+- All endpoints require valid JWT token in Authorization header
 
 ---
 

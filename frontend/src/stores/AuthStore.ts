@@ -30,6 +30,18 @@ export class AuthStore {
     return this.user?.role === 'ADMIN';
   }
 
+  get isMechanic(): boolean {
+    return this.user?.role === 'MECHANIC';
+  }
+
+  get isViewer(): boolean {
+    return this.user?.role === 'VIEWER';
+  }
+
+  get canEdit(): boolean {
+    return this.isAdmin || this.isMechanic;
+  }
+
   private loadFromStorage(): void {
     const token = localStorage.getItem('accessToken');
     const user = localStorage.getItem('user');

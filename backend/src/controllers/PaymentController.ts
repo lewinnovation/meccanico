@@ -25,6 +25,7 @@ export class PaymentController extends Controller {
    * Create a payment for an invoice
    */
   @Post('{invoiceId}/payments')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('201', 'Payment created')
   @Response<NotFoundError>(404, 'Invoice or payment method not found')
   @Response<BadRequestError>(400, 'Invalid payment amount or exceeds remaining balance')
@@ -53,6 +54,7 @@ export class PaymentController extends Controller {
    * Delete a payment
    */
   @Delete('{invoiceId}/payments/{paymentId}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('204', 'Payment deleted')
   @Response<NotFoundError>(404, 'Payment not found')
   public async deletePayment(

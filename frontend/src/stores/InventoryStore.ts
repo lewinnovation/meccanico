@@ -119,6 +119,9 @@ export class InventoryStore {
   }
 
   async create(data: CreateInventoryDto): Promise<Inventory | null> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to create inventory items');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -139,6 +142,9 @@ export class InventoryStore {
   }
 
   async update(id: string, data: UpdateInventoryDto): Promise<Inventory | null> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to update inventory items');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -181,6 +187,9 @@ export class InventoryStore {
   }
 
   async delete(id: string): Promise<void> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to delete inventory items');
+    }
     this.isLoading = true;
     this.error = null;
     try {

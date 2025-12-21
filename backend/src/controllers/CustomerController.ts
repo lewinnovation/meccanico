@@ -58,6 +58,7 @@ export class CustomerController extends Controller {
    * Create a new customer
    */
   @Post('/')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(201, 'Created')
   public async createCustomer(@Body() body: CreateCustomerDto): Promise<Customer> {
     this.setStatus(201);
@@ -68,6 +69,7 @@ export class CustomerController extends Controller {
    * Update a customer
    */
   @Patch('/{id}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateCustomer(
     @Path() id: string,
     @Body() body: UpdateCustomerDto
@@ -79,6 +81,7 @@ export class CustomerController extends Controller {
    * Delete a customer
    */
   @Delete('/{id}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(204, 'Deleted')
   public async deleteCustomer(@Path() id: string): Promise<void> {
     this.setStatus(204);

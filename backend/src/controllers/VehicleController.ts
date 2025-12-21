@@ -89,6 +89,7 @@ export class VehicleController extends Controller {
    * Create a new vehicle
    */
   @Post('/')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(201, 'Created')
   public async createVehicle(@Body() body: CreateVehicleDto): Promise<Vehicle> {
     this.setStatus(201);
@@ -99,6 +100,7 @@ export class VehicleController extends Controller {
    * Update a vehicle
    */
   @Patch('/{id}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateVehicle(
     @Path() id: string,
     @Body() body: UpdateVehicleDto
@@ -110,6 +112,7 @@ export class VehicleController extends Controller {
    * Update vehicle mileage
    */
   @Patch('/{id}/mileage')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateMileage(
     @Path() id: string,
     @Body() body: { mileage: number }
@@ -159,6 +162,7 @@ export class VehicleController extends Controller {
    * Delete a vehicle
    */
   @Delete('/{id}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(204, 'Deleted')
   public async deleteVehicle(@Path() id: string): Promise<void> {
     this.setStatus(204);

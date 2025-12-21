@@ -124,6 +124,9 @@ export class CommunicationTemplateStore {
   }
 
   async createTemplate(data: CreateCommunicationTemplateDto): Promise<boolean> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to create communication templates');
+    }
     this.isSaving = true;
     this.error = null;
     this.successMessage = null;
@@ -146,6 +149,9 @@ export class CommunicationTemplateStore {
   }
 
   async updateTemplate(id: string, data: UpdateCommunicationTemplateDto): Promise<boolean> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to update communication templates');
+    }
     this.isSaving = true;
     this.error = null;
     this.successMessage = null;
@@ -189,6 +195,9 @@ export class CommunicationTemplateStore {
   }
 
   async deleteTemplate(id: string): Promise<boolean> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to delete communication templates');
+    }
     this.isSaving = true;
     this.error = null;
     this.successMessage = null;

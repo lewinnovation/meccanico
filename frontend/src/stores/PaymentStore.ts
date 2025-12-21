@@ -58,6 +58,9 @@ export class PaymentStore {
   }
 
   async create(invoiceId: string, data: CreatePaymentDto): Promise<Payment> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to create payments');
+    }
     this.isLoading = true;
     this.error = null;
 
@@ -80,6 +83,9 @@ export class PaymentStore {
   }
 
   async delete(invoiceId: string, paymentId: string): Promise<void> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to delete payments');
+    }
     this.isLoading = true;
     this.error = null;
 

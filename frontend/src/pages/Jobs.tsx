@@ -288,7 +288,7 @@ const SortableLineItemRow: React.FC<SortableLineItemRowProps> = ({ item, canEdit
 
 // ==================== JOB LIST ====================
 const JobList: React.FC = observer(() => {
-  const { jobStore, settingsStore } = useStore();
+  const { jobStore, settingsStore, authStore } = useStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   
@@ -516,9 +516,11 @@ const JobList: React.FC = observer(() => {
         <Typography variant="h4" fontWeight={600}>
           Jobs
         </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/jobs/new')}>
-          New Job
-        </Button>
+        {authStore.canEdit && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/jobs/new')}>
+            New Job
+          </Button>
+        )}
       </Box>
 
       {/* Status Tabs */}
@@ -627,9 +629,11 @@ const JobList: React.FC = observer(() => {
             <Typography color="text.secondary" sx={{ mb: 3 }}>
               Create your first job to start managing your work orders.
             </Typography>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/jobs/new')}>
-              Create Job
-            </Button>
+            {authStore.canEdit && (
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/jobs/new')}>
+                Create Job
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -811,7 +815,7 @@ const detectSearchType = (input: string): 'vin' | 'licensePlate' | 'email' | 'ph
 };
 
 const NewJob: React.FC = observer(() => {
-  const { jobStore, customerStore, vehicleStore, settingsStore } = useStore();
+  const { jobStore, customerStore, vehicleStore, settingsStore, authStore } = useStore();
   const navigate = useNavigate();
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithVehicles | null>(null);
   const [customerVehicles, setCustomerVehicles] = useState<VehicleOption[]>([]);
@@ -1181,9 +1185,31 @@ const NewJob: React.FC = observer(() => {
             {/* Step 1: Search for Vehicle OR Customer */}
             {!selectedCustomer && !selectedVehicle && (
               <Box>
-                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
-                  Step 1: Find or create a vehicle or customer
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Step 1: Find or create a vehicle or customer
+                  </Typography>
+                  {authStore.canEdit && (
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<AddIcon />}
+                        onClick={() => setCreateCustomerOpen(true)}
+                      >
+                        New Customer
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<AddIcon />}
+                        onClick={() => setCreateVehicleOpen(true)}
+                      >
+                        New Vehicle
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
                 <Autocomplete
                   freeSolo
                   open={searchInputValue.trim().length >= 3}
@@ -1208,6 +1234,20 @@ const NewJob: React.FC = observer(() => {
                   onChange={(_, value) => {
                     if (value && typeof value !== 'string') {
                       handleSelectResult(value);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    // If Enter is pressed and there are no results, open create customer dialog
+                    if (e.key === 'Enter' && searchInputValue.trim() && searchResults.length === 0 && !isSearching && authStore.canEdit) {
+                      e.preventDefault();
+                      // Check if it looks like a vehicle identifier (VIN or license plate)
+                      const searchType = detectSearchType(searchInputValue);
+                      if (searchType === 'vin' || searchType === 'licensePlate') {
+                        setCreateVehicleOpen(true);
+                      } else {
+                        // Default to creating customer
+                        setCreateCustomerOpen(true);
+                      }
                     }
                   }}
                   loading={isSearching}
@@ -1277,43 +1317,50 @@ const NewJob: React.FC = observer(() => {
                   noOptionsText={
                     searchInputValue.trim() ? (
                       <Box sx={{ p: 2, textAlign: 'center' }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                           No results found
                         </Typography>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<AddIcon />}
-                            onClick={() => {
-                              const searchType = detectSearchType(searchInputValue);
-                              if (searchType === 'vin' || searchType === 'licensePlate') {
-                                setCreateVehicleOpen(true);
-                              } else {
-                                setCreateCustomerOpen(true);
-                              }
-                            }}
-                            fullWidth
-                          >
-                            Create {detectSearchType(searchInputValue) === 'vin' || detectSearchType(searchInputValue) === 'licensePlate' ? 'Vehicle' : 'Customer'}
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<AddIcon />}
-                            onClick={() => {
-                              const searchType = detectSearchType(searchInputValue);
-                              if (searchType === 'vin' || searchType === 'licensePlate') {
-                                setCreateCustomerOpen(true);
-                              } else {
-                                setCreateVehicleOpen(true);
-                              }
-                            }}
-                            fullWidth
-                          >
-                            Create {detectSearchType(searchInputValue) === 'vin' || detectSearchType(searchInputValue) === 'licensePlate' ? 'Customer' : 'Vehicle'}
-                          </Button>
-                        </Box>
+                        {authStore.canEdit && (
+                          <>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontStyle: 'italic' }}>
+                              Press Enter to create new {detectSearchType(searchInputValue) === 'vin' || detectSearchType(searchInputValue) === 'licensePlate' ? 'vehicle' : 'customer'}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<AddIcon />}
+                                onClick={() => {
+                                  const searchType = detectSearchType(searchInputValue);
+                                  if (searchType === 'vin' || searchType === 'licensePlate') {
+                                    setCreateVehicleOpen(true);
+                                  } else {
+                                    setCreateCustomerOpen(true);
+                                  }
+                                }}
+                                fullWidth
+                              >
+                                Create {detectSearchType(searchInputValue) === 'vin' || detectSearchType(searchInputValue) === 'licensePlate' ? 'Vehicle' : 'Customer'}
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<AddIcon />}
+                                onClick={() => {
+                                  const searchType = detectSearchType(searchInputValue);
+                                  if (searchType === 'vin' || searchType === 'licensePlate') {
+                                    setCreateCustomerOpen(true);
+                                  } else {
+                                    setCreateVehicleOpen(true);
+                                  }
+                                }}
+                                fullWidth
+                              >
+                                Create {detectSearchType(searchInputValue) === 'vin' || detectSearchType(searchInputValue) === 'licensePlate' ? 'Customer' : 'Vehicle'}
+                              </Button>
+                            </Box>
+                          </>
+                        )}
                       </Box>
                     ) : (
                       'Start typing to search...'
@@ -1355,8 +1402,8 @@ const NewJob: React.FC = observer(() => {
                       }
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && searchInputValue.trim() && searchResults.filter(r => r.type === 'customer').length === 0) {
-                        // If Enter pressed with text but no results, open create dialog
+                      // If Enter is pressed and there are no customer results, open create customer dialog
+                      if (e.key === 'Enter' && searchInputValue.trim() && searchResults.filter(r => r.type === 'customer').length === 0 && !isSearching && authStore.canEdit) {
                         e.preventDefault();
                         setCreateCustomerOpen(true);
                       }
@@ -1400,27 +1447,38 @@ const NewJob: React.FC = observer(() => {
                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                             No customer found
                           </Typography>
-                          <Button
-                            size="small"
-                            startIcon={<AddIcon />}
-                            onClick={() => setCreateCustomerOpen(true)}
-                          >
-                            Create "{searchInputValue.trim()}"
-                          </Button>
+                          {authStore.canEdit && (
+                            <>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontStyle: 'italic' }}>
+                                Press Enter to create new customer
+                              </Typography>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<AddIcon />}
+                                onClick={() => setCreateCustomerOpen(true)}
+                                fullWidth
+                              >
+                                Create "{searchInputValue.trim()}"
+                              </Button>
+                            </>
+                          )}
                         </Box>
                       ) : (
                         'Start typing to search for customer...'
                       )
                     }
                   />
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={() => setCreateCustomerOpen(true)}
-                    sx={{ minWidth: 'auto', px: 2 }}
-                  >
-                    Create New
-                  </Button>
+                  {authStore.canEdit && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<AddIcon />}
+                      onClick={() => setCreateCustomerOpen(true)}
+                      sx={{ minWidth: 'auto', px: 2 }}
+                    >
+                      Create New
+                    </Button>
+                  )}
                 </Box>
               </Box>
             )}
@@ -1459,6 +1517,13 @@ const NewJob: React.FC = observer(() => {
                       });
                       setSearchInputValue('');
                       setSearchResults([]);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    // If Enter is pressed and there are no vehicle results, open create vehicle dialog
+                    if (e.key === 'Enter' && searchInputValue.trim() && searchResults.filter(r => r.type === 'vehicle').length === 0 && !isSearching && authStore.canEdit) {
+                      e.preventDefault();
+                      setCreateVehicleOpen(true);
                     }
                   }}
                   loading={isSearching}
@@ -1500,13 +1565,22 @@ const NewJob: React.FC = observer(() => {
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                           No vehicle found
                         </Typography>
-                        <Button
-                          size="small"
-                          startIcon={<AddIcon />}
-                          onClick={() => setCreateVehicleOpen(true)}
-                        >
-                          Create New Vehicle
-                        </Button>
+                        {authStore.canEdit && (
+                          <>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontStyle: 'italic' }}>
+                              Press Enter to create new vehicle
+                            </Typography>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<AddIcon />}
+                              onClick={() => setCreateVehicleOpen(true)}
+                              fullWidth
+                            >
+                              Create New Vehicle
+                            </Button>
+                          </>
+                        )}
                       </Box>
                     ) : (
                       'Start typing to search for vehicle...'
@@ -2012,7 +2086,7 @@ interface SelectedLineItem {
 
 const JobDetail: React.FC = observer(() => {
   const { id } = useParams<{ id: string }>();
-  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore, paymentMethodStore, paymentStore } = useStore();
+  const { jobStore, templateStore, inventoryStore, labourStore, serviceStore, settingsStore, invoiceStore, auditLogStore, paymentMethodStore, paymentStore, authStore } = useStore();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
@@ -2493,7 +2567,7 @@ const JobDetail: React.FC = observer(() => {
     );
   }
 
-  const canEdit = job.status !== 'COMPLETED' && job.status !== 'CANCELLED';
+  const canEdit = !authStore.isViewer && job.status !== 'COMPLETED' && job.status !== 'CANCELLED';
   // Flexible transitions - allow any status to transition to any other status
   const taxName = settingsStore.taxSettings.name || 'GST';
 
@@ -2523,7 +2597,7 @@ const JobDetail: React.FC = observer(() => {
         {/* Print and Next Step Buttons */}
         <Box sx={{ display: 'flex', gap: 1 }}>
           {/* Download PDF and Email Buttons */}
-          {(job.status !== 'COMPLETED' || (job.status === 'COMPLETED' && job.invoiceId)) && (
+          {authStore.canEdit && (job.status !== 'COMPLETED' || (job.status === 'COMPLETED' && job.invoiceId)) && (
             <>
               <Button
                 variant="outlined"
@@ -2550,7 +2624,7 @@ const JobDetail: React.FC = observer(() => {
           )}
           
           {/* Next Natural Step Button */}
-          {job.status === 'BOOKED' && (
+          {authStore.canEdit && job.status === 'BOOKED' && (
             <Button
               variant="contained"
               startIcon={<StartIcon />}
@@ -2559,7 +2633,7 @@ const JobDetail: React.FC = observer(() => {
               Start Work
             </Button>
           )}
-          {job.status === 'IN_PROGRESS' && (
+          {authStore.canEdit && job.status === 'IN_PROGRESS' && (
             <Button
               variant="contained"
               startIcon={<ApproveIcon />}
@@ -2568,7 +2642,7 @@ const JobDetail: React.FC = observer(() => {
               Mark Complete
             </Button>
           )}
-          {job.status === 'COMPLETED' && !job.invoiceId && (
+          {authStore.canEdit && job.status === 'COMPLETED' && !job.invoiceId && (
             <Button
               variant="contained"
               startIcon={<InvoiceIcon />}
@@ -2593,7 +2667,7 @@ const JobDetail: React.FC = observer(() => {
 
       {/* Actions Menu */}
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        {allStatuses.filter(s => s !== job.status).map((status) => (
+        {authStore.canEdit && allStatuses.filter(s => s !== job.status).map((status) => (
           <MenuItem key={status} onClick={() => handleStatusChange(status)}>
             <ListItemIcon>
               {status === 'BOOKED' && <JobIcon fontSize="small" />}
@@ -2606,7 +2680,7 @@ const JobDetail: React.FC = observer(() => {
             <ListItemText>{statusConfig[status]?.label || status}</ListItemText>
           </MenuItem>
         ))}
-        <Divider />
+        {authStore.canEdit && allStatuses.filter(s => s !== job.status).length > 0 && <Divider />}
         {canEdit && (
           <MenuItem onClick={() => { setEditDialogOpen(true); setAnchorEl(null); }}>
             <ListItemIcon>
@@ -2615,12 +2689,14 @@ const JobDetail: React.FC = observer(() => {
             <ListItemText>Edit Details</ListItemText>
           </MenuItem>
         )}
-        <MenuItem onClick={handleDuplicate}>
-          <ListItemIcon>
-            <DuplicateIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Duplicate</ListItemText>
-        </MenuItem>
+        {authStore.canEdit && (
+          <MenuItem onClick={handleDuplicate}>
+            <ListItemIcon>
+              <DuplicateIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Duplicate</ListItemText>
+          </MenuItem>
+        )}
         {canEdit && (
           <MenuItem onClick={() => setDeleteConfirm(true)} sx={{ color: 'error.main' }}>
             <ListItemIcon>
@@ -2950,36 +3026,38 @@ const JobDetail: React.FC = observer(() => {
                                       <Typography variant="body2" color="error" sx={{ fontSize: '0.875rem' }}>
                                         -{formatCurrency(postTaxAmount)}
                                       </Typography>
-                                      <IconButton
-                                        size="small"
-                                        onClick={async () => {
-                                          if (!invoiceStore.selectedInvoice) return;
-                                          if (window.confirm(`Are you sure you want to delete credit note ${cn.creditNoteNumber}?`)) {
-                                            try {
-                                              await invoiceStore.deleteCreditNote(
-                                                invoiceStore.selectedInvoice.id,
-                                                cn.id
-                                              );
-                                              // Refresh credit notes and balance
-                                              const [creditNotesData, balance] = await Promise.all([
-                                                invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
-                                                invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
-                                              ]);
-                                              setCreditNotes(creditNotesData);
-                                              setRemainingBalance(balance);
-                                              // Refresh invoice to get updated status
-                                              if (job) {
-                                                await invoiceStore.fetchByJobId(job.id);
+                                      {authStore.canEdit && (
+                                        <IconButton
+                                          size="small"
+                                          onClick={async () => {
+                                            if (!invoiceStore.selectedInvoice) return;
+                                            if (window.confirm(`Are you sure you want to delete credit note ${cn.creditNoteNumber}?`)) {
+                                              try {
+                                                await invoiceStore.deleteCreditNote(
+                                                  invoiceStore.selectedInvoice.id,
+                                                  cn.id
+                                                );
+                                                // Refresh credit notes and balance
+                                                const [creditNotesData, balance] = await Promise.all([
+                                                  invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+                                                  invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
+                                                ]);
+                                                setCreditNotes(creditNotesData);
+                                                setRemainingBalance(balance);
+                                                // Refresh invoice to get updated status
+                                                if (job) {
+                                                  await invoiceStore.fetchByJobId(job.id);
+                                                }
+                                              } catch (error) {
+                                                // Error handling is done in the store
                                               }
-                                            } catch (error) {
-                                              // Error handling is done in the store
                                             }
-                                          }
-                                        }}
-                                        sx={{ padding: 0.5 }}
-                                      >
-                                        <DeleteIcon fontSize="small" />
-                                      </IconButton>
+                                          }}
+                                          sx={{ padding: 0.5 }}
+                                        >
+                                          <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                      )}
                                     </Box>
                                   </Box>
                                 );
@@ -3003,30 +3081,32 @@ const JobDetail: React.FC = observer(() => {
                       </>
                     )}
                     
-                    <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                      <Button
-                        variant="outlined"
-                        color="primary"
-                        fullWidth
-                        onClick={() => setCreditNoteDialogOpen(true)}
-                        disabled={invoiceStore.isLoading || (remainingBalance !== null && remainingBalance <= 0)}
-                      >
-                        Issue Credit Note
-                      </Button>
-                      {remainingBalance !== null && remainingBalance > 0 && (
+                    {authStore.canEdit && (
+                      <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
                         <Button
-                          variant="contained"
-                          color="success"
+                          variant="outlined"
+                          color="primary"
                           fullWidth
-                          onClick={() => {
-                            setPaymentAmount(remainingBalance.toFixed(2));
-                            setPaymentDialogOpen(true);
-                          }}
+                          onClick={() => setCreditNoteDialogOpen(true)}
+                          disabled={invoiceStore.isLoading || (remainingBalance !== null && remainingBalance <= 0)}
                         >
-                          Add Payment
+                          Issue Credit Note
                         </Button>
-                      )}
-                    </Box>
+                        {remainingBalance !== null && remainingBalance > 0 && (
+                          <Button
+                            variant="contained"
+                            color="success"
+                            fullWidth
+                            onClick={() => {
+                              setPaymentAmount(remainingBalance.toFixed(2));
+                              setPaymentDialogOpen(true);
+                            }}
+                          >
+                            Add Payment
+                          </Button>
+                        )}
+                      </Box>
+                    )}
                     
                     {/* Payments */}
                     {payments.length > 0 && (
@@ -3060,35 +3140,37 @@ const JobDetail: React.FC = observer(() => {
                                 <Typography variant="body2" color="success.main" sx={{ fontSize: '0.875rem' }}>
                                   {formatCurrency(parseFloat(String(payment.amount || 0)))}
                                 </Typography>
-                                <IconButton
-                                  size="small"
-                                  onClick={async () => {
-                                    if (!invoiceStore.selectedInvoice) return;
-                                    if (window.confirm(`Are you sure you want to delete this payment?`)) {
-                                      try {
-                                        await paymentStore.delete(invoiceStore.selectedInvoice.id, payment.id);
-                                        
-                                        // Refresh invoice info
-                                        const [creditNotesData, paymentsData, balance] = await Promise.all([
-                                          invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
-                                          paymentStore.fetchByInvoiceId(invoiceStore.selectedInvoice.id),
-                                          invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
-                                        ]);
-                                        setCreditNotes(creditNotesData);
-                                        setPayments(paymentsData);
-                                        setRemainingBalance(balance);
-                                        
-                                        // Refresh invoice to get updated status
-                                        await invoiceStore.fetchById(invoiceStore.selectedInvoice.id);
-                                      } catch (error) {
-                                        // Error handling is done in the store
+                                {authStore.canEdit && (
+                                  <IconButton
+                                    size="small"
+                                    onClick={async () => {
+                                      if (!invoiceStore.selectedInvoice) return;
+                                      if (window.confirm(`Are you sure you want to delete this payment?`)) {
+                                        try {
+                                          await paymentStore.delete(invoiceStore.selectedInvoice.id, payment.id);
+                                          
+                                          // Refresh invoice info
+                                          const [creditNotesData, paymentsData, balance] = await Promise.all([
+                                            invoiceStore.fetchCreditNotes(invoiceStore.selectedInvoice.id),
+                                            paymentStore.fetchByInvoiceId(invoiceStore.selectedInvoice.id),
+                                            invoiceStore.getRemainingBalance(invoiceStore.selectedInvoice.id),
+                                          ]);
+                                          setCreditNotes(creditNotesData);
+                                          setPayments(paymentsData);
+                                          setRemainingBalance(balance);
+                                          
+                                          // Refresh invoice to get updated status
+                                          await invoiceStore.fetchById(invoiceStore.selectedInvoice.id);
+                                        } catch (error) {
+                                          // Error handling is done in the store
+                                        }
                                       }
-                                    }
-                                  }}
-                                  sx={{ padding: 0.5 }}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
+                                    }}
+                                    sx={{ padding: 0.5 }}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                )}
                               </Box>
                             </Box>
                           ))}

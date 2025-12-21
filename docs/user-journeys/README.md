@@ -17,21 +17,27 @@
 ## 🎯 User Roles
 
 ### Admin (Head Mechanic)
-- Full system access
-- Manages shop settings, pricing, users
-- Can override locked jobs
-- Access to all reports
+- **Full system access** - Can create, read, update, and delete all resources
+- Manages shop settings, pricing, users, and system configuration
+- Can view and manage all jobs (not limited to assigned jobs)
+- Access to all reports and audit logs
+- Can manage inventory, labour rates, services, and communication templates
+- Can create/edit/delete payment methods and vehicle makes/models
 
 ### Mechanic
-- Creates and manages jobs
-- Adds customers and vehicles
-- Views inventory and pricing
-- Limited to own jobs (configurable)
+- **Standard operational access** - Can create and edit customers, vehicles, jobs, templates, invoices, payments, and credit notes
+- Can view all jobs but typically works on assigned jobs
+- Can view (read-only) inventory, labour rates, services, and communication templates
+- Cannot edit inventory, labour, services, communication templates, or settings (admin only)
+- Can manage vehicle makes and models
+- Read-only access to payment methods
 
 ### Viewer
-- Read-only access
-- Can view assigned jobs
-- Cannot make changes
+- **Read-only access** - Cannot create, update, or delete any resources
+- Can only view jobs assigned to them (`assignedTo = userId`)
+- Can view customers, vehicles, inventory, labour, services, templates, invoices, payments, and settings (read-only)
+- Cannot access unassigned jobs or make any modifications
+- All API endpoints require JWT authentication
 
 ---
 

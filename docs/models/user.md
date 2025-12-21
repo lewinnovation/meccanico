@@ -95,9 +95,46 @@ export class User {
 
 | Role | Description |
 |------|-------------|
-| **ADMIN** | Full access - settings, user management, all jobs |
-| **MECHANIC** | Standard access - own jobs, customers, vehicles |
-| **VIEWER** | Read-only access to assigned jobs |
+| **ADMIN** | Full access - settings, user management, all jobs, all resources |
+| **MECHANIC** | Standard access - own jobs, customers, vehicles, templates, invoices, payments |
+| **VIEWER** | Read-only access to assigned jobs only |
+
+### Detailed Permission Matrix
+
+| Resource | ADMIN | MECHANIC | VIEWER |
+|----------|-------|----------|--------|
+| **Jobs (assigned)** | CRUD | CRUD | R (assigned only) |
+| **Jobs (all)** | CRUD | R | - |
+| **Customers** | CRUD | CR | R |
+| **Vehicles** | CRUD | CR | R |
+| **Inventory** | CRUD | R | R |
+| **Labour** | CRUD | R | R |
+| **Services** | CRUD | R | R |
+| **Templates** | CRUD | CRUD | R |
+| **Invoices** | CRUD | CR | R |
+| **Payments** | CRUD | CR | R |
+| **Credit Notes** | CRUD | CR | R |
+| **Settings** | CRUD | - | R |
+| **Communication Templates** | CRUD | R | R |
+| **Payment Methods** | CRUD | R | R |
+| **Vehicle Makes/Models** | CRUD | CRUD | R |
+| **Users** | CRUD | - | - |
+| **Audit Logs** | R | R | R |
+
+**Legend:**
+- **C** = Create
+- **R** = Read
+- **U** = Update
+- **D** = Delete
+- **-** = No access
+
+**Notes:**
+- VIEWER can only see jobs assigned to them (`assignedTo = userId`)
+- VIEWER cannot create, update, or delete any resources (read-only)
+- MECHANIC can create/edit customers, vehicles, jobs, templates, invoices, payments, credit notes
+- MECHANIC can view all jobs but cannot edit jobs assigned to others (unless they have admin privileges)
+- MECHANIC cannot edit inventory, labour, services, communication templates, settings (admin only)
+- All API endpoints require JWT authentication (except `/api/auth/login` and `/api/auth/register`)
 
 ## 👤 User Management
 

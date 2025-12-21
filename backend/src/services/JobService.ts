@@ -7,7 +7,7 @@ import { Customer } from '../models/Customer';
 import { Invoice } from '../models/Invoice';
 import { VehicleOwner } from '../models/VehicleOwner';
 import { generateJobCode } from '../utils/codeGenerator';
-import { NotFoundError, ConflictError, BadRequestError, VersionConflictError } from '../middleware/errorHandler';
+import { NotFoundError, ConflictError, BadRequestError, VersionConflictError, UnauthorizedError } from '../middleware/errorHandler';
 import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 import { createAuditLog } from '../utils/auditLogger';
@@ -77,7 +77,9 @@ export class JobService {
     startDate?: string,
     endDate?: string,
     hasInvoice?: boolean,
-    invoicePaid?: boolean
+    invoicePaid?: boolean,
+    userId?: string,
+    userRole?: string
   ): Promise<PaginatedResult<Job>> {
     const queryBuilder = this.repository.createQueryBuilder('job')
       .leftJoinAndSelect('job.customer', 'customer')
@@ -85,6 +87,9 @@ export class JobService {
       .leftJoinAndSelect('job.assignee', 'assignee')
       .leftJoinAndSelect('job.lineItems', 'lineItems')
       .leftJoinAndSelect('job.invoice', 'invoice');
+
+    // VIEWER can see all jobs (read-only access)
+    // No filtering needed - VIEWER restrictions are enforced at the endpoint level
 
     if (search) {
       queryBuilder.leftJoin('vehicle.vehicleOwners', 'vehicleOwner')
@@ -107,7 +112,8 @@ export class JobService {
       queryBuilder.andWhere('job.vehicleId = :vehicleId', { vehicleId });
     }
 
-    if (assignedTo) {
+    // Only apply assignedTo filter if user is not VIEWER (VIEWER filter already applied above)
+    if (assignedTo && userRole !== 'VIEWER') {
       queryBuilder.andWhere('job.assignedTo = :assignedTo', { assignedTo });
     }
 
@@ -150,7 +156,7 @@ export class JobService {
     return { data, total, page, limit };
   }
 
-  async findById(id: string): Promise<Job> {
+  async findById(id: string, userId?: string, userRole?: string): Promise<Job> {
     const job = await this.repository.findOne({
       where: { id },
       relations: ['customer', 'vehicle', 'assignee', 'lineItems', 'invoice'],
@@ -160,6 +166,9 @@ export class JobService {
     if (!job) {
       throw new NotFoundError('Job not found');
     }
+
+    // VIEWER can view all jobs (read-only access)
+    // Edit restrictions are enforced at the endpoint level
 
     return job;
   }

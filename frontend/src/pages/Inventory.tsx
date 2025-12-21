@@ -81,7 +81,7 @@ const defaultPartForm: PartFormData = {
 };
 
 const PartsTab: React.FC = observer(() => {
-  const { inventoryStore, settingsStore } = useStore();
+  const { inventoryStore, settingsStore, authStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryType | null>(null);
   const [formData, setFormData] = useState<PartFormData>(defaultPartForm);
@@ -189,9 +189,11 @@ const PartsTab: React.FC = observer(() => {
             <Typography color="text.secondary" sx={{ mb: 3 }}>
               Add your first part to start tracking inventory.
             </Typography>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
-              Add Part
-            </Button>
+            {authStore.isAdmin && (
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
+                Add Part
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -242,12 +244,16 @@ const PartsTab: React.FC = observer(() => {
                     </Box>
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleOpenDialog(item)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {authStore.isAdmin && (
+                      <>
+                        <IconButton size="small" onClick={() => handleOpenDialog(item)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -388,7 +394,7 @@ const defaultLabourForm: LabourFormData = {
 };
 
 const LabourTab: React.FC = observer(() => {
-  const { labourStore, settingsStore } = useStore();
+  const { labourStore, settingsStore, authStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Labour | null>(null);
   const [formData, setFormData] = useState<LabourFormData>(defaultLabourForm);
@@ -487,9 +493,11 @@ const LabourTab: React.FC = observer(() => {
             <Typography color="text.secondary" sx={{ mb: 3 }}>
               Add your first labour rate to start billing for work.
             </Typography>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
-              Add Labour Rate
-            </Button>
+            {authStore.isAdmin && (
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
+                Add Labour Rate
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -536,12 +544,16 @@ const LabourTab: React.FC = observer(() => {
                   <TableCell align="right">{settingsStore.currencySettings.symbol || '$'}{Number(item.hourlyRate).toFixed(2)}</TableCell>
                   <TableCell align="right">{item.isFlatRate ? '-' : `${item.defaultHours}h`}</TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleOpenDialog(item)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {authStore.isAdmin && (
+                      <>
+                        <IconButton size="small" onClick={() => handleOpenDialog(item)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -649,7 +661,7 @@ const defaultServiceForm: ServiceFormData = {
 };
 
 const ServicesTab: React.FC = observer(() => {
-  const { serviceStore, settingsStore } = useStore();
+  const { serviceStore, settingsStore, authStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Service | null>(null);
   const [formData, setFormData] = useState<ServiceFormData>(defaultServiceForm);
@@ -744,9 +756,11 @@ const ServicesTab: React.FC = observer(() => {
             <Typography color="text.secondary" sx={{ mb: 3 }}>
               Create service packages to bundle parts and labour together.
             </Typography>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
-              Add Service
-            </Button>
+            {authStore.isAdmin && (
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
+                Add Service
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -782,12 +796,16 @@ const ServicesTab: React.FC = observer(() => {
                   </TableCell>
                   <TableCell align="right">{settingsStore.currencySettings.symbol || '$'}{Number(item.basePrice).toFixed(2)}</TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleOpenDialog(item)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {authStore.isAdmin && (
+                      <>
+                        <IconButton size="small" onClick={() => handleOpenDialog(item)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -1044,7 +1062,7 @@ const SortableTemplateItemRow: React.FC<SortableTemplateItemRowProps> = ({
 };
 
 const TemplatesTab: React.FC = observer(() => {
-  const { templateStore, inventoryStore, labourStore, serviceStore, settingsStore } = useStore();
+  const { templateStore, inventoryStore, labourStore, serviceStore, settingsStore, authStore } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Template | null>(null);
   const [formData, setFormData] = useState<TemplateFormData>(defaultTemplateForm);
@@ -1298,9 +1316,11 @@ const TemplatesTab: React.FC = observer(() => {
             <Typography color="text.secondary" sx={{ mb: 3 }}>
               Create templates to quickly add common items to jobs.
             </Typography>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
-              Add Template
-            </Button>
+            {authStore.canEdit && (
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
+                Add Template
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -1352,12 +1372,18 @@ const TemplatesTab: React.FC = observer(() => {
                     ).toFixed(2)}
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleOpenDialog(item)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {authStore.canEdit && (
+                      <>
+                        <IconButton size="small" onClick={() => handleOpenDialog(item)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        {authStore.isAdmin && (
+                          <IconButton size="small" color="error" onClick={() => setDeleteConfirm(item.id)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

@@ -27,6 +27,7 @@ import { Job, JobStatus } from '../models/Job';
 import { LineItem } from '../models/LineItem';
 import { User } from '../models/User';
 import { BadRequestError } from '../middleware/errorHandler';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { EmailService } from '../services/EmailService';
 import { CommunicationTemplateService } from '../services/CommunicationTemplateService';
 import { CommunicationTemplateType, CommunicationTemplateAction } from '../models/CommunicationTemplate';
@@ -47,6 +48,7 @@ export class JobController extends Controller {
    */
   @Get('/')
   public async getJobs(
+    @Request() request: AuthenticatedRequest,
     @Query() page: number = 1,
     @Query() limit: number = 50,
     @Query() search?: string,
@@ -70,7 +72,9 @@ export class JobController extends Controller {
       startDate,
       endDate,
       hasInvoice,
-      invoicePaid
+      invoicePaid,
+      request.user?.id,
+      request.user?.role
     );
   }
 
@@ -78,8 +82,11 @@ export class JobController extends Controller {
    * Get a job by ID
    */
   @Get('/{id}')
-  public async getJob(@Path() id: string): Promise<Job> {
-    return this.jobService.findById(id);
+  public async getJob(
+    @Request() request: AuthenticatedRequest,
+    @Path() id: string
+  ): Promise<Job> {
+    return this.jobService.findById(id, request.user?.id, request.user?.role);
   }
 
   /**
@@ -94,6 +101,7 @@ export class JobController extends Controller {
    * Create a new job
    */
   @Post('/')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(201, 'Created')
   public async createJob(
     @Body() body: CreateJobDto,
@@ -107,6 +115,7 @@ export class JobController extends Controller {
    * Update a job
    */
   @Patch('/{id}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateJob(
     @Path() id: string,
     @Body() body: UpdateJobDto,
@@ -121,6 +130,7 @@ export class JobController extends Controller {
    * Update job status
    */
   @Post('/{id}/status')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateJobStatus(
     @Path() id: string,
     @Body() body: { status: JobStatus },
@@ -133,6 +143,7 @@ export class JobController extends Controller {
    * Delete a job (only if in ESTIMATE status)
    */
   @Delete('/{id}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(204, 'Deleted')
   public async deleteJob(@Path() id: string): Promise<void> {
     this.setStatus(204);
@@ -143,6 +154,7 @@ export class JobController extends Controller {
    * Duplicate a job as a new estimate
    */
   @Post('/{id}/duplicate')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(201, 'Created')
   public async duplicateJob(@Path() id: string): Promise<Job> {
     this.setStatus(201);
@@ -153,6 +165,7 @@ export class JobController extends Controller {
    * Apply a template to a job
    */
   @Post('/{id}/apply-template/{templateId}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async applyTemplate(
     @Path() id: string,
     @Path() templateId: string
@@ -175,6 +188,7 @@ export class JobController extends Controller {
    * Add a line item to a job
    */
   @Post('/{id}/line-items')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(201, 'Created')
   public async addLineItem(
     @Path() id: string,
@@ -189,6 +203,7 @@ export class JobController extends Controller {
    * Add multiple line items to a job
    */
   @Post('/{id}/line-items/bulk')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(201, 'Created')
   public async addLineItemsBulk(
     @Path() id: string,
@@ -203,6 +218,7 @@ export class JobController extends Controller {
    * Update a line item
    */
   @Patch('/{id}/line-items/{lineItemId}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   public async updateLineItem(
     @Path() id: string,
     @Path() lineItemId: string,
@@ -216,6 +232,7 @@ export class JobController extends Controller {
    * Delete a line item
    */
   @Delete('/{id}/line-items/{lineItemId}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse(204, 'Deleted')
   public async deleteLineItem(
     @Path() id: string,
@@ -241,6 +258,7 @@ export class JobController extends Controller {
    * Download PDF for a job (estimate or invoice)
    */
   @Get('/{id}/pdf')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @Response<BadRequestError>(400, 'Invalid type or job does not have invoice')
   public async downloadPdf(
     @Path() id: string,
@@ -282,6 +300,7 @@ export class JobController extends Controller {
    * Send PDF via email for a job (estimate or invoice)
    */
   @Post('/{id}/email')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
   @Response<BadRequestError>(400, 'Invalid type, job does not have invoice, or customer email missing')
   @SuccessResponse(200, 'Email sent successfully')
   public async sendEmail(

@@ -70,6 +70,7 @@ export class InventoryController extends Controller {
    * Create a new inventory item
    */
   @Post('/')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(201, 'Created')
   public async createInventoryItem(@Body() body: CreateInventoryDto): Promise<Inventory> {
     this.setStatus(201);
@@ -80,6 +81,7 @@ export class InventoryController extends Controller {
    * Update an inventory item
    */
   @Patch('/{id}')
+  @Security('jwt', ['ADMIN'])
   public async updateInventoryItem(
     @Path() id: string,
     @Body() body: UpdateInventoryDto
@@ -91,6 +93,7 @@ export class InventoryController extends Controller {
    * Delete an inventory item
    */
   @Delete('/{id}')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(204, 'Deleted')
   public async deleteInventoryItem(@Path() id: string): Promise<void> {
     this.setStatus(204);
@@ -101,6 +104,7 @@ export class InventoryController extends Controller {
    * Adjust stock quantity
    */
   @Post('/{id}/adjust-stock')
+  @Security('jwt', ['ADMIN'])
   public async adjustStock(
     @Path() id: string,
     @Body() body: AdjustStockDto

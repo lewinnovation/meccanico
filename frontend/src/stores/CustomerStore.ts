@@ -73,6 +73,9 @@ export class CustomerStore {
   }
 
   async createCustomer(data: Partial<Customer>): Promise<Customer> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to create customers');
+    }
     const response = await api.post('/api/customers', data);
     
     runInAction(() => {
@@ -83,6 +86,9 @@ export class CustomerStore {
   }
 
   async updateCustomer(id: string, data: Partial<Customer>): Promise<Customer> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to update customers');
+    }
     try {
       // Include current version from selectedCustomer if available
       const updateData = {
@@ -115,6 +121,9 @@ export class CustomerStore {
   }
 
   async deleteCustomer(id: string): Promise<void> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to delete customers');
+    }
     await api.delete(`/api/customers/${id}`);
     
     runInAction(() => {

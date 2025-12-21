@@ -80,6 +80,9 @@ export class InvoiceStore {
   }
 
   async createFromJob(jobId: string): Promise<Invoice | null> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to create invoices');
+    }
     this.isLoading = true;
     this.error = null;
 
@@ -192,6 +195,9 @@ export class InvoiceStore {
   }
 
   async createCreditNote(invoiceId: string, data: CreateCreditNoteDto): Promise<CreditNote> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to create credit notes');
+    }
     this.isLoading = true;
     this.error = null;
 
@@ -235,6 +241,9 @@ export class InvoiceStore {
   }
 
   async deleteCreditNote(invoiceId: string, creditNoteId: string): Promise<void> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to delete credit notes');
+    }
     this.isLoading = true;
     this.error = null;
 

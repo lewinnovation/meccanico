@@ -121,6 +121,9 @@ export class ServiceStore {
   }
 
   async create(data: CreateServiceDto): Promise<Service | null> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to create services');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -141,6 +144,9 @@ export class ServiceStore {
   }
 
   async update(id: string, data: UpdateServiceDto): Promise<Service | null> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to update services');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -183,6 +189,9 @@ export class ServiceStore {
   }
 
   async delete(id: string): Promise<void> {
+    if (!this.rootStore.authStore.isAdmin) {
+      throw new Error('You do not have permission to delete services');
+    }
     this.isLoading = true;
     this.error = null;
     try {

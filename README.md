@@ -210,9 +210,16 @@ npm run test:e2e
 
 | Role | Capabilities |
 |------|--------------|
-| **Admin** | Full access: settings, pricing, user management |
-| **Mechanic** | Own jobs, view inventory, create estimates |
-| **Viewer** | Read-only access to assigned jobs |
+| **Admin** | Full access: settings, pricing, user management, all jobs, all resources |
+| **Mechanic** | Own jobs, customers, vehicles, templates, invoices, payments. Read-only access to inventory, labour, services, communication templates |
+| **Viewer** | Read-only access to assigned jobs only. Cannot create, update, or delete any resources |
+
+**Detailed Permission Matrix:**
+- **VIEWER**: Can only see jobs assigned to them (`assignedTo = userId`). Read-only access to all other resources.
+- **MECHANIC**: Can create/edit customers, vehicles, jobs, templates, invoices, payments, credit notes. Can view all jobs. Cannot edit inventory, labour, services, communication templates, or settings (admin only).
+- **ADMIN**: Full CRUD access to all resources.
+
+All API endpoints require JWT authentication (except `/api/auth/login` and `/api/auth/register`). See [docs/models/user.md](./docs/models/user.md) for complete permission details.
 
 ---
 

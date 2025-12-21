@@ -695,7 +695,7 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
 
 // ==================== VEHICLE LIST ====================
 const VehicleList: React.FC = observer(() => {
-  const { vehicleStore } = useStore();
+  const { vehicleStore, authStore } = useStore();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -779,14 +779,16 @@ const VehicleList: React.FC = observer(() => {
         <Typography variant="h4" fontWeight={600}>
           Vehicles
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleOpenCreate}
-          data-testid="add-vehicle"
-        >
-          New Vehicle
-        </Button>
+        {authStore.canEdit && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleOpenCreate}
+            data-testid="add-vehicle"
+          >
+            New Vehicle
+          </Button>
+        )}
       </Box>
 
       {/* Search */}
@@ -824,7 +826,7 @@ const VehicleList: React.FC = observer(() => {
                 ? 'Try adjusting your search criteria.'
                 : 'Add your first vehicle to start tracking service history.'}
             </Typography>
-            {!search && (
+            {!search && authStore.canEdit && (
               <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate}>
                 Add Vehicle
               </Button>
@@ -911,28 +913,32 @@ const VehicleList: React.FC = observer(() => {
                       </Typography>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Edit">
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleOpenEdit(vehicle, e)}
-                          data-testid="edit-vehicle"
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteVehicle(vehicle);
-                          }}
-                          data-testid="delete-vehicle"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      {authStore.canEdit && (
+                        <>
+                          <Tooltip title="Edit">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => handleOpenEdit(vehicle, e)}
+                              data-testid="edit-vehicle"
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteVehicle(vehicle);
+                              }}
+                              data-testid="delete-vehicle"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -975,7 +981,7 @@ const VehicleList: React.FC = observer(() => {
 
 // ==================== VEHICLE DETAIL ====================
 const VehicleDetail: React.FC = observer(() => {
-  const { vehicleStore } = useStore();
+  const { vehicleStore, authStore } = useStore();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [formOpen, setFormOpen] = useState(false);
@@ -1096,23 +1102,27 @@ const VehicleDetail: React.FC = observer(() => {
             data-testid="vehicle-code"
           />
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<EditIcon />}
-          onClick={() => setFormOpen(true)}
-          data-testid="edit-vehicle"
-        >
-          Edit
-        </Button>
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<DeleteIcon />}
-          onClick={() => setDeleteOpen(true)}
-          data-testid="delete-vehicle"
-        >
-          Delete
-        </Button>
+        {authStore.canEdit && (
+          <>
+            <Button
+              variant="outlined"
+              startIcon={<EditIcon />}
+              onClick={() => setFormOpen(true)}
+              data-testid="edit-vehicle"
+            >
+              Edit
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => setDeleteOpen(true)}
+              data-testid="delete-vehicle"
+            >
+              Delete
+            </Button>
+          </>
+        )}
       </Box>
 
       <Grid container spacing={3}>
@@ -1240,13 +1250,15 @@ const VehicleDetail: React.FC = observer(() => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">Service History</Typography>
-                <Button 
-                  variant="outlined" 
-                  size="small"
-                  onClick={() => navigate(`/jobs/new?vehicleId=${id}`)}
-                >
-                  New Job
-                </Button>
+                {authStore.canEdit && (
+                  <Button 
+                    variant="outlined" 
+                    size="small"
+                    onClick={() => navigate(`/jobs/new?vehicleId=${id}`)}
+                  >
+                    New Job
+                  </Button>
+                )}
               </Box>
               <Divider sx={{ mb: 2 }} />
               {loadingJobs ? (

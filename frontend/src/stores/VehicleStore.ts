@@ -191,6 +191,9 @@ export class VehicleStore {
   }
 
   async createVehicle(data: CreateVehicleDto): Promise<Vehicle> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to create vehicles');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -211,6 +214,9 @@ export class VehicleStore {
   }
 
   async updateVehicle(id: string, data: UpdateVehicleDto): Promise<Vehicle> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to update vehicles');
+    }
     this.isLoading = true;
     this.error = null;
     try {
@@ -253,6 +259,9 @@ export class VehicleStore {
   }
 
   async deleteVehicle(id: string): Promise<void> {
+    if (this.rootStore.authStore.isViewer) {
+      throw new Error('You do not have permission to delete vehicles');
+    }
     this.isLoading = true;
     this.error = null;
     try {

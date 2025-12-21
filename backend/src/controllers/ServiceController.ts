@@ -68,6 +68,7 @@ export class ServiceController extends Controller {
    * Create a new service
    */
   @Post('/')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(201, 'Created')
   public async createService(@Body() body: CreateServiceDto): Promise<Service> {
     this.setStatus(201);
@@ -78,6 +79,7 @@ export class ServiceController extends Controller {
    * Update a service
    */
   @Patch('/{id}')
+  @Security('jwt', ['ADMIN'])
   public async updateService(
     @Path() id: string,
     @Body() body: UpdateServiceDto
@@ -89,6 +91,7 @@ export class ServiceController extends Controller {
    * Delete a service
    */
   @Delete('/{id}')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(204, 'Deleted')
   public async deleteService(@Path() id: string): Promise<void> {
     this.setStatus(204);

@@ -45,6 +45,22 @@ export class PaymentMethodController extends Controller {
   }
 
   /**
+   * Get usage counts for all payment methods (read-only for all authenticated users)
+   */
+  @Get('/usage-counts')
+  @SuccessResponse('200', 'Usage counts retrieved')
+  public async getUsageCounts(): Promise<Record<string, number>> {
+    const methods = await this.paymentMethodService.findAllIncludingInactive();
+    const counts: Record<string, number> = {};
+    
+    for (const method of methods) {
+      counts[method.id] = await this.paymentMethodService.getUsageCount(method.id);
+    }
+    
+    return counts;
+  }
+
+  /**
    * Get payment method by ID
    */
   @Get('/{id}')
@@ -95,21 +111,5 @@ export class PaymentMethodController extends Controller {
   public async deletePaymentMethod(@Path() id: string): Promise<void> {
     this.setStatus(204);
     await this.paymentMethodService.delete(id);
-  }
-
-  /**
-   * Get usage counts for all payment methods (read-only for all authenticated users)
-   */
-  @Get('/usage-counts')
-  @SuccessResponse('200', 'Usage counts retrieved')
-  public async getUsageCounts(): Promise<Record<string, number>> {
-    const methods = await this.paymentMethodService.findAllIncludingInactive();
-    const counts: Record<string, number> = {};
-    
-    for (const method of methods) {
-      counts[method.id] = await this.paymentMethodService.getUsageCount(method.id);
-    }
-    
-    return counts;
   }
 }

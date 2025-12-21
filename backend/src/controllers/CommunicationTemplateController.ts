@@ -58,6 +58,7 @@ export class CommunicationTemplateController extends Controller {
    * Create a new template
    */
   @Post('/')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(201, 'Created')
   public async createTemplate(
     @Body() body: CreateCommunicationTemplateDto
@@ -70,6 +71,7 @@ export class CommunicationTemplateController extends Controller {
    * Update a template
    */
   @Put('/{id}')
+  @Security('jwt', ['ADMIN'])
   public async updateTemplate(
     @Path() id: string,
     @Body() body: UpdateCommunicationTemplateDto
@@ -81,6 +83,7 @@ export class CommunicationTemplateController extends Controller {
    * Delete a template
    */
   @Delete('/{id}')
+  @Security('jwt', ['ADMIN'])
   @SuccessResponse(204, 'Deleted')
   public async deleteTemplate(@Path() id: string): Promise<void> {
     this.setStatus(204);
