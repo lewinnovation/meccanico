@@ -5,6 +5,26 @@ config();
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+// SSL configuration
+// DB_SSL can be: 'true', 'false', or 'require' (for require mode)
+// If not set, defaults to: true in production, false in development
+const getSslConfig = (): boolean | { rejectUnauthorized: boolean } => {
+  const dbSsl = process.env.DB_SSL?.toLowerCase();
+  
+  if (dbSsl === 'false' || dbSsl === '0') {
+    return false;
+  }
+  
+  if (dbSsl === 'true' || dbSsl === '1' || dbSsl === 'require') {
+    // For cloud databases (e.g., GCP Cloud SQL), rejectUnauthorized: false is often needed
+    const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED?.toLowerCase() !== 'true';
+    return { rejectUnauthorized };
+  }
+  
+  // Default behavior: SSL in production, no SSL in development
+  return isProduction ? { rejectUnauthorized: false } : false;
+};
+
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   host: process.env.DB_HOST || 'localhost',
@@ -16,7 +36,7 @@ export const dataSourceOptions: DataSourceOptions = {
   migrations: [__dirname + '/../migrations/**/*.{ts,js}'],
   synchronize: !isProduction, // Only in development
   logging: !isProduction,
-  ssl: isProduction ? { rejectUnauthorized: false } : false,
+  ssl: getSslConfig(),
 };
 
 export const AppDataSource = new DataSource(dataSourceOptions);

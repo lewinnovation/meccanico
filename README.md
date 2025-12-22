@@ -39,6 +39,23 @@
 - Docker & Docker Compose
 - Git
 
+### Docker Compose Files
+
+The project includes two Docker Compose configurations:
+
+- **`docker-compose.local.yml`** — Full local development stack (PostgreSQL, Backend, Frontend)
+  - Use for local development
+  - Exposes all services on localhost ports
+  - Includes hot-reload volumes
+
+- **`docker-compose.external.yml`** — External/Traefik setup (Full stack)
+  - Use when integrating with Traefik or external Docker networks
+  - Includes PostgreSQL, Backend, and Frontend services
+  - Connects to `traefik_compose_webgateway` network
+  - Configured with Traefik labels for automatic routing
+  - Services accessible via Traefik (no direct port mappings)
+  - Database accessible to other containers via service name `postgres`
+
 ### Development Setup
 
 1. **Clone the repository**
@@ -49,7 +66,7 @@
 
 2. **Start with Docker Compose** (recommended)
    ```bash
-   docker-compose up -d
+   docker-compose -f docker-compose.local.yml up -d
    ```
    
    This starts:
@@ -61,7 +78,7 @@
    
    ```bash
    # Terminal 1: Start PostgreSQL
-   docker-compose up postgres -d
+   docker-compose -f docker-compose.local.yml up postgres -d
    
    # Terminal 2: Start Backend
    cd backend
@@ -114,7 +131,8 @@ meccanico/
 │   │   ├── hooks/           # Custom hooks
 │   │   └── theme/           # MUI theme
 │   └── tests/
-├── docker-compose.yml
+├── docker-compose.local.yml      # Local development environment
+├── docker-compose.external.yml   # External/Traefik setup (database only)
 ├── agent.md                 # AI agent governance
 └── README.md
 ```
@@ -202,6 +220,7 @@ npm run test:e2e
 - [Domain Models](./docs/models/README.md)
 - [User Journeys](./docs/user-journeys/README.md)
 - [UI/UX Guidelines](./docs/ui-ux/README.md)
+- [Environment Variables](./docs/ENVIRONMENT_VARIABLES.md) - Complete environment variable reference
 - [Agent Governance](./agent.md)
 
 ---
@@ -228,8 +247,41 @@ All API endpoints require JWT authentication (except `/api/auth/login` and `/api
 ### Docker Production Build
 
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+docker-compose -f docker-compose.local.yml up -d
 ```
+
+### External/Traefik Setup
+
+For use with Traefik or external Docker networks, use the external compose file:
+
+**Quick start:**
+```bash
+# Copy example environment file
+cp .env.external.example .env.external
+
+# Edit .env.external with your domains and secrets
+# Then start services
+docker-compose -f docker-compose.external.yml --env-file .env.external up -d
+```
+
+**Or with inline variables:**
+```bash
+API_DOMAIN=api.meccanico.com \
+WEB_DOMAIN=meccanico.com \
+API_URL=https://api.meccanico.com \
+JWT_SECRET=your-production-secret \
+docker-compose -f docker-compose.external.yml up -d
+```
+
+This starts all services (PostgreSQL, Backend, Frontend) connected to the `traefik_compose_webgateway` network. Services are configured with Traefik labels for automatic routing.
+
+**Required environment variables:**
+- `API_DOMAIN` - Backend API domain
+- `WEB_DOMAIN` - Frontend domain
+- `API_URL` - Full backend API URL
+- `JWT_SECRET` - JWT secret key (must be set!)
+
+See [docs/ENVIRONMENT_VARIABLES.md](./docs/ENVIRONMENT_VARIABLES.md) for complete environment variable documentation.
 
 ### GCP Cloud Run
 

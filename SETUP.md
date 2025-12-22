@@ -8,6 +8,23 @@ This guide will help you set up the Meccanico project from scratch with comprehe
 - Node.js 24+ installed
 - npm installed
 
+## Docker Compose Files
+
+This project includes two Docker Compose configurations:
+
+- **`docker-compose.local.yml`** — Full local development stack (PostgreSQL, Backend, Frontend)
+  - Use for local development
+  - Exposes all services on localhost ports
+  - Includes hot-reload volumes
+
+- **`docker-compose.external.yml`** — External/Traefik setup (Full stack)
+  - Use when integrating with Traefik or external Docker networks
+  - Includes PostgreSQL, Backend, and Frontend services
+  - Connects to `traefik_compose_webgateway` network
+  - Configured with Traefik labels for automatic routing
+  - Services accessible via Traefik (no direct port mappings)
+  - Database accessible to other containers via service name `postgres`
+
 ## Quick Setup
 
 Run the setup script from the project root:
@@ -28,7 +45,7 @@ If you prefer to set up manually:
 ### 1. Start the Database
 
 ```bash
-docker-compose up -d postgres
+docker-compose -f docker-compose.local.yml up -d postgres
 ```
 
 Wait a few seconds for the database to be ready.
@@ -171,14 +188,72 @@ Available npm scripts in the backend:
 
 ## Environment Variables
 
+### Local Development
+
+For local development using `docker-compose.local.yml`, all environment variables have sensible defaults and no configuration is required. The services will work out of the box.
+
+If you need to customize settings, you can:
+
+1. **Create environment files** (optional):
+   - `backend/.env` - Backend configuration (see `backend/.env.example`)
+   - `frontend/.env` - Frontend configuration (see `frontend/.env.example`)
+
+2. **Or modify `docker-compose.local.yml`** directly to change environment variables.
+
+### External/Traefik Setup
+
+For external deployments using `docker-compose.external.yml`, you **must** configure environment variables for Traefik routing and security.
+
+**Required variables:**
+- `API_DOMAIN` - Domain for backend API (e.g., `api.meccanico.com`)
+- `WEB_DOMAIN` - Domain for frontend (e.g., `meccanico.com`)
+- `API_URL` - Full backend API URL (e.g., `https://api.meccanico.com`)
+- `JWT_SECRET` - Secret key for JWT tokens (must be set!)
+
+**Setup steps:**
+
+1. Copy the example file:
+   ```bash
+   cp .env.external.example .env.external
+   ```
+
+2. Edit `.env.external` with your actual values:
+   ```env
+   API_DOMAIN=api.meccanico.com
+   WEB_DOMAIN=meccanico.com
+   API_URL=https://api.meccanico.com
+   JWT_SECRET=your-production-secret-key
+   CORS_ORIGIN=https://meccanico.com
+   ```
+
+3. Start services with the environment file:
+   ```bash
+   docker-compose -f docker-compose.external.yml --env-file .env.external up -d
+   ```
+
+**Full documentation:** See [docs/ENVIRONMENT_VARIABLES.md](./docs/ENVIRONMENT_VARIABLES.md) for complete environment variable reference.
+
+### Backend Environment Variables
+
 The backend uses the following environment variables (with defaults):
 
-- `DB_HOST` - Database host (default: `localhost`)
+- `NODE_ENV` - Node.js environment (default: `development`)
+- `PORT` - Server port (default: `4000`)
+- `DB_HOST` - Database host (default: `localhost`, use `postgres` in Docker)
 - `DB_PORT` - Database port (default: `5432`)
 - `DB_NAME` - Database name (default: `meccanico`)
 - `DB_USER` - Database user (default: `meccanico`)
 - `DB_PASSWORD` - Database password (default: `meccanico_dev_password`)
-- `AUTO_SEED` - Auto-seed on server start (default: `true`, set to `false` to disable)
+- `DB_SSL` - Enable SSL for database (default: `false` in dev, `true` in prod)
+- `DB_SSL_REJECT_UNAUTHORIZED` - Reject unauthorized SSL certs (default: `false`)
+- `JWT_SECRET` - JWT secret key (default: `default-dev-secret`)
+- `CORS_ORIGIN` - Allowed CORS origin (default: `http://localhost:3000`)
+- `JWT_EXPIRES_IN` - JWT expiration (default: `24h`)
+- `LOG_LEVEL` - Logging level (default: `info`)
+
+### Frontend Environment Variables
+
+- `VITE_API_URL` - Backend API URL (default: empty, uses proxy in dev mode)
 
 ## E2E Testing
 
@@ -198,13 +273,13 @@ npm run test:e2e
 If you get connection errors:
 1. Make sure Docker is running
 2. Check that the postgres container is running: `docker ps`
-3. Try restarting the container: `docker-compose restart postgres`
+3. Try restarting the container: `docker-compose -f docker-compose.local.yml restart postgres`
 
 ### Port Already in Use
 
 If ports 3000, 4000, or 5432 are already in use:
 1. Stop the conflicting services
-2. Or update the ports in `docker-compose.yml`
+2. Or update the ports in `docker-compose.local.yml`
 
 ### Seed Data Not Loading
 
@@ -219,7 +294,7 @@ To completely reset the project:
 
 ```bash
 # Stop all containers
-docker-compose down
+docker-compose -f docker-compose.local.yml down
 
 # Remove database volume (WARNING: deletes all data)
 docker volume rm meccanico_postgres_data

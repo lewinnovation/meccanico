@@ -113,8 +113,8 @@ meccanico/
 │   │   ├── unit/                  # Component unit tests
 │   │   └── e2e/                   # Playwright E2E tests
 │   └── package.json
-├── docker-compose.yml             # Development environment
-├── docker-compose.prod.yml        # Production environment
+├── docker-compose.local.yml       # Local development environment (full stack)
+├── docker-compose.external.yml    # External/Traefik setup (full stack with Traefik labels)
 ├── Dockerfile.backend             # Backend container
 ├── Dockerfile.frontend            # Frontend container
 ├── agent.md                       # This file

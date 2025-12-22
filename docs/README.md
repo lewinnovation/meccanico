@@ -14,6 +14,7 @@
 | [API Reference](./api/README.md) | REST API endpoint documentation |
 | [User Journeys](./user-journeys/README.md) | Workflow documentation and user flows |
 | [UI/UX Guidelines](./ui-ux/README.md) | Design system and interaction patterns |
+| [Environment Variables](./ENVIRONMENT_VARIABLES.md) | Complete environment variable reference and setup guide |
 
 ### Quick Links
 - [Agent Governance](/agent.md) — AI agent guidelines and pre-release checklist
@@ -77,6 +78,7 @@ Backend (Express + TSOA + TypeORM)
 docs/
 ├── README.md                 # This file
 ├── architecture.md           # System architecture deep-dive
+├── ENVIRONMENT_VARIABLES.md  # Environment variable reference
 ├── getting-started.md        # Development setup
 ├── contributing.md           # Contribution guidelines
 ├── models/

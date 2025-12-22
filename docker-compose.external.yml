@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: meccanico-db
+    environment:
+      POSTGRES_USER: meccanico
+      POSTGRES_PASSWORD: meccanico_dev_password
+      POSTGRES_DB: meccanico
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meccanico"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - web
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: meccanico-api
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: meccanico
+      DB_USER: meccanico
+      DB_PASSWORD: meccanico_dev_password
+      DB_SSL: ${DB_SSL:-true}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    volumes:
+      - ./backend/src:/app/src
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meccanico-api.rule=Host(${API_DOMAIN:-api.meccanico.local})"
+      - "traefik.http.routers.meccanico-api.entrypoints=http,https"
+      - "traefik.http.routers.meccanico-api.tls=true"
+      - "traefik.http.routers.meccanico-api.tls.options=default"
+      - "traefik.http.routers.meccanico-api.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.meccanico-api.loadbalancer.server.port=4000"
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: meccanico-web
+    environment:
+      VITE_API_URL: ${API_URL:-http://api.meccanico.local}
+    volumes:
+      - ./frontend/src:/app/src
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meccanico-web.rule=Host(${WEB_DOMAIN:-meccanico.local})"
+      - "traefik.http.routers.meccanico-web.entrypoints=http,https"
+      - "traefik.http.routers.meccanico-web.tls=true"
+      - "traefik.http.routers.meccanico-web.tls.options=default"
+      - "traefik.http.routers.meccanico-web.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.meccanico-web.loadbalancer.server.port=3000"
+
+volumes:
+  postgres_data:
+
+networks:
+  web:
+    external:
+      name: traefik_compose_webgateway

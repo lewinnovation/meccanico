@@ -10,8 +10,8 @@ echo "=========================="
 echo ""
 
 # Check if we're in the right directory
-if [ ! -f "docker-compose.yml" ]; then
-  echo "❌ Error: docker-compose.yml not found. Please run this script from the project root."
+if [ ! -f "docker-compose.local.yml" ]; then
+  echo "❌ Error: docker-compose.local.yml not found. Please run this script from the project root."
   exit 1
 fi
 
@@ -24,7 +24,7 @@ fi
 # Check if database container is running
 if ! docker ps | grep -q meccanico-db; then
   echo "📦 Starting database container..."
-  docker-compose up -d postgres
+  docker-compose -f docker-compose.local.yml up -d postgres
   
   # Wait for database to be ready
   echo "⏳ Waiting for database to be ready..."
@@ -74,6 +74,6 @@ echo "   Mechanic: mechanic@meccanico.dev / mechanic123"
 echo "   Viewer:   viewer@meccanico.dev / viewer123"
 echo ""
 echo "🚀 You can now start the backend with: cd backend && npm run dev"
-echo "   Or start everything with: docker-compose up"
+echo "   Or start everything with: docker-compose -f docker-compose.local.yml up"
 
 
