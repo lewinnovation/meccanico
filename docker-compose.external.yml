@@ -27,9 +27,7 @@ services:
     container_name: meccanico-api
     environment:
       NODE_ENV: production
-      PORT: 4000
       DB_HOST: postgres
-      DB_PORT: 5432
       DB_NAME: meccanico
       DB_USER: meccanico
       DB_PASSWORD: meccanico_dev_password
@@ -84,5 +82,5 @@ volumes:
 
 networks:
   web:
-    name: traefik_compose_webgateway
-    external: true
+    external: 
+      name: traefik_compose_webgateway
