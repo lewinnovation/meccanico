@@ -60,6 +60,33 @@ export const initializeDatabase = async (): Promise<DataSource> => {
 
     await AppDataSource.initialize();
     console.log('✅ Database connection established');
+
+    // In production, synchronize is disabled, so we need to ensure tables exist
+    // Check if tables exist, and if not, run synchronize as fallback
+    if (isProduction) {
+      try {
+        // Check if any tables exist
+        const result = await AppDataSource.query(`
+          SELECT COUNT(*) as count
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_type = 'BASE TABLE'
+        `);
+        const tableCount = parseInt(result[0]?.count || '0', 10);
+        
+        if (tableCount === 0) {
+          console.log('⚠️  No tables found in production. Running synchronize to create schema...');
+          await AppDataSource.synchronize(false);
+          console.log('✅ Database schema synchronized');
+        } else {
+          console.log(`✅ Database has ${tableCount} table(s)`);
+        }
+      } catch (syncError: any) {
+        console.error('⚠️  Failed to check/sync database schema:', syncError.message);
+        // Continue anyway - might be a transient error
+      }
+    }
+
     return AppDataSource;
   } catch (error) {
     console.error('❌ Database connection failed:', error);
