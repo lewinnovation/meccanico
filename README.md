@@ -74,7 +74,19 @@ The project includes two Docker Compose configurations:
    - Backend API on `localhost:4000`
    - Frontend on `localhost:3000`
 
-3. **Or run locally**
+3. **Seed the database** (optional, for initial setup)
+   ```bash
+   # For local development:
+   docker exec meccanico-api npm run db:seed
+   
+   # For production/external deployment:
+   docker exec meccanico-api npm run db:seed:prod
+   ```
+   
+   **Note:** Seeding is disabled by default to prevent accidentally overriding production data. 
+   Run this command manually after containers have started to populate the database with initial data.
+
+4. **Or run locally**
    
    ```bash
    # Terminal 1: Start PostgreSQL
@@ -91,7 +103,7 @@ The project includes two Docker Compose configurations:
    npm run dev
    ```
 
-4. **Access the application**
+5. **Access the application**
    - Frontend: http://localhost:3000
    - API Docs: http://localhost:4000/api/docs
    - Database: `postgresql://meccanico:meccanico_dev_password@localhost:5432/meccanico`
@@ -185,6 +197,13 @@ npm run build
 
 # Generate TSOA routes and OpenAPI spec
 npm run tsoa:generate
+
+# Seed database (after containers are running)
+# For local development:
+docker exec meccanico-api npm run db:seed
+
+# For production/external:
+docker exec meccanico-api npm run db:seed:prod
 
 # Run database migrations
 npm run migration:run

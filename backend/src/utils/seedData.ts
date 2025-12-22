@@ -1808,11 +1808,16 @@ async function seedPaymentMethods(): Promise<void> {
  * Run seeding if called directly
  */
 if (require.main === module) {
-  AppDataSource.initialize()
-    .then(() => seedDatabase())
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error('Seeding failed:', error);
+  (async () => {
+    try {
+      const { initializeDatabase } = await import('../config/database');
+      await initializeDatabase();
+      await seedDatabase();
+      console.log('✅ Seeding completed successfully');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Seeding failed:', error);
       process.exit(1);
-    });
+    }
+  })();
 }

@@ -51,9 +51,13 @@ async function bootstrap() {
     // Initialize database
     await initializeDatabase();
 
-    // Run database seeding only if AUTO_SEED is enabled (default: true for development)
-    if (process.env.AUTO_SEED !== 'false') {
+    // Run database seeding only if AUTO_SEED is explicitly enabled
+    // Default: disabled to prevent accidentally overriding production data
+    if (process.env.AUTO_SEED === 'true') {
+      console.log('🌱 AUTO_SEED enabled - running database seeding...');
       await seedDatabase();
+    } else {
+      console.log('ℹ️  Database seeding skipped (set AUTO_SEED=true to enable)');
     }
 
     // Start listening

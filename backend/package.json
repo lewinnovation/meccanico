@@ -14,6 +14,7 @@
     "migration:revert": "npm run typeorm -- migration:revert -d src/config/database.ts",
     "db:reset": "ts-node src/utils/resetDatabase.ts",
     "db:seed": "ts-node src/utils/seedData.ts",
+    "db:seed:prod": "node dist/utils/seedData.js",
     "db:setup": "ts-node src/utils/resetAndSeed.ts",
     "db:migrate-templates": "ts-node src/utils/migrateCommunicationTemplates.ts",
     "db:add-versions": "ts-node src/utils/addVersionColumns.ts",
