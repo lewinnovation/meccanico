@@ -38,7 +38,6 @@ resource "google_compute_backend_service" "backend" {
     group = google_compute_region_network_endpoint_group.backend_neg.id
   }
 
-  health_checks = [google_compute_health_check.backend.id]
 }
 
 # Backend service for frontend Cloud Run
@@ -55,7 +54,6 @@ resource "google_compute_backend_service" "frontend" {
     group = google_compute_region_network_endpoint_group.frontend_neg.id
   }
 
-  health_checks = [google_compute_health_check.frontend.id]
 }
 
 # Network endpoint group for backend
@@ -77,36 +75,6 @@ resource "google_compute_region_network_endpoint_group" "frontend_neg" {
   project               = var.project_id
   cloud_run {
     service = split("/", var.frontend_service)[5]
-  }
-}
-
-# Health check for backend
-resource "google_compute_health_check" "backend" {
-  name               = "meccanico-backend-health-${var.environment}"
-  project             = var.project_id
-  check_interval_sec = 10
-  timeout_sec         = 5
-  healthy_threshold  = 2
-  unhealthy_threshold = 3
-
-  http_health_check {
-    port         = 4000
-    request_path = "/health"
-  }
-}
-
-# Health check for frontend
-resource "google_compute_health_check" "frontend" {
-  name               = "meccanico-frontend-health-${var.environment}"
-  project             = var.project_id
-  check_interval_sec = 10
-  timeout_sec         = 5
-  healthy_threshold  = 2
-  unhealthy_threshold = 3
-
-  http_health_check {
-    port         = 3000
-    request_path = "/"
   }
 }
 

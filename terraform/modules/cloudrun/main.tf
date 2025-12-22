@@ -30,12 +30,6 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "NODE_ENV"
         value = "production"
       }
-
-      env {
-        name  = "PORT"
-        value = "4000"
-      }
-
       env {
         name  = "DB_HOST"
         value = var.db_host
@@ -57,13 +51,18 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
-        name  = "DB_PASSWORD"
-        value = var.db_password
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = var.db_password_secret_id
+            version = "latest"
+          }
+        }
       }
 
       env {
         name  = "DB_SSL"
-        value = "true"
+        value = "false"
       }
 
       env {
@@ -72,8 +71,13 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
-        name  = "JWT_SECRET"
-        value = var.jwt_secret
+        name = "JWT_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = var.jwt_secret_secret_id
+            version = "latest"
+          }
+        }
       }
 
       env {
@@ -85,10 +89,56 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "AUTO_SEED"
         value = "false"
       }
+
+      # SMTP Configuration
+      env {
+        name  = "SMTP_HOST"
+        value = var.smtp_host
+      }
+
+      env {
+        name  = "SMTP_PORT"
+        value = var.smtp_port
+      }
+
+      env {
+        name = "SMTP_USER"
+        value_source {
+          secret_key_ref {
+            secret  = var.smtp_user_secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "SMTP_PASS"
+        value_source {
+          secret_key_ref {
+            secret  = var.smtp_password_secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "SMTP_FROM"
+        value = var.smtp_from
+      }
+
+      env {
+        name  = "SMTP_SECURE"
+        value = var.smtp_secure
+      }
+
+      env {
+        name  = "SMTP_REQUIRE_TLS"
+        value = var.smtp_require_tls
+      }
     }
 
     vpc_access {
-      connector = var.vpc_connector_name
+      connector = var.vpc_connector_id
       egress    = "PRIVATE_RANGES_ONLY"
     }
   }
@@ -121,7 +171,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       image = var.frontend_image
 
       ports {
-        container_port = 3000
+        container_port = 80
       }
 
       resources {
@@ -131,10 +181,8 @@ resource "google_cloud_run_v2_service" "frontend" {
         }
       }
 
-      env {
-        name  = "VITE_API_URL"
-        value = var.api_url
-      }
+      # Runtime environment injection happens via entrypoint
+      # but we can set defaults here if needed
     }
   }
 
@@ -182,8 +230,8 @@ variable "frontend_image" {
   type        = string
 }
 
-variable "vpc_connector_name" {
-  description = "VPC connector name"
+variable "vpc_connector_id" {
+  description = "VPC connector ID"
   type        = string
 }
 
@@ -207,16 +255,24 @@ variable "db_user" {
   type        = string
 }
 
-variable "db_password" {
-  description = "Database password"
+variable "db_password_secret_id" {
+  description = "Database password secret ID"
   type        = string
-  sensitive   = true
 }
 
-variable "jwt_secret" {
-  description = "JWT secret"
+variable "jwt_secret_secret_id" {
+  description = "JWT secret secret ID"
   type        = string
-  sensitive   = true
+}
+
+variable "smtp_user_secret_id" {
+  description = "SMTP user secret ID"
+  type        = string
+}
+
+variable "smtp_password_secret_id" {
+  description = "SMTP password secret ID"
+  type        = string
 }
 
 variable "cors_origin" {
@@ -257,4 +313,31 @@ variable "service_account_email" {
 variable "environment" {
   description = "Environment name"
   type        = string
+}
+
+variable "smtp_host" {
+  description = "SMTP host"
+  type        = string
+}
+
+variable "smtp_port" {
+  description = "SMTP port"
+  type        = string
+}
+
+variable "smtp_from" {
+  description = "SMTP from address"
+  type        = string
+}
+
+variable "smtp_secure" {
+  description = "SMTP secure"
+  type        = string
+  default     = "true"
+}
+
+variable "smtp_require_tls" {
+  description = "SMTP require TLS"
+  type        = string
+  default     = "true"
 }

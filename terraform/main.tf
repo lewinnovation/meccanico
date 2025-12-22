@@ -20,27 +20,39 @@ module "network" {
 }
 
 # Create service accounts and IAM bindings
-# module "iam" {
-#   source = "./modules/iam"
-#
-#   project_id = var.project_id
-# }
+module "iam" {
+  source = "./modules/iam"
+
+  project_id = var.project_id
+}
+
+# Create Secrets
+module "secrets" {
+  source = "./modules/secrets"
+
+  project_id    = var.project_id
+  environment   = var.environment
+  db_password   = var.db_password
+  jwt_secret    = var.jwt_secret
+  smtp_user     = var.smtp_user
+  smtp_password = var.smtp_password
+}
 
 # Create Cloud SQL database
 module "database" {
   source = "./modules/database"
 
-  project_id              = var.project_id
-  region                  = var.region
-  zone                    = var.zone
-  database_tier           = var.database_tier
-  database_disk_size      = var.database_disk_size
+  project_id               = var.project_id
+  region                   = var.region
+  zone                     = var.zone
+  database_tier            = var.database_tier
+  database_disk_size       = var.database_disk_size
   enable_high_availability = var.enable_high_availability
-  db_password             = var.db_password
-  vpc_connector_name      = module.network.vpc_connector_name
-  private_ip_range        = module.network.private_ip_range
-  vpc_network_name        = module.network.vpc_network_name
-  environment             = var.environment
+  db_password              = var.db_password
+  vpc_connector_name       = module.network.vpc_connector_name
+  private_ip_range         = module.network.private_ip_range
+  vpc_network_name         = module.network.vpc_network_name
+  environment              = var.environment
 
   depends_on = [
     module.network
@@ -51,29 +63,43 @@ module "database" {
 module "cloudrun" {
   source = "./modules/cloudrun"
 
-  project_id              = var.project_id
-  region                  = var.region
-  backend_image           = var.backend_image
-  frontend_image          = var.frontend_image
-  vpc_connector_name      = module.network.vpc_connector_name
-  cloud_sql_connection    = module.database.connection_name
-  db_host                 = module.database.private_ip_address
-  db_name                 = module.database.database_name
-  db_user                 = module.database.database_user
-  db_password             = var.db_password
-  jwt_secret              = var.jwt_secret
-  cors_origin             = var.cors_origin
-  cloudrun_min_instances  = var.cloudrun_min_instances
-  cloudrun_max_instances  = var.cloudrun_max_instances
-  cloudrun_cpu            = var.cloudrun_cpu
-  cloudrun_memory         = var.cloudrun_memory
-  api_url                 = "https://${var.api_subdomain}"
-  service_account_email   = "meccanico-cloudrun@${var.project_id}.iam.gserviceaccount.com"
-  environment             = var.environment
+  project_id           = var.project_id
+  region               = var.region
+  backend_image        = var.backend_image
+  frontend_image       = var.frontend_image
+  vpc_connector_id     = module.network.vpc_connector_id
+  cloud_sql_connection = module.database.connection_name
+  db_host              = module.database.private_ip_address
+  db_name              = module.database.database_name
+  db_user              = module.database.database_user
+
+  # Pass Secret IDs instead of values
+  db_password_secret_id   = module.secrets.db_password_secret_id
+  jwt_secret_secret_id    = module.secrets.jwt_secret_secret_id
+  smtp_user_secret_id     = module.secrets.smtp_user_secret_id
+  smtp_password_secret_id = module.secrets.smtp_password_secret_id
+
+  cors_origin            = var.cors_origin
+  cloudrun_min_instances = var.cloudrun_min_instances
+  cloudrun_max_instances = var.cloudrun_max_instances
+  cloudrun_cpu           = var.cloudrun_cpu
+  cloudrun_memory        = var.cloudrun_memory
+  api_url                = "https://${var.api_subdomain}"
+  service_account_email  = module.iam.cloudrun_service_account_email
+  environment            = var.environment
+
+  # SMTP Configuration
+  smtp_host        = var.smtp_host
+  smtp_port        = var.smtp_port
+  smtp_from        = var.smtp_from
+  smtp_secure      = var.smtp_secure
+  smtp_require_tls = var.smtp_require_tls
 
   depends_on = [
     module.network,
-    module.database
+    module.database,
+    module.iam,
+    module.secrets
   ]
 }
 
@@ -81,12 +107,12 @@ module "cloudrun" {
 module "loadbalancer" {
   source = "./modules/loadbalancer"
 
-  project_id        = var.project_id
-  domain            = var.domain
-  api_subdomain     = var.api_subdomain
-  frontend_service  = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.frontend_service_name}"
-  backend_service   = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.backend_service_name}"
-  environment       = var.environment
+  project_id       = var.project_id
+  domain           = var.domain
+  api_subdomain    = var.api_subdomain
+  frontend_service = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.frontend_service_name}"
+  backend_service  = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.backend_service_name}"
+  environment      = var.environment
 
   depends_on = [
     module.cloudrun

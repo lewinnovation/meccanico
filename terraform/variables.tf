@@ -101,3 +101,44 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+# SMTP Configuration
+variable "smtp_host" {
+  description = "SMTP host"
+  type        = string
+}
+
+variable "smtp_port" {
+  description = "SMTP port"
+  type        = string
+  default     = "587"
+}
+
+variable "smtp_user" {
+  description = "SMTP user"
+  type        = string
+  sensitive   = true
+}
+
+variable "smtp_password" {
+  description = "SMTP password"
+  type        = string
+  sensitive   = true
+}
+
+variable "smtp_from" {
+  description = "SMTP from address"
+  type        = string
+}
+
+variable "smtp_secure" {
+  description = "SMTP secure connection"
+  type        = string
+  default     = "false" # Usually false for 587 (STARTTLS), true for 465
+}
+
+variable "smtp_require_tls" {
+  description = "SMTP require TLS"
+  type        = string
+  default     = "true"
+}
