@@ -33,7 +33,7 @@ services:
       DB_NAME: meccanico
       DB_USER: meccanico
       DB_PASSWORD: meccanico_dev_password
-      DB_SSL: ${DB_SSL:-true}
+      DB_SSL: ${DB_SSL:-false}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
@@ -83,5 +83,5 @@ volumes:
 
 networks:
   web:
-    external:
-      name: traefik_compose_webgateway
+    name: traefik_compose_webgateway
+    external: true

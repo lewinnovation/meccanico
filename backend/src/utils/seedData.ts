@@ -406,30 +406,47 @@ export async function seedDatabase(): Promise<void> {
   // Using raw SQL DELETE to avoid TRUNCATE foreign key constraint issues
   const queryRunner = AppDataSource.createQueryRunner();
   
+  // Helper function to safely truncate a table if it exists
+  const truncateTableIfExists = async (tableName: string): Promise<void> => {
+    const tableExists = await queryRunner.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = $1
+      )`,
+      [tableName]
+    );
+    
+    if (tableExists[0]?.exists) {
+      await queryRunner.query(`TRUNCATE TABLE ${tableName} CASCADE`);
+    }
+  };
+  
   try {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     
     // Use TRUNCATE CASCADE to handle circular foreign key dependencies
     // CASCADE automatically deletes dependent rows, handling the jobs<->invoices circular reference
-    await queryRunner.query('TRUNCATE TABLE communication_templates CASCADE');
-    await queryRunner.query('TRUNCATE TABLE payments CASCADE');
-    await queryRunner.query('TRUNCATE TABLE credit_notes CASCADE');
-    await queryRunner.query('TRUNCATE TABLE payment_methods CASCADE');
-    await queryRunner.query('TRUNCATE TABLE template_items CASCADE');
-    await queryRunner.query('TRUNCATE TABLE templates CASCADE');
-    await queryRunner.query('TRUNCATE TABLE line_items CASCADE');
-    await queryRunner.query('TRUNCATE TABLE invoices CASCADE');
-    await queryRunner.query('TRUNCATE TABLE jobs CASCADE');
-    await queryRunner.query('TRUNCATE TABLE service_items CASCADE');
-    await queryRunner.query('TRUNCATE TABLE services CASCADE');
-    await queryRunner.query('TRUNCATE TABLE labour CASCADE');
-    await queryRunner.query('TRUNCATE TABLE inventory CASCADE');
-    await queryRunner.query('TRUNCATE TABLE vehicle_owners CASCADE');
-    await queryRunner.query('TRUNCATE TABLE vehicles CASCADE');
-    await queryRunner.query('TRUNCATE TABLE vehicle_models CASCADE');
-    await queryRunner.query('TRUNCATE TABLE vehicle_makes CASCADE');
-    await queryRunner.query('TRUNCATE TABLE customers CASCADE');
+    // Only truncate tables that exist (in case migrations haven't run yet)
+    await truncateTableIfExists('communication_templates');
+    await truncateTableIfExists('payments');
+    await truncateTableIfExists('credit_notes');
+    await truncateTableIfExists('payment_methods');
+    await truncateTableIfExists('template_items');
+    await truncateTableIfExists('templates');
+    await truncateTableIfExists('line_items');
+    await truncateTableIfExists('invoices');
+    await truncateTableIfExists('jobs');
+    await truncateTableIfExists('service_items');
+    await truncateTableIfExists('services');
+    await truncateTableIfExists('labour');
+    await truncateTableIfExists('inventory');
+    await truncateTableIfExists('vehicle_owners');
+    await truncateTableIfExists('vehicles');
+    await truncateTableIfExists('vehicle_models');
+    await truncateTableIfExists('vehicle_makes');
+    await truncateTableIfExists('customers');
     
     await queryRunner.commitTransaction();
   } catch (error) {
@@ -1499,6 +1516,26 @@ async function seedJobs(
  * Seed communication templates
  */
 async function seedCommunicationTemplates(): Promise<void> {
+  // Check if table exists before trying to seed
+  const queryRunner = AppDataSource.createQueryRunner();
+  try {
+    await queryRunner.connect();
+    const tableExists = await queryRunner.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'communication_templates'
+      )`
+    );
+    
+    if (!tableExists[0]?.exists) {
+      console.log('  ⚠ Communication templates table does not exist yet. Skipping seed.');
+      return;
+    }
+  } finally {
+    await queryRunner.release();
+  }
+
   const templateRepository = AppDataSource.getRepository(CommunicationTemplate);
 
   // Remove all existing templates to ensure clean state
