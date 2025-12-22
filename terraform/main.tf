@@ -1,0 +1,94 @@
+provider "google" {
+  project = var.project_id
+  region  = var.region
+  zone    = var.zone
+}
+
+# Enable required APIs
+# module "project" {
+#   source = "./modules/project"
+#
+#   project_id = var.project_id
+# }
+
+# Create networking resources
+module "network" {
+  source = "./modules/network"
+
+  project_id = var.project_id
+  region     = var.region
+}
+
+# Create service accounts and IAM bindings
+# module "iam" {
+#   source = "./modules/iam"
+#
+#   project_id = var.project_id
+# }
+
+# Create Cloud SQL database
+module "database" {
+  source = "./modules/database"
+
+  project_id              = var.project_id
+  region                  = var.region
+  zone                    = var.zone
+  database_tier           = var.database_tier
+  database_disk_size      = var.database_disk_size
+  enable_high_availability = var.enable_high_availability
+  db_password             = var.db_password
+  vpc_connector_name      = module.network.vpc_connector_name
+  private_ip_range        = module.network.private_ip_range
+  vpc_network_name        = module.network.vpc_network_name
+  environment             = var.environment
+
+  depends_on = [
+    module.network
+  ]
+}
+
+# Create Cloud Run services
+module "cloudrun" {
+  source = "./modules/cloudrun"
+
+  project_id              = var.project_id
+  region                  = var.region
+  backend_image           = var.backend_image
+  frontend_image          = var.frontend_image
+  vpc_connector_name      = module.network.vpc_connector_name
+  cloud_sql_connection    = module.database.connection_name
+  db_host                 = module.database.private_ip_address
+  db_name                 = module.database.database_name
+  db_user                 = module.database.database_user
+  db_password             = var.db_password
+  jwt_secret              = var.jwt_secret
+  cors_origin             = var.cors_origin
+  cloudrun_min_instances  = var.cloudrun_min_instances
+  cloudrun_max_instances  = var.cloudrun_max_instances
+  cloudrun_cpu            = var.cloudrun_cpu
+  cloudrun_memory         = var.cloudrun_memory
+  api_url                 = "https://${var.api_subdomain}"
+  service_account_email   = "meccanico-cloudrun@${var.project_id}.iam.gserviceaccount.com"
+  environment             = var.environment
+
+  depends_on = [
+    module.network,
+    module.database
+  ]
+}
+
+# Create load balancer
+module "loadbalancer" {
+  source = "./modules/loadbalancer"
+
+  project_id        = var.project_id
+  domain            = var.domain
+  api_subdomain     = var.api_subdomain
+  frontend_service  = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.frontend_service_name}"
+  backend_service   = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.backend_service_name}"
+  environment       = var.environment
+
+  depends_on = [
+    module.cloudrun
+  ]
+}
