@@ -1,0 +1,12 @@
+steps:
+  # Build Backend Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/meccanico-backend:$COMMIT_SHA', './backend']
+
+  # Build Frontend Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/meccanico-frontend:$COMMIT_SHA', './frontend']
+
+images:
+  - 'gcr.io/$PROJECT_ID/meccanico-backend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/meccanico-frontend:$COMMIT_SHA'
