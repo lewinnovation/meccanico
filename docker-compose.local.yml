@@ -35,6 +35,7 @@ services:
       DB_PASSWORD: meccanico_dev_password
       JWT_SECRET: dev-secret-change-in-production
       CORS_ORIGIN: http://localhost:3000
+      AUTO_SEED: ${AUTO_SEED:-false}
     ports:
       - "4000:4000"
     volumes:

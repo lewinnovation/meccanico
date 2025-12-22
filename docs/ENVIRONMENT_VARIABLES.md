@@ -34,12 +34,17 @@ This document describes all environment variables used in the Meccanico project 
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
+| `AUTO_SEED` | Automatically seed database on startup | `false` (disabled) | `true`, `false` |
 | `DB_SSL` | Enable SSL for database connection | Auto (true in prod, false in dev) | `true`, `false`, `require` |
 | `DB_SSL_REJECT_UNAUTHORIZED` | Reject unauthorized SSL certificates | `false` | `true`, `false` |
 | `CORS_ORIGIN` | Allowed CORS origin | `http://localhost:3000` | `https://meccanico.com`, `*` |
 | `JWT_EXPIRES_IN` | JWT token expiration | `24h` | `1h`, `7d` |
 | `JWT_REFRESH_EXPIRES_IN` | Refresh token expiration | `7d` | `30d` |
 | `LOG_LEVEL` | Logging level | `info` | `debug`, `warn`, `error` |
+
+**Note on AUTO_SEED:** Seeding is disabled by default to prevent accidentally overriding production data. To seed the database manually after containers start, use:
+- Local: `docker exec meccanico-api npm run db:seed`
+- Production: `docker exec meccanico-api npm run db:seed:prod`
 
 ---
 
@@ -94,6 +99,7 @@ DB_USER=meccanico
 DB_PASSWORD=meccanico_dev_password
 JWT_SECRET=dev-secret-change-in-production
 CORS_ORIGIN=http://localhost:3000
+AUTO_SEED=false
 ```
 
 Then load it when starting Docker Compose:
@@ -115,6 +121,7 @@ If running services directly on your machine:
    DB_NAME=meccanico
    DB_USER=meccanico
    DB_PASSWORD=meccanico_dev_password
+   AUTO_SEED=false
    JWT_SECRET=dev-secret-change-in-production
    CORS_ORIGIN=http://localhost:3000
    ```
@@ -216,6 +223,9 @@ DB_PASSWORD=meccanico_dev_password
 # DB_SSL=true (enable SSL)
 # DB_SSL_REJECT_UNAUTHORIZED=false (for cloud databases like GCP Cloud SQL)
 
+# Database Seeding (disabled by default - use manual seeding instead)
+AUTO_SEED=false
+
 # JWT Configuration
 JWT_SECRET=dev-secret-change-in-production
 JWT_EXPIRES_IN=24h
@@ -263,6 +273,8 @@ DB_PASSWORD=your-secure-production-password
 # SSL Configuration (required for cloud databases)
 DB_SSL=true
 DB_SSL_REJECT_UNAUTHORIZED=false
+# Database Seeding (disabled by default - use manual seeding instead)
+AUTO_SEED=false
 ```
 
 ---

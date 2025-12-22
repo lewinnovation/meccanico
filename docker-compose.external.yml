@@ -37,6 +37,7 @@ services:
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      AUTO_SEED: ${AUTO_SEED:-false}
     volumes:
       - ./backend/src:/app/src
       - /app/node_modules
