@@ -59,6 +59,15 @@ module "database" {
   ]
 }
 
+# Create frontend resources
+module "frontend" {
+  source = "./modules/frontend"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+}
+
 # Create Cloud Run services
 module "cloudrun" {
   source = "./modules/cloudrun"
@@ -66,7 +75,6 @@ module "cloudrun" {
   project_id           = var.project_id
   region               = var.region
   backend_image        = var.backend_image
-  frontend_image       = var.frontend_image
   vpc_connector_id     = module.network.vpc_connector_id
   cloud_sql_connection = module.database.connection_name
   db_host              = module.database.private_ip_address
@@ -108,14 +116,15 @@ module "cloudrun" {
 module "loadbalancer" {
   source = "./modules/loadbalancer"
 
-  project_id       = var.project_id
-  domain           = var.domain
-  api_subdomain    = var.api_subdomain
-  frontend_service = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.frontend_service_name}"
-  backend_service  = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.backend_service_name}"
-  environment      = var.environment
+  project_id           = var.project_id
+  domain               = var.domain
+  api_subdomain        = var.api_subdomain
+  frontend_bucket_name = module.frontend.bucket_name
+  backend_service      = "projects/${var.project_id}/locations/${var.region}/services/${module.cloudrun.backend_service_name}"
+  environment          = var.environment
 
   depends_on = [
-    module.cloudrun
+    module.cloudrun,
+    module.frontend
   ]
 }

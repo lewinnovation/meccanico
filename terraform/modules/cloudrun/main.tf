@@ -153,68 +153,9 @@ resource "google_cloud_run_v2_service" "backend" {
   ]
 }
 
-# Frontend Cloud Run service
-resource "google_cloud_run_v2_service" "frontend" {
-  name     = "meccanico-frontend-${var.environment}"
-  location = var.region
-  project  = var.project_id
-
-  template {
-    service_account = var.service_account_email
-
-    scaling {
-      min_instance_count = var.cloudrun_min_instances
-      max_instance_count = var.cloudrun_max_instances
-    }
-
-    containers {
-      image = var.frontend_image
-
-      ports {
-        container_port = 80
-      }
-
-      resources {
-        limits = {
-          cpu    = var.cloudrun_cpu
-          memory = var.cloudrun_memory
-        }
-      }
-
-      env {
-        name  = "VITE_API_URL"
-        value = var.api_url
-      }
-
-      env {
-        name  = "ALLOWED_HOSTS"
-        value = var.web_subdomain
-      }
-
-
-      # Runtime environment injection happens via entrypoint
-      # but we can set defaults here if needed
-    }
-  }
-
-  traffic {
-    percent = 100
-    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
-  }
-}
-
 # IAM policy for backend service (allow unauthenticated access for load balancer)
 resource "google_cloud_run_service_iam_member" "backend_public" {
   service  = google_cloud_run_v2_service.backend.name
-  location = var.region
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-  project  = var.project_id
-}
-
-# IAM policy for frontend service (allow unauthenticated access for load balancer)
-resource "google_cloud_run_service_iam_member" "frontend_public" {
-  service  = google_cloud_run_v2_service.frontend.name
   location = var.region
   role     = "roles/run.invoker"
   member   = "allUsers"
@@ -233,11 +174,6 @@ variable "region" {
 
 variable "backend_image" {
   description = "Container image for backend service"
-  type        = string
-}
-
-variable "frontend_image" {
-  description = "Container image for frontend service"
   type        = string
 }
 
