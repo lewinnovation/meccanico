@@ -182,7 +182,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       }
 
       env {
-        name  = "API_URL"
+        name  = "VITE_API_URL"
         value = var.api_url
       }
 
