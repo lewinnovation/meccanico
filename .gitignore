@@ -51,3 +51,6 @@ temp/
 
 # Migrations from prod
 migrations/
+
+# Terraform
+terraform/terraform.tfvars.terraform/
