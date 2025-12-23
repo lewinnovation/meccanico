@@ -85,6 +85,7 @@ module "cloudrun" {
   cloudrun_cpu           = var.cloudrun_cpu
   cloudrun_memory        = var.cloudrun_memory
   api_url                = "https://${var.api_subdomain}"
+  web_subdomain          = var.domain
   service_account_email  = module.iam.cloudrun_service_account_email
   environment            = var.environment
 

@@ -181,6 +181,17 @@ resource "google_cloud_run_v2_service" "frontend" {
         }
       }
 
+      env {
+        name  = "API_URL"
+        value = var.api_url
+      }
+
+      env {
+        name  = "ALLOWED_HOSTS"
+        value = var.web_subdomain
+      }
+
+
       # Runtime environment injection happens via entrypoint
       # but we can set defaults here if needed
     }
@@ -340,4 +351,10 @@ variable "smtp_require_tls" {
   description = "SMTP require TLS"
   type        = string
   default     = "true"
+}
+
+variable "web_subdomain" {
+  description = "Web subdomain"
+  type        = string
+  default     = "mc.lwylabs.dev"
 }
