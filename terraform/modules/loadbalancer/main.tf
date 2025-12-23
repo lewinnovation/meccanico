@@ -14,13 +14,12 @@ resource "google_compute_managed_ssl_certificate" "domain_cert" {
   }
 }
 
-# SSL certificate for API subdomain
-resource "google_compute_managed_ssl_certificate" "api_cert" {
-  name    = "meccanico-api-cert-${var.environment}"
+resource "google_compute_managed_ssl_certificate" "cert" {
+  name    = "meccanico-cert-${var.environment}"
   project = var.project_id
 
   managed {
-    domains = [var.api_subdomain]
+    domains = [var.domain, var.api_subdomain]
   }
 }
 
@@ -115,15 +114,7 @@ resource "google_compute_target_https_proxy" "domain_proxy" {
   name             = "meccanico-domain-proxy-${var.environment}"
   project          = var.project_id
   url_map          = google_compute_url_map.url_map.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.domain_cert.id]
-}
-
-# HTTPS proxy for API subdomain
-resource "google_compute_target_https_proxy" "api_proxy" {
-  name             = "meccanico-api-proxy-${var.environment}"
-  project          = var.project_id
-  url_map          = google_compute_url_map.url_map.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.api_cert.id]
+  ssl_certificates = [google_compute_managed_ssl_certificate.cert.id]
 }
 
 # Forwarding rule for primary domain
