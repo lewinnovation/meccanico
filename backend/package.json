@@ -48,7 +48,10 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.1.0",
     "@jest/test-sequencer": "^30.2.0",
+    "@jorgebodega/typeorm-factory": "^2.1.0",
+    "@jorgebodega/typeorm-seeding": "^7.1.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
