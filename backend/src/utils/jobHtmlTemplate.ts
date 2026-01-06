@@ -18,6 +18,8 @@ export interface JobHtmlTemplateData {
   discountTotal: number;
   taxTotal: number;
   grandTotal: number;
+  preInvoiceLabel: string;
+  invoiceLabel: string;
 }
 
 /**
@@ -40,9 +42,11 @@ export function buildJobHtmlTemplate(data: JobHtmlTemplateData): string {
     discountTotal,
     taxTotal,
     grandTotal,
+    preInvoiceLabel,
+    invoiceLabel,
   } = data;
 
-  const title = type === 'estimate' ? 'Estimate' : 'Invoice';
+  const title = type === 'estimate' ? preInvoiceLabel : invoiceLabel;
 
   return `
     <!DOCTYPE html>
@@ -88,10 +92,10 @@ export function buildJobHtmlTemplate(data: JobHtmlTemplateData): string {
           </div>
           <div class="document-info">
             <h2>${title}</h2>
-            <p>Job number: <strong>${job.code}</strong></p>
-            ${invoice ? `<p>Invoice number: <strong>${invoice.invoiceNumber}</strong></p>` : ''}
+            <p>Job Number: <strong>${job.code}</strong></p>
+            ${invoice ? `<p>${invoiceLabel} Number: <strong>${invoice.invoiceNumber}</strong></p>` : ''}
             <p>Date: ${new Date().toLocaleDateString()}</p>
-            ${type === 'invoice' && invoice ? `<p>Invoice Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}</p>` : ''}
+            ${type === 'invoice' && invoice ? `<p>${invoiceLabel} Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}</p>` : ''}
           </div>
         </div>
 

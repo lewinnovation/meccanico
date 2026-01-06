@@ -35,6 +35,8 @@ export interface InvoiceSettings {
   terms: string;
   footer: string;
   paymentTermsDays: number;
+  preInvoiceLabel: string;
+  invoiceLabel: string;
 }
 
 export class SettingsStore {
@@ -80,6 +82,8 @@ export class SettingsStore {
       terms: (this.settings['invoice.terms']?.value as string) || '',
       footer: (this.settings['invoice.footer']?.value as string) || '',
       paymentTermsDays: (this.settings['invoice.payment_terms_days']?.value as number) || 14,
+      preInvoiceLabel: (this.settings['invoice.pre_invoice_label']?.value as string) || '',
+      invoiceLabel: (this.settings['invoice.invoice_label']?.value as string) || '',
     };
   }
 
@@ -166,6 +170,8 @@ export class SettingsStore {
       'invoice.terms': invoice.terms,
       'invoice.footer': invoice.footer,
       'invoice.payment_terms_days': invoice.paymentTermsDays,
+      'invoice.pre_invoice_label': invoice.preInvoiceLabel,
+      'invoice.invoice_label': invoice.invoiceLabel,
     });
   }
 

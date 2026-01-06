@@ -59,7 +59,6 @@ import {
   DirectionsCar as VehicleIcon,
   OpenInNew as OpenIcon,
   Speed as OdometerIcon,
-  History as HistoryIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
   Mail as MailIcon,
@@ -70,6 +69,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
 import { api } from '../utils/api';
+import { sanitizeFilename } from '../utils/strings';
 import type { Payment } from '../stores/PaymentStore';
 import { EmailDialog } from '../components/jobs/EmailDialog';
 import type { JobStatus, LineItemType, CreateLineItemDto, LineItem, Job } from '../stores/JobStore';
@@ -1795,7 +1795,7 @@ const NewJob: React.FC = observer(() => {
                       const reading = parseFloat(odometer);
                       if (!isNaN(reading) && selectedVehicle && vehicleStore.selectedVehicle?.odometer !== null) {
                         const readingInBaseUnit = vehicleStore.convertToBaseUnit(reading, e.target.value);
-                        const currentOdometer = vehicleStore.selectedVehicle.odometer;
+                        const currentOdometer = vehicleStore?.selectedVehicle?.odometer || 0;
                         if (readingInBaseUnit < currentOdometer) {
                           setOdometerWarning(`Warning: New reading (${reading} ${e.target.value}) is less than current vehicle odometer (${currentOdometer} ${settingsStore.odometerSettings.unit}). This may indicate an odometer reset or data entry error.`);
                         } else {
@@ -2712,12 +2712,14 @@ const JobDetail: React.FC = observer(() => {
         responseType: 'blob',
       });
 
+      const filenamePrefix = type === 'estimate' ? settingsStore.invoiceSettings.preInvoiceLabel : settingsStore.invoiceSettings.invoiceLabel;
+
       // Create blob and trigger download
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${type}-${job.code}.pdf`;
+      link.download = sanitizeFilename(`${filenamePrefix}-${job.code}.pdf`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -4491,8 +4493,8 @@ const EditJobDialog: React.FC<EditJobDialogProps> = observer(({ open, onClose, j
         taxRate: parseFloat(formData.taxRate) || 0,
         discountAmount: discountAmount,
         discountPercent: discountPercent,
-        odometer: formData.odometer ? parseFloat(formData.odometer) : null,
-        odometerUnit: formData.odometer ? formData.odometerUnit : null,
+        odometer: formData.odometer ? parseFloat(formData.odometer) : undefined,
+        odometerUnit: formData.odometer ? formData.odometerUnit : undefined,
       };
 
       // Add customer/vehicle changes only if in booked status
