@@ -88,7 +88,8 @@ export function buildJobHtmlTemplate(data: JobHtmlTemplateData): string {
           </div>
           <div class="document-info">
             <h2>${title}</h2>
-            <p><strong>${job.code}</strong></p>
+            <p>Job number: <strong>${job.code}</strong></p>
+            ${invoice ? `<p>Invoice number: <strong>${invoice.invoiceNumber}</strong></p>` : ''}
             <p>Date: ${new Date().toLocaleDateString()}</p>
             ${type === 'invoice' && invoice ? `<p>Invoice Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}</p>` : ''}
           </div>
