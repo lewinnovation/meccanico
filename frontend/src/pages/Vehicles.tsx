@@ -869,6 +869,8 @@ const VehicleList: React.FC = observer(() => {
                   <TableRow
                     key={vehicle.id}
                     hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/vehicles/${vehicle.id}`)}
                     data-testid="vehicle-row"
                   >
                     <TableCell>
@@ -1328,7 +1330,7 @@ const VehicleDetail: React.FC = observer(() => {
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Vehicles
+                Operators
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
