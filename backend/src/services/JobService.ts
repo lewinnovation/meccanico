@@ -987,6 +987,8 @@ export class JobService {
     const invoiceFooter = (await this.settingsService.findByKey('invoice.footer')).value as string || '';
     const currencySymbol = (await this.settingsService.findByKey('currency.symbol')).value as string || '$';
     const taxName = (await this.settingsService.findByKey('tax.name')).value as string || 'GST';
+    const preInvoiceLabel = (await this.settingsService.findByKey('invoice.pre_invoice_label')).value as string || 'Pre Invoice';
+    const invoiceLabel = (await this.settingsService.findByKey('invoice.invoice_label')).value as string || 'Invoice';
 
     // Calculate totals
     const subtotal = job.lineItems?.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) || 0;
@@ -1017,6 +1019,8 @@ export class JobService {
       discountTotal,
       taxTotal,
       grandTotal,
+      preInvoiceLabel,
+      invoiceLabel,
     });
 
     // Generate PDF

@@ -292,6 +292,7 @@ const CurrencySettings: React.FC = observer(() => {
     setFormData({
       code: currency.code,
       symbol: currency.symbol,
+      odometerUnit: settingsStore.odometerSettings.unit,
     });
   }, [settingsStore.currencySettings]);
 
@@ -391,6 +392,8 @@ const InvoiceSettings: React.FC = observer(() => {
     terms: '',
     footer: '',
     paymentTermsDays: 14,
+    preInvoiceLabel: '',
+    invoiceLabel: ''
   });
 
   useEffect(() => {
@@ -404,6 +407,8 @@ const InvoiceSettings: React.FC = observer(() => {
       terms: invoice.terms,
       footer: invoice.footer,
       paymentTermsDays: invoice.paymentTermsDays,
+      preInvoiceLabel: invoice.preInvoiceLabel,
+      invoiceLabel: invoice.invoiceLabel,
     });
   }, [settingsStore.invoiceSettings]);
 
@@ -459,6 +464,28 @@ const InvoiceSettings: React.FC = observer(() => {
                   disabled={isReadOnly}
                   data-testid="invoice-payment-terms-days-input"
                   helperText="Number of days until payment is due"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Pre Invoice Label"
+                  value={formData.preInvoiceLabel}
+                  onChange={handleChange('preInvoiceLabel')}
+                  placeholder="e.g., Pre Invoice"
+                  disabled={isReadOnly}
+                  data-testid="invoice-pre-invoice-label-input"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Invoice Label"
+                  value={formData.invoiceLabel}
+                  onChange={handleChange('invoiceLabel')}
+                  placeholder="e.g., Invoice"
+                  disabled={isReadOnly}
+                  data-testid="invoice-invoice-label-input"
                 />
               </Grid>
               <Grid item xs={12}>
