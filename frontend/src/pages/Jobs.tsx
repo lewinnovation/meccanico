@@ -2111,6 +2111,8 @@ const JobDetail: React.FC = observer(() => {
   const [odometerNotes, setOdometerNotes] = useState('');
   const [odometerWarning, setOdometerWarning] = useState<string | null>(null);
   const [updatingOdometer, setUpdatingOdometer] = useState(false);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [markCompleteAfterOdometer, setMarkCompleteAfterOdometer] = useState(false);
   const [currentVehicleOdometer, setCurrentVehicleOdometer] = useState<number | null>(null);
   const [vehicleJobs, setVehicleJobs] = useState<Job[]>([]);
   const [loadingVehicleJobs, setLoadingVehicleJobs] = useState(false);
@@ -2674,7 +2676,7 @@ const JobDetail: React.FC = observer(() => {
             <Button
               variant="contained"
               startIcon={<ApproveIcon />}
-              onClick={() => handleStatusChange('COMPLETED')}
+              onClick={() => setCompleteConfirmOpen(true)}
             >
               Mark Complete
             </Button>
@@ -2705,7 +2707,14 @@ const JobDetail: React.FC = observer(() => {
       {/* Actions Menu */}
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
         {authStore.canEdit && allStatuses.filter(s => s !== job.status).map((status) => (
-          <MenuItem key={status} onClick={() => handleStatusChange(status)}>
+          <MenuItem key={status} onClick={() => {
+            if (status === 'COMPLETED') {
+              setAnchorEl(null);
+              setCompleteConfirmOpen(true);
+            } else {
+              handleStatusChange(status);
+            }
+          }}>
             <ListItemIcon>
               {status === 'BOOKED' && <JobIcon fontSize="small" />}
               {status === 'IN_PROGRESS' && <StartIcon fontSize="small" />}
@@ -3760,14 +3769,17 @@ const JobDetail: React.FC = observer(() => {
                   
                   if (result.warning) {
                     setOdometerWarning(result.warning);
-                    // Still close dialog and refresh
-                    setOdometerDialogOpen(false);
-                    await jobStore.fetchJobById(job.id);
-                    await vehicleStore.fetchVehicleById(job.vehicle.id);
-                  } else {
-                    setOdometerDialogOpen(false);
-                    await jobStore.fetchJobById(job.id);
-                    await vehicleStore.fetchVehicleById(job.vehicle.id);
+                  }
+                  
+                  // Close dialog and refresh
+                  setOdometerDialogOpen(false);
+                  await jobStore.fetchJobById(job.id);
+                  await vehicleStore.fetchVehicleById(job.vehicle.id);
+                  
+                  // If we need to mark complete after odometer update, do it now
+                  if (markCompleteAfterOdometer) {
+                    setMarkCompleteAfterOdometer(false);
+                    await handleStatusChange('COMPLETED');
                   }
                 } catch (err) {
                   setOdometerWarning(err instanceof Error ? err.message : 'Failed to update odometer reading');
@@ -3782,6 +3794,48 @@ const JobDetail: React.FC = observer(() => {
           </DialogActions>
         </Dialog>
       )}
+
+      {/* Complete Job Confirmation - Ask about odometer update */}
+      <Dialog open={completeConfirmOpen} onClose={() => setCompleteConfirmOpen(false)}>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ApproveIcon color="primary" />
+            Mark Job Complete
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Would you like to update the vehicle's odometer reading before marking this job as complete?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCompleteConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={async () => {
+              setCompleteConfirmOpen(false);
+              await handleStatusChange('COMPLETED');
+            }}
+          >
+            No, Complete Now
+          </Button>
+          {job.vehicle && (
+            <Button
+              variant="contained"
+              startIcon={<OdometerIcon />}
+              onClick={() => {
+                setCompleteConfirmOpen(false);
+                setMarkCompleteAfterOdometer(true);
+                setOdometerDialogOpen(true);
+              }}
+            >
+              Yes, Update Odometer
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Delete Job Confirmation */}
       <Dialog open={deleteConfirm} onClose={() => setDeleteConfirm(false)}>
