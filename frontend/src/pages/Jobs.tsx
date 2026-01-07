@@ -3764,7 +3764,8 @@ const JobDetail: React.FC = observer(() => {
                     reading,
                     odometerUnit,
                     odometerNotes || null,
-                    true // Update vehicle odometer
+                    true, // Update vehicle odometer
+                    'job'
                   );
                   
                   if (result.warning) {

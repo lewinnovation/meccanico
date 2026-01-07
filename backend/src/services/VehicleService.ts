@@ -331,7 +331,8 @@ export class VehicleService {
     unit: string,
     notes: string | null,
     userId: string | null,
-    updateVehicle: boolean = true
+    updateVehicle: boolean = true,
+    source: string = 'adhoc'
   ): Promise<{ reading: VehicleOdometerReading; warning?: string }> {
     const vehicle = await this.findById(id);
     
@@ -350,7 +351,7 @@ export class VehicleService {
       jobId: null,
       reading: readingInBaseUnit,
       unit,
-      source: 'adhoc',
+      source,
       notes,
       createdBy: userId,
     });
@@ -370,7 +371,7 @@ export class VehicleService {
         'Vehicle',
         vehicle.id,
         { odometer: oldValue },
-        { odometer: readingInBaseUnit, source: 'adhoc', readingId: savedReading.id }
+        { odometer: readingInBaseUnit, source, readingId: savedReading.id }
       );
     } else {
       // Still create audit log for the reading
@@ -380,7 +381,7 @@ export class VehicleService {
         'VehicleOdometerReading',
         savedReading.id,
         null,
-        { vehicleId: id, reading: readingInBaseUnit, unit, source: 'adhoc' }
+        { vehicleId: id, reading: readingInBaseUnit, unit, source }
       );
     }
     

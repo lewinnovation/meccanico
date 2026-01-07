@@ -132,7 +132,7 @@ export class VehicleController extends Controller {
   public async addOdometerReading(
     @Request() request: AuthenticatedRequest,
     @Path() id: string,
-    @Body() body: { reading: number; unit: string; notes?: string | null; updateVehicle?: boolean }
+    @Body() body: { reading: number; unit: string; notes?: string | null; updateVehicle?: boolean; source?: string }
   ): Promise<{ reading: VehicleOdometerReading; warning?: string }> {
     this.setStatus(201);
     return this.vehicleService.addOdometerReading(
@@ -141,7 +141,8 @@ export class VehicleController extends Controller {
       body.unit,
       body.notes || null,
       request.user?.id || null,
-      body.updateVehicle !== false // Default to true
+      body.updateVehicle !== false, // Default to true
+      body.source || 'adhoc'
     );
   }
 
