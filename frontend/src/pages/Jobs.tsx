@@ -1676,142 +1676,6 @@ const NewJob: React.FC = observer(() => {
               </Box>
             )}
 
-            {selectedVehicle && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Odometer Reading (Optional)
-                </Typography>
-                {odometerWarning && (
-                  <Alert severity="warning" onClose={() => setOdometerWarning(null)}>
-                    {odometerWarning}
-                  </Alert>
-                )}
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <TextField
-                    label="Odometer"
-                    type="number"
-                    fullWidth
-                    value={odometer}
-                    onChange={(e) => {
-                      setOdometer(e.target.value);
-                      // Check for decreasing odometer
-                      const reading = parseFloat(e.target.value);
-                      if (!isNaN(reading) && selectedVehicle) {
-                        // Fetch current vehicle odometer
-                        vehicleStore.fetchVehicleById(selectedVehicle.id).then((vehicle) => {
-                          if (vehicle.odometer !== null) {
-                            const readingInBaseUnit = vehicleStore.convertToBaseUnit(reading, odometerUnit);
-                            if (readingInBaseUnit < vehicle.odometer) {
-                              setOdometerWarning(`Warning: New reading (${reading} ${odometerUnit}) is less than current vehicle odometer (${vehicle.odometer} ${settingsStore.odometerSettings.unit}). This may indicate an odometer reset or data entry error.`);
-                            } else {
-                              setOdometerWarning(null);
-                            }
-                          }
-                        }).catch(() => {});
-                      } else {
-                        setOdometerWarning(null);
-                      }
-                    }}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">{odometerUnit}</InputAdornment>,
-                    }}
-                  />
-                  <TextField
-                    select
-                    label="Unit"
-                    sx={{ minWidth: 120 }}
-                    value={odometerUnit}
-                    onChange={(e) => {
-                      setOdometerUnit(e.target.value);
-                      // Re-check warning with new unit
-                      const reading = parseFloat(odometer);
-                      if (!isNaN(reading) && selectedVehicle) {
-                        vehicleStore.fetchVehicleById(selectedVehicle.id).then((vehicle) => {
-                          if (vehicle.odometer !== null) {
-                            const readingInBaseUnit = vehicleStore.convertToBaseUnit(reading, e.target.value);
-                            if (readingInBaseUnit < vehicle.odometer) {
-                              setOdometerWarning(`Warning: New reading (${reading} ${e.target.value}) is less than current vehicle odometer (${vehicle.odometer} ${settingsStore.odometerSettings.unit}). This may indicate an odometer reset or data entry error.`);
-                            } else {
-                              setOdometerWarning(null);
-                            }
-                          }
-                        }).catch(() => {});
-                      }
-                    }}
-                  >
-                    <MenuItem value="km">km</MenuItem>
-                    <MenuItem value="miles">miles</MenuItem>
-                    <MenuItem value="hours">hours</MenuItem>
-                  </TextField>
-                </Box>
-              </Box>
-            )}
-
-            {selectedVehicle && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Odometer Reading (Optional)
-                </Typography>
-                {odometerWarning && (
-                  <Alert severity="warning" onClose={() => setOdometerWarning(null)}>
-                    {odometerWarning}
-                  </Alert>
-                )}
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
-                    label="Odometer"
-                    type="number"
-                    fullWidth
-                    value={odometer}
-                    onChange={(e) => {
-                      setOdometer(e.target.value);
-                      // Check for decreasing odometer
-                      const reading = parseFloat(e.target.value);
-                      if (!isNaN(reading) && selectedVehicle && vehicleStore.selectedVehicle?.odometer !== null && vehicleStore.selectedVehicle?.odometer !== undefined) {
-                        const readingInBaseUnit = vehicleStore.convertToBaseUnit(reading, odometerUnit);
-                        const currentOdometer = vehicleStore.selectedVehicle.odometer;
-                        if (readingInBaseUnit < currentOdometer) {
-                          setOdometerWarning(`Warning: New reading (${reading} ${odometerUnit}) is less than current vehicle odometer (${currentOdometer} ${settingsStore.odometerSettings.unit}). This may indicate an odometer reset or data entry error.`);
-                        } else {
-                          setOdometerWarning(null);
-                        }
-                      } else {
-                        setOdometerWarning(null);
-                      }
-                    }}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">{odometerUnit}</InputAdornment>,
-                    }}
-                    placeholder="Enter odometer reading"
-                  />
-                  <TextField
-                    select
-                    label="Unit"
-                    sx={{ minWidth: 120 }}
-                    value={odometerUnit}
-                    onChange={(e) => {
-                      setOdometerUnit(e.target.value);
-                      // Re-check warning with new unit
-                      const reading = parseFloat(odometer);
-                      if (!isNaN(reading) && selectedVehicle && vehicleStore.selectedVehicle?.odometer !== null) {
-                        const readingInBaseUnit = vehicleStore.convertToBaseUnit(reading, e.target.value);
-                        const currentOdometer = vehicleStore?.selectedVehicle?.odometer || 0;
-                        if (readingInBaseUnit < currentOdometer) {
-                          setOdometerWarning(`Warning: New reading (${reading} ${e.target.value}) is less than current vehicle odometer (${currentOdometer} ${settingsStore.odometerSettings.unit}). This may indicate an odometer reset or data entry error.`);
-                        } else {
-                          setOdometerWarning(null);
-                        }
-                      }
-                    }}
-                  >
-                    <MenuItem value="km">km</MenuItem>
-                    <MenuItem value="miles">miles</MenuItem>
-                    <MenuItem value="hours">hours</MenuItem>
-                  </TextField>
-                </Box>
-              </Box>
-            )}
-
             <TextField
               label="Notes"
               multiline
@@ -2247,9 +2111,14 @@ const JobDetail: React.FC = observer(() => {
   const [odometerNotes, setOdometerNotes] = useState('');
   const [odometerWarning, setOdometerWarning] = useState<string | null>(null);
   const [updatingOdometer, setUpdatingOdometer] = useState(false);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [markCompleteAfterOdometer, setMarkCompleteAfterOdometer] = useState(false);
   const [currentVehicleOdometer, setCurrentVehicleOdometer] = useState<number | null>(null);
   const [vehicleJobs, setVehicleJobs] = useState<Job[]>([]);
   const [loadingVehicleJobs, setLoadingVehicleJobs] = useState(false);
+  const [latestOdometerReading, setLatestOdometerReading] = useState<{ reading: number; unit: string; createdAt: string } | null>(null);
+  const [recentVehicleJobs, setRecentVehicleJobs] = useState<Job[]>([]);
+  const [loadingRecentVehicleJobs, setLoadingRecentVehicleJobs] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentMethodId, setPaymentMethodId] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
@@ -2400,6 +2269,57 @@ const JobDetail: React.FC = observer(() => {
       });
     }
   }, [odometerDialogOpen, job?.vehicle?.id, vehicleStore, settingsStore.odometerSettings.unit]);
+
+  // Fetch latest odometer reading and recent jobs for the vehicle when job loads
+  useEffect(() => {
+    const fetchVehicleData = async () => {
+      if (job?.vehicleId) {
+        // Fetch latest odometer reading from history
+        try {
+          await vehicleStore.fetchOdometerHistory(job.vehicleId);
+          const history = vehicleStore.odometerHistory;
+          if (history && history.length > 0) {
+            const latest = history[0]; // Already sorted by createdAt DESC
+            setLatestOdometerReading({
+              reading: latest.reading,
+              unit: latest.unit,
+              createdAt: latest.createdAt,
+            });
+          } else {
+            setLatestOdometerReading(null);
+          }
+        } catch (error) {
+          console.error('Failed to fetch odometer history:', error);
+          setLatestOdometerReading(null);
+        }
+
+        // Fetch recent jobs for this vehicle
+        setLoadingRecentVehicleJobs(true);
+        try {
+          const params = new URLSearchParams({
+            page: '1',
+            limit: '4', // Fetch 4 to allow for filtering out current job
+            vehicleId: job.vehicleId,
+          });
+          const response = await api.get(`/api/jobs?${params}`);
+          // Filter out current job and take up to 3
+          const jobs = (response.data.data || [])
+            .filter((j: Job) => j.id !== job.id)
+            .slice(0, 3);
+          setRecentVehicleJobs(jobs);
+        } catch (error) {
+          console.error('Failed to fetch recent vehicle jobs:', error);
+          setRecentVehicleJobs([]);
+        } finally {
+          setLoadingRecentVehicleJobs(false);
+        }
+      } else {
+        setLatestOdometerReading(null);
+        setRecentVehicleJobs([]);
+      }
+    };
+    fetchVehicleData();
+  }, [job?.vehicleId, job?.id, vehicleStore]);
 
   // Build options for line item autocomplete
   const getLineItemOptions = (): SelectedLineItem[] => {
@@ -2810,7 +2730,7 @@ const JobDetail: React.FC = observer(() => {
             <Button
               variant="contained"
               startIcon={<ApproveIcon />}
-              onClick={() => handleStatusChange('COMPLETED')}
+              onClick={() => setCompleteConfirmOpen(true)}
             >
               Mark Complete
             </Button>
@@ -2841,7 +2761,14 @@ const JobDetail: React.FC = observer(() => {
       {/* Actions Menu */}
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
         {authStore.canEdit && allStatuses.filter(s => s !== job.status).map((status) => (
-          <MenuItem key={status} onClick={() => handleStatusChange(status)}>
+          <MenuItem key={status} onClick={() => {
+            if (status === 'COMPLETED') {
+              setAnchorEl(null);
+              setCompleteConfirmOpen(true);
+            } else {
+              handleStatusChange(status);
+            }
+          }}>
             <ListItemIcon>
               {status === 'BOOKED' && <JobIcon fontSize="small" />}
               {status === 'IN_PROGRESS' && <StartIcon fontSize="small" />}
@@ -3121,6 +3048,66 @@ const JobDetail: React.FC = observer(() => {
                   </Typography>
                 </Box>
               )}
+              {latestOdometerReading && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Latest Vehicle Odometer: {latestOdometerReading.reading.toLocaleString()} {latestOdometerReading.unit}
+                  </Typography>
+                </Box>
+              )}
+              
+              {/* Recent Jobs for this Vehicle */}
+              {job.vehicle && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
+                    Recent Jobs
+                  </Typography>
+                  {loadingRecentVehicleJobs ? (
+                    <CircularProgress size={16} />
+                  ) : recentVehicleJobs.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No other jobs for this vehicle
+                    </Typography>
+                  ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      {recentVehicleJobs.map((recentJob) => {
+                        const jobTotals = calculateJobTotals(recentJob);
+                        return (
+                          <Box
+                            key={recentJob.id}
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              py: 0.5,
+                              px: 1,
+                              borderRadius: 1,
+                              bgcolor: 'action.hover',
+                              '&:hover': { bgcolor: 'action.selected' },
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => navigate(`/jobs/${recentJob.id}`)}
+                          >
+                            <Typography
+                              variant="body2"
+                              fontFamily="monospace"
+                              fontWeight={500}
+                              color="primary"
+                              sx={{ textDecoration: 'underline' }}
+                            >
+                              {recentJob.code}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {formatCurrency(jobTotals.total)}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  )}
+                </Box>
+              )}
+              
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <Button
                   variant="outlined"
@@ -3891,19 +3878,34 @@ const JobDetail: React.FC = observer(() => {
                     reading,
                     odometerUnit,
                     odometerNotes || null,
-                    true // Update vehicle odometer
+                    true, // Update vehicle odometer
+                    'job'
                   );
                   
                   if (result.warning) {
                     setOdometerWarning(result.warning);
-                    // Still close dialog and refresh
-                    setOdometerDialogOpen(false);
-                    await jobStore.fetchJobById(job.id);
-                    await vehicleStore.fetchVehicleById(job.vehicle.id);
-                  } else {
-                    setOdometerDialogOpen(false);
-                    await jobStore.fetchJobById(job.id);
-                    await vehicleStore.fetchVehicleById(job.vehicle.id);
+                  }
+                  
+                  // Close dialog and refresh
+                  setOdometerDialogOpen(false);
+                  await jobStore.fetchJobById(job.id);
+                  await vehicleStore.fetchVehicleById(job.vehicle.id);
+                  
+                  // Update the latest odometer reading state from the refreshed history
+                  const history = vehicleStore.odometerHistory;
+                  if (history && history.length > 0) {
+                    const latest = history[0];
+                    setLatestOdometerReading({
+                      reading: latest.reading,
+                      unit: latest.unit,
+                      createdAt: latest.createdAt,
+                    });
+                  }
+                  
+                  // If we need to mark complete after odometer update, do it now
+                  if (markCompleteAfterOdometer) {
+                    setMarkCompleteAfterOdometer(false);
+                    await handleStatusChange('COMPLETED');
                   }
                 } catch (err) {
                   setOdometerWarning(err instanceof Error ? err.message : 'Failed to update odometer reading');
@@ -3918,6 +3920,48 @@ const JobDetail: React.FC = observer(() => {
           </DialogActions>
         </Dialog>
       )}
+
+      {/* Complete Job Confirmation - Ask about odometer update */}
+      <Dialog open={completeConfirmOpen} onClose={() => setCompleteConfirmOpen(false)}>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ApproveIcon color="primary" />
+            Mark Job Complete
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Would you like to update the vehicle's odometer reading before marking this job as complete?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCompleteConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={async () => {
+              setCompleteConfirmOpen(false);
+              await handleStatusChange('COMPLETED');
+            }}
+          >
+            No, Complete Now
+          </Button>
+          {job.vehicle && (
+            <Button
+              variant="contained"
+              startIcon={<OdometerIcon />}
+              onClick={() => {
+                setCompleteConfirmOpen(false);
+                setMarkCompleteAfterOdometer(true);
+                setOdometerDialogOpen(true);
+              }}
+            >
+              Yes, Update Odometer
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Delete Job Confirmation */}
       <Dialog open={deleteConfirm} onClose={() => setDeleteConfirm(false)}>

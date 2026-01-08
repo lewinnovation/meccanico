@@ -8,11 +8,15 @@
     "frontend"
   ],
   "scripts": {
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "dev:api": "npm run dev --workspace=@meccanico/backend",
+    "dev:web": "npm run dev --workspace=@meccanico/frontend",
+    "dev": "trap 'docker-compose -f docker-compose.local.yml down' EXIT; docker-compose -f docker-compose.local.yml up postgres -d && concurrently \"npm run dev:api\" \"npm run dev:web\""
   },
   "devDependencies": {
     "@commitlint/cli": "^18.4.4",
     "@commitlint/config-conventional": "^18.4.4",
+    "concurrently": "^9.2.1",
     "husky": "^8.0.3"
   },
   "engines": {

@@ -425,7 +425,8 @@ export class VehicleStore {
     reading: number,
     unit: string,
     notes?: string | null,
-    updateVehicle: boolean = true
+    updateVehicle: boolean = true,
+    source: string = 'adhoc'
   ): Promise<{ reading: any; warning?: string }> {
     if (this.rootStore.authStore.isViewer) {
       throw new Error('You do not have permission to add odometer readings');
@@ -438,6 +439,7 @@ export class VehicleStore {
         unit,
         notes: notes || null,
         updateVehicle,
+        source,
       });
       
       // Refresh vehicle to get updated odometer
