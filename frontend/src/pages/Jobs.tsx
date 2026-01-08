@@ -2116,6 +2116,9 @@ const JobDetail: React.FC = observer(() => {
   const [currentVehicleOdometer, setCurrentVehicleOdometer] = useState<number | null>(null);
   const [vehicleJobs, setVehicleJobs] = useState<Job[]>([]);
   const [loadingVehicleJobs, setLoadingVehicleJobs] = useState(false);
+  const [latestOdometerReading, setLatestOdometerReading] = useState<{ reading: number; unit: string; createdAt: string } | null>(null);
+  const [recentVehicleJobs, setRecentVehicleJobs] = useState<Job[]>([]);
+  const [loadingRecentVehicleJobs, setLoadingRecentVehicleJobs] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentMethodId, setPaymentMethodId] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
@@ -2266,6 +2269,57 @@ const JobDetail: React.FC = observer(() => {
       });
     }
   }, [odometerDialogOpen, job?.vehicle?.id, vehicleStore, settingsStore.odometerSettings.unit]);
+
+  // Fetch latest odometer reading and recent jobs for the vehicle when job loads
+  useEffect(() => {
+    const fetchVehicleData = async () => {
+      if (job?.vehicleId) {
+        // Fetch latest odometer reading from history
+        try {
+          await vehicleStore.fetchOdometerHistory(job.vehicleId);
+          const history = vehicleStore.odometerHistory;
+          if (history && history.length > 0) {
+            const latest = history[0]; // Already sorted by createdAt DESC
+            setLatestOdometerReading({
+              reading: latest.reading,
+              unit: latest.unit,
+              createdAt: latest.createdAt,
+            });
+          } else {
+            setLatestOdometerReading(null);
+          }
+        } catch (error) {
+          console.error('Failed to fetch odometer history:', error);
+          setLatestOdometerReading(null);
+        }
+
+        // Fetch recent jobs for this vehicle
+        setLoadingRecentVehicleJobs(true);
+        try {
+          const params = new URLSearchParams({
+            page: '1',
+            limit: '4', // Fetch 4 to allow for filtering out current job
+            vehicleId: job.vehicleId,
+          });
+          const response = await api.get(`/api/jobs?${params}`);
+          // Filter out current job and take up to 3
+          const jobs = (response.data.data || [])
+            .filter((j: Job) => j.id !== job.id)
+            .slice(0, 3);
+          setRecentVehicleJobs(jobs);
+        } catch (error) {
+          console.error('Failed to fetch recent vehicle jobs:', error);
+          setRecentVehicleJobs([]);
+        } finally {
+          setLoadingRecentVehicleJobs(false);
+        }
+      } else {
+        setLatestOdometerReading(null);
+        setRecentVehicleJobs([]);
+      }
+    };
+    fetchVehicleData();
+  }, [job?.vehicleId, job?.id, vehicleStore]);
 
   // Build options for line item autocomplete
   const getLineItemOptions = (): SelectedLineItem[] => {
@@ -2994,6 +3048,66 @@ const JobDetail: React.FC = observer(() => {
                   </Typography>
                 </Box>
               )}
+              {latestOdometerReading && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Latest Vehicle Odometer: {latestOdometerReading.reading.toLocaleString()} {latestOdometerReading.unit}
+                  </Typography>
+                </Box>
+              )}
+              
+              {/* Recent Jobs for this Vehicle */}
+              {job.vehicle && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
+                    Recent Jobs
+                  </Typography>
+                  {loadingRecentVehicleJobs ? (
+                    <CircularProgress size={16} />
+                  ) : recentVehicleJobs.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No other jobs for this vehicle
+                    </Typography>
+                  ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      {recentVehicleJobs.map((recentJob) => {
+                        const jobTotals = calculateJobTotals(recentJob);
+                        return (
+                          <Box
+                            key={recentJob.id}
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              py: 0.5,
+                              px: 1,
+                              borderRadius: 1,
+                              bgcolor: 'action.hover',
+                              '&:hover': { bgcolor: 'action.selected' },
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => navigate(`/jobs/${recentJob.id}`)}
+                          >
+                            <Typography
+                              variant="body2"
+                              fontFamily="monospace"
+                              fontWeight={500}
+                              color="primary"
+                              sx={{ textDecoration: 'underline' }}
+                            >
+                              {recentJob.code}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {formatCurrency(jobTotals.total)}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  )}
+                </Box>
+              )}
+              
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <Button
                   variant="outlined"
@@ -3776,6 +3890,17 @@ const JobDetail: React.FC = observer(() => {
                   setOdometerDialogOpen(false);
                   await jobStore.fetchJobById(job.id);
                   await vehicleStore.fetchVehicleById(job.vehicle.id);
+                  
+                  // Update the latest odometer reading state from the refreshed history
+                  const history = vehicleStore.odometerHistory;
+                  if (history && history.length > 0) {
+                    const latest = history[0];
+                    setLatestOdometerReading({
+                      reading: latest.reading,
+                      unit: latest.unit,
+                      createdAt: latest.createdAt,
+                    });
+                  }
                   
                   // If we need to mark complete after odometer update, do it now
                   if (markCompleteAfterOdometer) {
