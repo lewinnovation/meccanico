@@ -23,6 +23,8 @@ import {
   CreditNoteFactory,
 } from './factories';
 import {
+  User,
+  Settings,
   UserRole,
   JobStatus,
   ServiceItemType,
@@ -30,7 +32,7 @@ import {
   CommunicationTemplateType,
   CommunicationTemplateAction,
 } from '../models';
-import { vehicleMakesWithModels } from './seedData';
+import { vehicleMakesWithModels } from './vehicleData';
 import { CODE_PREFIXES, generateCustomerCode, generateCode, generateJobCode } from './codeGenerator';
 import { InvoiceService } from '../services/InvoiceService';
 import { CreditNoteService } from '../services/CreditNoteService';
@@ -59,10 +61,10 @@ export class MainSeeder extends Seeder {
     await this.seedVehicleMakesAndModels();
 
     // 3. Seed Users
-    const users = await this.seedUsers();
+    const users = await this.seedUsers(dataSource);
 
     // 4. Seed Settings
-    await this.seedSettings();
+    await this.seedSettings(dataSource);
 
     // 5. Seed Payment Methods
     await this.seedPaymentMethods();
@@ -175,47 +177,17 @@ export class MainSeeder extends Seeder {
     console.log(`  ✓ Seeded ${vehicleMakesWithModels.length} makes with their models`);
   }
 
-  private async seedUsers() {
+  private async seedUsers(dataSource: DataSource) {
     console.log('  Seeding default users...');
-    
-    // Use factory create but check for existence first if unique constraint requires it
-    // Or simpler: factories usually create new records. If we want to avoid duplicates on re-seed without truncate, we'd check.
-    // But since we didn't truncate users, we should check.
-    
-    // We can't easily check inside factory create without modifying factory.
-    // So we'll instantiate UserFactory but maybe not call create if exists?
-    // Actually, seedData.ts logic: "Check if admin exists... if existingAdmin return".
-    
-    // We'll reproduce that logic but use Factory to get the attrs if needed, or just manually create if we want to be safe.
-    // Using Factory.create() will insert.
-    
-    // Since we didn't truncate users, let's just do manual check + factory create if missing.
-    // Note: Factories return promise of entity.
+    const userRepository = dataSource.getRepository(User);
     
     const adminEmail = 'admin@meccanico.dev';
     const mechanicEmail = 'mechanic@meccanico.dev';
     const viewerEmail = 'viewer@meccanico.dev';
 
-    // We can use the factory to generate the object, then save only if needed?
-    // Factory.make() returns instance without saving.
-    
-    // Assuming we want to return the users for later use (like assigning jobs).
-    // We need to fetch them if they exist.
-    
-    // Need repository to find
-    // Since we are in a Seeder, we don't have easy access to repo unless we use dataSource passed to run.
-    // But we are in a method. We can use factories which use internal datasource logic or just use global AppDataSource (which factories use internally usually).
-    // Factories in @jorgebodega/typeorm-factory use the dataSource from the connection? 
-    // They usually use `getRepository(Entity)`.
-    
-    // Let's assume standard repo usage for finding.
-    
-    // Note: UserFactory uses a random password hash. We want specific passwords.
-    // We'll override.
-    
     const adminFactory = new UserFactory();
     
-    let admin = await adminFactory.repository.findOne({ where: { email: adminEmail } });
+    let admin = await userRepository.findOne({ where: { email: adminEmail } });
     if (!admin) {
       admin = await adminFactory.create({
         email: adminEmail,
@@ -225,7 +197,7 @@ export class MainSeeder extends Seeder {
     }
 
     const mechanicFactory = new UserFactory();
-    let mechanic = await mechanicFactory.repository.findOne({ where: { email: mechanicEmail } });
+    let mechanic = await userRepository.findOne({ where: { email: mechanicEmail } });
     if (!mechanic) {
       mechanic = await mechanicFactory.create({
         email: mechanicEmail,
@@ -235,7 +207,7 @@ export class MainSeeder extends Seeder {
     }
 
     const viewerFactory = new UserFactory();
-    let viewer = await viewerFactory.repository.findOne({ where: { email: viewerEmail } });
+    let viewer = await userRepository.findOne({ where: { email: viewerEmail } });
     if (!viewer) {
       viewer = await viewerFactory.create({
         email: viewerEmail,
@@ -248,8 +220,9 @@ export class MainSeeder extends Seeder {
     return { admin, mechanic, viewer };
   }
 
-  private async seedSettings() {
+  private async seedSettings(dataSource: DataSource) {
     console.log('  Seeding settings...');
+    const settingsRepository = dataSource.getRepository(Settings);
     const defaultSettings = [
       { key: 'shop_info', value: { name: 'Meccanico Auto Repair', email: 'info@meccanico.dev', phone: '+61 2 1234 5678', address: '123 Main Street', city: 'Sydney', state: 'NSW', postcode: '2000', country: 'Australia', abn: '12 345 678 901', website: 'https://meccanico.dev' } },
       { key: 'tax_settings', value: { name: 'GST', defaultRate: 10.0, enabled: true } },
@@ -264,7 +237,7 @@ export class MainSeeder extends Seeder {
 
     const factory = new SettingsFactory();
     for (const setting of defaultSettings) {
-      const existing = await factory.repository.findOne({ where: { key: setting.key } });
+      const existing = await settingsRepository.findOne({ where: { key: setting.key } });
       if (!existing) {
         await factory.create(setting);
       }
