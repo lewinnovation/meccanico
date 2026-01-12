@@ -1,0 +1,16 @@
+---
+globs: backend/src/models/**/*.ts
+description: Use Context7 TypeORM library when operating on files in backend/src/models
+---
+
+# TypeORM Documentation for Models
+
+- Always use Context7 MCP with library `/typeorm/typeorm` when operating on files in `backend/src/models`
+- Use Context7 to query TypeORM documentation for:
+  - Entity definitions and decorators
+  - Relationships and associations
+  - Column types and options
+  - Indexes and constraints
+  - Query builder patterns
+  - Migration patterns
+  - Best practices for model design
