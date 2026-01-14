@@ -73,11 +73,6 @@ variable "backend_image" {
   type        = string
 }
 
-variable "frontend_image" {
-  description = "Container image for frontend service"
-  type        = string
-}
-
 variable "jwt_secret" {
   description = "JWT secret for authentication (should be stored in Secret Manager in production)"
   type        = string
@@ -142,3 +137,4 @@ variable "smtp_require_tls" {
   type        = string
   default     = "true"
 }
+

@@ -39,20 +39,12 @@ resource "google_compute_backend_service" "backend" {
 
 }
 
-# Backend service for frontend Cloud Run
-resource "google_compute_backend_service" "frontend" {
-  name                  = "meccanico-frontend-${var.environment}"
-  project               = var.project_id
-  protocol              = "HTTP"
-  port_name             = "http"
-  timeout_sec           = 30
-  enable_cdn            = true
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-
-  backend {
-    group = google_compute_region_network_endpoint_group.frontend_neg.id
-  }
-
+# Backend bucket for frontend GCS
+resource "google_compute_backend_bucket" "frontend" {
+  name        = "meccanico-frontend-bucket-${var.environment}"
+  project     = var.project_id
+  bucket_name = var.frontend_bucket_name
+  enable_cdn  = true
 }
 
 # Network endpoint group for backend
@@ -66,22 +58,11 @@ resource "google_compute_region_network_endpoint_group" "backend_neg" {
   }
 }
 
-# Network endpoint group for frontend
-resource "google_compute_region_network_endpoint_group" "frontend_neg" {
-  name                  = "meccanico-frontend-neg-${var.environment}"
-  network_endpoint_type = "SERVERLESS"
-  region                = split("/", var.frontend_service)[3]
-  project               = var.project_id
-  cloud_run {
-    service = split("/", var.frontend_service)[5]
-  }
-}
-
 # URL map for routing
 resource "google_compute_url_map" "url_map" {
   name            = "meccanico-url-map-${var.environment}"
   project         = var.project_id
-  default_service = google_compute_backend_service.frontend.id
+  default_service = google_compute_backend_bucket.frontend.id
 
   host_rule {
     hosts        = [var.domain]
@@ -95,7 +76,7 @@ resource "google_compute_url_map" "url_map" {
 
   path_matcher {
     name            = "allpaths"
-    default_service = google_compute_backend_service.frontend.id
+    default_service = google_compute_backend_bucket.frontend.id
   }
 
   path_matcher {
@@ -169,8 +150,8 @@ variable "api_subdomain" {
   type        = string
 }
 
-variable "frontend_service" {
-  description = "Frontend Cloud Run service URL"
+variable "frontend_bucket_name" {
+  description = "GCS bucket name for frontend static site"
   type        = string
 }
 
