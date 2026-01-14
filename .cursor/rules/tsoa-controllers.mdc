@@ -1,0 +1,17 @@
+---
+globs: backend/src/controllers/**/*.ts
+description: Use Context7 TSOA library when operating on files in backend/src/controllers
+---
+
+# TSOA Documentation for Controllers
+
+- Always use Context7 MCP with library `/lukeautry/tsoa` when operating on files in `backend/src/controllers`
+- Use Context7 to query TSOA documentation for:
+  - Route decorators (@Route, @Get, @Post, @Put, @Delete, etc.)
+  - Request and response decorators (@Body, @Query, @Path, @Header, etc.)
+  - Response types and status codes
+  - Validation and security decorators
+  - OpenAPI/Swagger annotations
+  - Controller best practices
+  - Error handling patterns
+  - Middleware integration
