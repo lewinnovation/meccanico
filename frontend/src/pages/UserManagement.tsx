@@ -36,7 +36,7 @@ import {
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
-import type { User, CreateUserDto } from '../stores/UserStore';
+import type { CreateUserDto } from '../stores/UserStore';
 
 const UserManagement: React.FC = observer(() => {
   const { userStore, authStore } = useStore();
