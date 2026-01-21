@@ -38,4 +38,5 @@ smtp_user     = "dummy"
 smtp_password = "dummy"
 
 # Environment
-environment = "dev" # Options: dev, staging, prod
+environment       = "dev" # Options: dev, staging, prod
+github_repository = "lewinnovation/meccanico"
