@@ -9,6 +9,11 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    exclude: ["e2e/**"],
+  },
   server: {
     port: process.env.PORT ?? 3000,
     allowedHosts: process.env.ALLOWED_HOSTS?.split(",") ?? [],
