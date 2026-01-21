@@ -1,11 +1,6 @@
-name: Deploy Frontend
+name: Deploy Frontend (Prod)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "frontend/**"
   workflow_dispatch:
 
 permissions:
@@ -13,8 +8,8 @@ permissions:
   id-token: write
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  BUCKET_NAME: meccanico-frontend-dev # Matches the bucket name pattern in Terraform
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID_PROD }}
+  BUCKET_NAME: meccanico-frontend-prod # Matches the bucket name pattern in Terraform
   API_URL: https://api.meccanico.com # Should be configured as a secret or env var if it varies
 
 jobs:
@@ -34,16 +29,16 @@ jobs:
 
       - run: npm ci
 
-      - working-directory: ./frontend
-        run: npm run build
+      - run: npm run build
+        working-directory: ./frontend
         env:
           VITE_API_URL: ${{ env.API_URL }}
 
       - id: auth
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_GHA_SA_EMAIL }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_GHA_SA_EMAIL_PROD }}
 
       - uses: google-github-actions/setup-gcloud@v3
 
