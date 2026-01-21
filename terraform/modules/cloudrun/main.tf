@@ -153,6 +153,99 @@ resource "google_cloud_run_v2_service" "backend" {
   ]
 }
 
+# Backend admin bootstrap job
+resource "google_cloud_run_v2_job" "admin_bootstrap" {
+  name     = "meccanico-admin-bootstrap-${var.environment}"
+  location = var.region
+  project  = var.project_id
+
+  template {
+    template {
+      service_account = var.service_account_email
+
+      containers {
+        image   = var.backend_image
+        command = ["node"]
+        args    = ["dist/utils/createAdminUser.js"]
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
+          name  = "DB_HOST"
+          value = var.db_host
+        }
+
+        env {
+          name  = "DB_PORT"
+          value = "5432"
+        }
+
+        env {
+          name  = "DB_NAME"
+          value = var.db_name
+        }
+
+        env {
+          name  = "DB_USER"
+          value = var.db_user
+        }
+
+        env {
+          name = "DB_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = var.db_password_secret_id
+              version = "latest"
+            }
+          }
+        }
+
+        env {
+          name  = "DB_SSL"
+          value = "false"
+        }
+
+        env {
+          name  = "DB_SSL_REJECT_UNAUTHORIZED"
+          value = "false"
+        }
+
+        env {
+          name  = "ADMIN_USER_EMAIL"
+          value = var.admin_user_email
+        }
+
+        env {
+          name  = "ADMIN_USER_NAME"
+          value = var.admin_user_name
+        }
+
+        env {
+          name = "ADMIN_USER_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = var.admin_user_password_secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      vpc_access {
+        connector = var.vpc_connector_id
+        egress    = "PRIVATE_RANGES_ONLY"
+      }
+    }
+  }
+
+  depends_on = [
+    var.cloud_sql_connection
+  ]
+}
+
 # IAM policy for backend service (allow unauthenticated access for load balancer)
 resource "google_cloud_run_service_iam_member" "backend_public" {
   service  = google_cloud_run_v2_service.backend.name
@@ -204,6 +297,11 @@ variable "db_user" {
 
 variable "db_password_secret_id" {
   description = "Database password secret ID"
+  type        = string
+}
+
+variable "admin_user_password_secret_id" {
+  description = "Admin user password secret ID"
   type        = string
 }
 
@@ -260,6 +358,17 @@ variable "service_account_email" {
 variable "environment" {
   description = "Environment name"
   type        = string
+}
+
+variable "admin_user_email" {
+  description = "Admin bootstrap email"
+  type        = string
+}
+
+variable "admin_user_name" {
+  description = "Admin bootstrap name"
+  type        = string
+  default     = ""
 }
 
 variable "smtp_host" {

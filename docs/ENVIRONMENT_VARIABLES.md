@@ -42,6 +42,16 @@ This document describes all environment variables used in the Meccanico project 
 | `JWT_REFRESH_EXPIRES_IN` | Refresh token expiration | `7d` | `30d` |
 | `LOG_LEVEL` | Logging level | `info` | `debug`, `warn`, `error` |
 
+### Admin Bootstrap Variables
+
+These are used by the admin bootstrap job/script (`npm run create-admin`) to create or upgrade an admin user.
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `ADMIN_USER_EMAIL` | Admin user email address | (none) | `admin@meccanico.com` |
+| `ADMIN_USER_PASSWORD` | Admin user password | (none) | `change-me-now` |
+| `ADMIN_USER_NAME` | Admin user display name | Email local part or `Admin` | `Shop Admin` |
+
 **Note on AUTO_SEED:** Seeding is disabled by default to prevent accidentally overriding production data. To seed the database manually after containers start, use:
 - Local: `docker exec meccanico-api npm run db:seed`
 - Production: `docker exec meccanico-api npm run db:seed:prod`
@@ -233,6 +243,11 @@ JWT_REFRESH_EXPIRES_IN=7d
 
 # CORS Configuration
 CORS_ORIGIN=http://localhost:3000
+
+# Admin bootstrap (optional)
+ADMIN_USER_EMAIL=admin@meccanico.com
+ADMIN_USER_PASSWORD=change-me-now
+ADMIN_USER_NAME=Shop Admin
 
 # Logging
 LOG_LEVEL=info

@@ -85,6 +85,23 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "admin_user_email" {
+  description = "Admin bootstrap user email"
+  type        = string
+}
+
+variable "admin_user_password" {
+  description = "Admin bootstrap user password (stored in Secret Manager)"
+  type        = string
+  sensitive   = true
+}
+
+variable "admin_user_name" {
+  description = "Admin bootstrap user display name"
+  type        = string
+  default     = ""
+}
+
 variable "cors_origin" {
   description = "Allowed CORS origin"
   type        = string
