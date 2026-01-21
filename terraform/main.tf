@@ -5,11 +5,11 @@ provider "google" {
 }
 
 # Enable required APIs
-# module "project" {
-#   source = "./modules/project"
-#
-#   project_id = var.project_id
-# }
+module "project" {
+  source = "./modules/project"
+
+  project_id = var.project_id
+}
 
 # Create networking resources
 module "network" {
@@ -17,6 +17,10 @@ module "network" {
 
   project_id = var.project_id
   region     = var.region
+
+  depends_on = [
+    module.project
+  ]
 }
 
 # Create service accounts and IAM bindings
@@ -24,6 +28,10 @@ module "iam" {
   source = "./modules/iam"
 
   project_id = var.project_id
+
+  depends_on = [
+    module.project
+  ]
 }
 
 # Create Secrets
@@ -36,6 +44,10 @@ module "secrets" {
   jwt_secret    = var.jwt_secret
   smtp_user     = var.smtp_user
   smtp_password = var.smtp_password
+
+  depends_on = [
+    module.project
+  ]
 }
 
 # Create Cloud SQL database
@@ -66,6 +78,10 @@ module "frontend" {
   project_id  = var.project_id
   region      = var.region
   environment = var.environment
+
+  depends_on = [
+    module.network
+  ]
 }
 
 # Create Cloud Run services

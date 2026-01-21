@@ -33,6 +33,7 @@
 
 - `terraform.tfvars` - Your actual configuration (not in git)
 - `terraform.tfvars.example` - Example configuration template
+- `terraform.tfvars.production.example` - Production template (copy locally)
 - `variables.tf` - Variable definitions
 - `main.tf` - Main Terraform configuration
 - `outputs.tf` - Output values
@@ -95,6 +96,11 @@ After successful deployment:
      --region=australia-southeast1 \
      --project=mc-dev-482002
    ```
+
+## Production Notes
+
+- Copy `terraform.tfvars.production.example` to a local `terraform.prod.tfvars`
+- Run `terraform plan -var-file=terraform.prod.tfvars` and `terraform apply -var-file=terraform.prod.tfvars`
 
 ## Troubleshooting
 

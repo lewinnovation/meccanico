@@ -1,0 +1,42 @@
+# GCP Project Configuration
+project_id = "mc-prod-000000"
+region     = "australia-southeast1"
+zone       = "australia-southeast1-a"
+
+# Domain Configuration
+domain        = "meccanico.com"
+api_subdomain = "api.meccanico.com"
+
+# Container Images (use immutable tags for production releases)
+backend_image = "australia-southeast1-docker.pkg.dev/mc-prod-000000/meccanico/backend:2026-01-20.1"
+
+# Database Configuration
+database_tier            = "db-n1-standard-1"
+database_disk_size       = 100
+enable_high_availability = true
+
+# Cloud Run Configuration
+cloudrun_min_instances = 1
+cloudrun_max_instances = 25
+cloudrun_cpu           = "2"
+cloudrun_memory        = "1Gi"
+
+# Security Configuration
+# NOTE: These values are used to create Secret Manager secrets. Do not commit real values.
+jwt_secret  = "replace-with-prod-jwt-secret"
+db_password = "replace-with-prod-db-password"
+
+# CORS Configuration
+cors_origin = "https://meccanico.com"
+
+# SMTP Configuration
+smtp_host     = "smtp.sendgrid.net"
+smtp_port     = "587"
+smtp_user     = "replace-with-smtp-user"
+smtp_password = "replace-with-smtp-password"
+smtp_from     = "noreply@meccanico.com"
+smtp_secure   = "false"
+smtp_require_tls = "true"
+
+# Environment
+environment = "prod"

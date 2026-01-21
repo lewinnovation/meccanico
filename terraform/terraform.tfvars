@@ -10,8 +10,7 @@ api_subdomain = "api.mc.lwylabs.dev"
 # Container Images
 # These should point to your container images in Artifact Registry or Container Registry
 # Format: gcr.io/PROJECT_ID/IMAGE_NAME:TAG or REGION-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG
-backend_image  = "australia-southeast1-docker.pkg.dev/mc-dev-482002/meccanico/backend:latest"
-frontend_image = "australia-southeast1-docker.pkg.dev/mc-dev-482002/meccanico/frontend:latest"
+backend_image = "australia-southeast1-docker.pkg.dev/mc-dev-482002/meccanico/backend:latest"
 
 # Database Configuration
 database_tier            = "db-f1-micro" # Options: db-f1-micro, db-g1-small, db-n1-standard-1, etc.
