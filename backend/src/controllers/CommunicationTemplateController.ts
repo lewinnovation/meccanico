@@ -32,7 +32,7 @@ export class CommunicationTemplateController extends Controller {
    * Get all communication templates
    */
   @Get('/')
-  public async getTemplates(
+  public async getCommunicationTemplates(
     @Query() type?: CommunicationTemplateType
   ): Promise<CommunicationTemplate[]> {
     return this.templateService.findAll(type);
@@ -50,7 +50,7 @@ export class CommunicationTemplateController extends Controller {
    * Get a template by ID
    */
   @Get('/{id}')
-  public async getTemplate(@Path() id: string): Promise<CommunicationTemplate> {
+  public async getCommunicationTemplate(@Path() id: string): Promise<CommunicationTemplate> {
     return this.templateService.findById(id);
   }
 
@@ -60,7 +60,7 @@ export class CommunicationTemplateController extends Controller {
   @Post('/')
   @Security('jwt', ['ADMIN'])
   @SuccessResponse(201, 'Created')
-  public async createTemplate(
+  public async createCommunicationTemplate(
     @Body() body: CreateCommunicationTemplateDto
   ): Promise<CommunicationTemplate> {
     this.setStatus(201);
@@ -72,7 +72,7 @@ export class CommunicationTemplateController extends Controller {
    */
   @Put('/{id}')
   @Security('jwt', ['ADMIN'])
-  public async updateTemplate(
+  public async updateCommunicationTemplate(
     @Path() id: string,
     @Body() body: UpdateCommunicationTemplateDto
   ): Promise<CommunicationTemplate> {
@@ -85,7 +85,7 @@ export class CommunicationTemplateController extends Controller {
   @Delete('/{id}')
   @Security('jwt', ['ADMIN'])
   @SuccessResponse(204, 'Deleted')
-  public async deleteTemplate(@Path() id: string): Promise<void> {
+  public async deleteCommunicationTemplate(@Path() id: string): Promise<void> {
     this.setStatus(204);
     return this.templateService.delete(id);
   }
