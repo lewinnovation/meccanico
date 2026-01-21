@@ -28,31 +28,26 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version-file: ".nvmrc"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Dependencies
-        run: npm ci
+      - run: npm ci
 
-      - name: Build
-        working-directory: ./frontend
+      - working-directory: ./frontend
         run: npm run build
         env:
           VITE_API_URL: ${{ env.API_URL }}
 
-      - name: Google Auth
-        id: auth
+      - id: auth
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_GHA_SA_EMAIL }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@v3
 
-      - name: Upload to GCS
-        uses: google-github-actions/upload-cloud-storage@v3
+      - uses: google-github-actions/upload-cloud-storage@v3
         with:
           path: frontend/dist
           destination: ${{ env.BUCKET_NAME }}
