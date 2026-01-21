@@ -1,11 +1,6 @@
-name: Deploy Backend
+name: Deploy Backend (Prod)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
   workflow_dispatch:
 
 permissions:
@@ -13,9 +8,9 @@ permissions:
   id-token: write
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID_PROD }}
   REGION: australia-southeast1
-  SERVICE_NAME: meccanico-backend-dev
+  SERVICE_NAME: meccanico-backend-prod
   REPOSITORY: meccanico-backend # Name of the artifact registry repository or image name
 
 jobs:
@@ -33,8 +28,8 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_GHA_SA_EMAIL }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_GHA_SA_EMAIL_PROD }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -55,4 +50,3 @@ jobs:
           image: gcr.io/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}:${{ github.sha }}
           env_vars: |
             NODE_ENV=production
-

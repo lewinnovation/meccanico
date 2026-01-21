@@ -97,6 +97,11 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "github_repository" {
+  description = "GitHub repository in the form owner/name"
+  type        = string
+}
+
 # SMTP Configuration
 variable "smtp_host" {
   description = "SMTP host"

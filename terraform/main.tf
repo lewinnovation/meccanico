@@ -27,7 +27,9 @@ module "network" {
 module "iam" {
   source = "./modules/iam"
 
-  project_id = var.project_id
+  project_id        = var.project_id
+  github_repository = var.github_repository
+  environment       = var.environment
 
   depends_on = [
     module.project

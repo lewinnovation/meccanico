@@ -35,23 +35,28 @@ output "vpc_connector_name" {
   value       = module.network.vpc_connector_name
 }
 
+output "github_actions_service_account_email" {
+  description = "GitHub Actions service account email for WIF"
+  value       = module.iam.github_actions_service_account_email
+}
+
 output "cloudflare_dns_instructions" {
   description = "Instructions for Cloudflare DNS configuration"
   value       = <<-EOT
     Configure the following DNS records in Cloudflare:
-    
+
     1. Create a CNAME record for ${var.domain}:
        Name: @ (or root domain)
        Target: ${module.loadbalancer.load_balancer_ip}
        Proxy: Enabled (orange cloud)
-    
+
     2. Create a CNAME record for ${var.api_subdomain}:
        Name: api
        Target: ${module.loadbalancer.load_balancer_ip}
        Proxy: Enabled (orange cloud)
-    
+
     3. Set SSL/TLS mode to "Full" or "Full (strict)" in Cloudflare dashboard
-    
+
     Note: The load balancer IP is: ${module.loadbalancer.load_balancer_ip}
   EOT
 }
