@@ -69,6 +69,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../stores/RootStore';
 import { api } from '../utils/api';
+import { detectSearchType } from '../utils/jobSearch';
 import { sanitizeFilename } from '../utils/strings';
 import type { Payment } from '../stores/PaymentStore';
 import { EmailDialog } from '../components/jobs/EmailDialog';
@@ -787,35 +788,6 @@ interface SearchResult {
   vehicle?: Vehicle & { customer?: CustomerWithVehicles };
 }
 
-// Pattern detection utilities
-const detectSearchType = (input: string): 'vin' | 'licensePlate' | 'email' | 'phone' | 'name' => {
-  const trimmed = input.trim();
-  
-  // VIN: exactly 17 alphanumeric characters
-  if (/^[A-Z0-9]{17}$/i.test(trimmed)) {
-    return 'vin';
-  }
-  
-  // License plate: 2-8 alphanumeric characters, may contain spaces/hyphens
-  if (/^[A-Z0-9\s-]{2,8}$/i.test(trimmed) && trimmed.length <= 8) {
-    return 'licensePlate';
-  }
-  
-  // Email: contains @ symbol
-  if (trimmed.includes('@')) {
-    return 'email';
-  }
-  
-  // Phone: mostly digits with optional formatting
-  const digitsOnly = trimmed.replace(/[\s\-()]/g, '');
-  if (/^\d{7,15}$/.test(digitsOnly)) {
-    return 'phone';
-  }
-  
-  // Default to name
-  return 'name';
-};
-
 const NewJob: React.FC = observer(() => {
   const { jobStore, customerStore, vehicleStore, settingsStore, authStore } = useStore();
   const navigate = useNavigate();
@@ -823,9 +795,6 @@ const NewJob: React.FC = observer(() => {
   const [customerVehicles, setCustomerVehicles] = useState<VehicleOption[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleOption | null>(null);
   const [notes, setNotes] = useState('');
-  const [odometer, setOdometer] = useState('');
-  const [odometerUnit, setOdometerUnit] = useState('km');
-  const [odometerWarning, setOdometerWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createVehicleOpen, setCreateVehicleOpen] = useState(false);
@@ -843,8 +812,6 @@ const NewJob: React.FC = observer(() => {
   useEffect(() => {
     vehicleStore.fetchMakes();
     settingsStore.fetchSettings();
-    // Set default odometer unit from settings
-    setOdometerUnit(settingsStore.odometerSettings.unit);
   }, [vehicleStore, settingsStore]);
 
   // Auto-focus search input when component mounts and no customer/vehicle selected
@@ -1124,8 +1091,6 @@ const NewJob: React.FC = observer(() => {
         vehicleId: selectedVehicle.id,
         notes: notes || undefined,
         taxRate: defaultTaxRate,
-        odometer: odometer ? parseFloat(odometer) : undefined,
-        odometerUnit: odometer ? odometerUnit : undefined,
       });
 
       if (job) {

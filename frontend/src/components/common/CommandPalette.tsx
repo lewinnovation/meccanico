@@ -56,8 +56,13 @@ export const CommandPalette: React.FC = observer(() => {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
+  const createCommand = (command: Omit<Command, 'type'>): Command => ({
+    ...command,
+    type: 'command',
+  });
+
   const commands: Command[] = [
-    ...(authStore.canEdit ? [{
+    ...(authStore.canEdit ? [createCommand({
       id: 'new-job',
       label: 'New Job',
       description: 'Create a new job/estimate',
@@ -67,9 +72,8 @@ export const CommandPalette: React.FC = observer(() => {
         uiStore.closeCommandPalette();
       },
       keywords: ['create', 'estimate', 'work order'],
-      type: 'command',
-    }] : []),
-    {
+    })] : []),
+    createCommand({
       id: 'jobs',
       label: 'Go to Jobs',
       icon: JobIcon,
@@ -77,9 +81,8 @@ export const CommandPalette: React.FC = observer(() => {
         navigate('/jobs');
         uiStore.closeCommandPalette();
       },
-      type: 'command',
-    },
-    {
+    }),
+    createCommand({
       id: 'customers',
       label: 'Go to Customers',
       icon: CustomerIcon,
@@ -87,9 +90,8 @@ export const CommandPalette: React.FC = observer(() => {
         navigate('/customers');
         uiStore.closeCommandPalette();
       },
-      type: 'command',
-    },
-    ...(authStore.canEdit ? [{
+    }),
+    ...(authStore.canEdit ? [createCommand({
       id: 'new-customer',
       label: 'New Customer',
       description: 'Add a new customer',
@@ -99,9 +101,8 @@ export const CommandPalette: React.FC = observer(() => {
         uiStore.closeCommandPalette();
       },
       keywords: ['create', 'client'],
-      type: 'command',
-    }] : []),
-    {
+    })] : []),
+    createCommand({
       id: 'inventory',
       label: 'Go to Inventory',
       icon: InventoryIcon,
@@ -110,9 +111,8 @@ export const CommandPalette: React.FC = observer(() => {
         uiStore.closeCommandPalette();
       },
       keywords: ['parts', 'stock'],
-      type: 'command',
-    },
-    {
+    }),
+    createCommand({
       id: 'settings',
       label: 'Settings',
       icon: SettingsIcon,
@@ -120,8 +120,7 @@ export const CommandPalette: React.FC = observer(() => {
         navigate('/settings');
         uiStore.closeCommandPalette();
       },
-      type: 'command',
-    },
+    }),
   ];
 
   // Perform search when query is 3+ characters
