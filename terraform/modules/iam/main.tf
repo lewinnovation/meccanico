@@ -95,13 +95,13 @@ locals {
 module "github_oidc" {
   source = "github.com/terraform-google-modules/terraform-google-github-actions-runners//modules/gh-oidc"
 
-  project_id  = var.project_id
-  pool_id     = local.github_pool_id
-  provider_id = local.github_provider_id
-
+  project_id          = var.project_id
+  pool_id             = local.github_pool_id
+  provider_id         = local.github_provider_id
+  attribute_condition = "assertion.repository=='${var.github_repository}'"
   sa_mapping = {
     "github-actions" = {
-      sa_name   = google_service_account.github_actions.email
+      sa_name   = google_service_account.github_actions.name
       attribute = "attribute.repository/${var.github_repository}"
     }
   }
