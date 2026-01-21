@@ -1,8 +1,3 @@
-output "frontend_url" {
-  description = "Frontend Cloud Run service URL"
-  value       = module.cloudrun.frontend_service_url
-}
-
 output "backend_url" {
   description = "Backend Cloud Run service URL"
   value       = module.cloudrun.backend_service_url
@@ -42,7 +37,7 @@ output "vpc_connector_name" {
 
 output "cloudflare_dns_instructions" {
   description = "Instructions for Cloudflare DNS configuration"
-  value = <<-EOT
+  value       = <<-EOT
     Configure the following DNS records in Cloudflare:
     
     1. Create a CNAME record for ${var.domain}:
