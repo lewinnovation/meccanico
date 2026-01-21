@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc && tsoa spec-and-routes",
+    "build": "tsoa spec-and-routes && tsc",
     "start": "node dist/server.js",
     "tsoa:generate": "tsoa spec-and-routes",
     "typeorm": "typeorm-ts-node-commonjs",
