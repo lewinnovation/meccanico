@@ -48,7 +48,6 @@ describe('UserService', () => {
     lastLoginAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    version: 0,
   };
 
   beforeEach(() => {
@@ -420,7 +419,8 @@ describe('UserService', () => {
     });
 
     it('should update password with valid current password', async () => {
-      const user = { ...mockUser, passwordHash: await bcrypt.hash('oldPassword', 10) };
+      const originalHash = await bcrypt.hash('oldPassword', 10);
+      const user = { ...mockUser, passwordHash: originalHash };
       const mockQueryBuilder = {
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
@@ -437,7 +437,7 @@ describe('UserService', () => {
 
       expect(mockUserRepository.save).toHaveBeenCalled();
       const savedUser = mockUserRepository.save.mock.calls[0][0];
-      expect(savedUser.passwordHash).not.toBe(user.passwordHash);
+      expect(savedUser.passwordHash).not.toBe(originalHash);
       expect(result).not.toHaveProperty('passwordHash');
     });
 

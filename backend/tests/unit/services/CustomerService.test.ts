@@ -18,6 +18,7 @@ const mockGenerateCustomerCode = generateCustomerCode as jest.Mock;
 describe('CustomerService', () => {
   let customerService: CustomerService;
   let mockRepository: any;
+  let mockVehicleOwnerRepository: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -31,9 +32,17 @@ describe('CustomerService', () => {
       remove: jest.fn(),
     };
 
+    mockVehicleOwnerRepository = {
+      count: jest.fn(),
+    };
+
     // Mock AppDataSource.getRepository
     const { AppDataSource } = require('../../../src/config/database');
-    AppDataSource.getRepository.mockReturnValue(mockRepository);
+    AppDataSource.getRepository.mockImplementation((entity: any) => {
+      if (entity.name === 'Customer') return mockRepository;
+      if (entity.name === 'VehicleOwner') return mockVehicleOwnerRepository;
+      return mockRepository;
+    });
 
     customerService = new CustomerService();
   });
@@ -84,8 +93,8 @@ describe('CustomerService', () => {
       expect(result.data).toEqual(mockCustomers);
       expect(result.total).toBe(1);
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        'customer.name ILIKE :search OR customer.email ILIKE :search OR customer.phone ILIKE :search OR customer.code ILIKE :search',
-        { search: '%john%' }
+        '(customer.name ILIKE :search OR customer.email ILIKE :search OR customer.code ILIKE :search) OR (customer.phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(REPLACE(customer.phone, \' \', \'\'), \'-\', \'\'), \'(\', \'\'), \')\', \'\') LIKE :normalizedSearch)',
+        { search: '%john%', normalizedSearch: '%john%' }
       );
     });
 
@@ -326,7 +335,7 @@ describe('CustomerService', () => {
 
     it('should handle OptimisticLockVersionMismatchError from TypeORM', async () => {
       mockRepository.findOne.mockResolvedValue(existingCustomer);
-      mockRepository.save.mockRejectedValue(new OptimisticLockVersionMismatchError('', ''));
+      mockRepository.save.mockRejectedValue(new OptimisticLockVersionMismatchError('Customer', 1, 2));
 
       await expect(customerService.update('123', { name: 'John Updated' }))
         .rejects
@@ -358,10 +367,10 @@ describe('CustomerService', () => {
         id: '123',
         code: 'CJOHNS001',
         name: 'John Smith',
-        vehicles: [],
       };
       mockRepository.findOne.mockResolvedValue(customerWithoutVehicles);
       mockRepository.remove.mockResolvedValue(customerWithoutVehicles);
+      mockVehicleOwnerRepository.count.mockResolvedValue(0);
 
       await customerService.delete('123');
 
@@ -381,27 +390,27 @@ describe('CustomerService', () => {
         id: '123',
         code: 'CJOHNS001',
         name: 'John Smith',
-        vehicles: [{ id: 'v1', make: 'Toyota' }],
       };
       mockRepository.findOne.mockResolvedValue(customerWithVehicles);
+      mockVehicleOwnerRepository.count.mockResolvedValue(2);
 
       await expect(customerService.delete('123'))
         .rejects
         .toThrow(ConflictError);
     });
 
-    it('should throw ConflictError with correct message for vehicles', async () => {
+    it('should throw ConflictError with correct message for vehicle ownership', async () => {
       const customerWithVehicles = {
         id: '123',
         code: 'CJOHNS001',
         name: 'John Smith',
-        vehicles: [{ id: 'v1' }],
       };
       mockRepository.findOne.mockResolvedValue(customerWithVehicles);
+      mockVehicleOwnerRepository.count.mockResolvedValue(1);
 
       await expect(customerService.delete('123'))
         .rejects
-        .toThrow('Cannot delete customer with vehicles. Remove vehicles first.');
+        .toThrow('Cannot delete customer who owns vehicles. Remove vehicle ownership first.');
     });
   });
 });
