@@ -12,7 +12,8 @@
     "dev:api": "npm run dev --workspace=@meccanico/backend",
     "dev:web": "npm run dev --workspace=@meccanico/frontend",
     "dev:local": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
-    "dev": "trap 'docker-compose -f docker-compose.local.yml down' EXIT; docker-compose -f docker-compose.local.yml up postgres -d && concurrently \"npm run dev:api\" \"npm run dev:web\""
+    "dev": "trap 'docker-compose -f docker-compose.local.yml down' EXIT; docker-compose -f docker-compose.local.yml up postgres -d && concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "create-admin": "npm run create-admin:cli --workspace=@meccanico/backend"
   },
   "devDependencies": {
     "@commitlint/cli": "^18.4.4",

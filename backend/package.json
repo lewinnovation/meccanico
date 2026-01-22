@@ -19,6 +19,7 @@
     "db:migrate-templates": "ts-node src/utils/migrateCommunicationTemplates.ts",
     "db:add-versions": "ts-node src/utils/addVersionColumns.ts",
     "create-admin": "node dist/utils/createAdminUser.js",
+    "create-admin:cli": "ts-node src/utils/createAdminUserCli.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -49,6 +50,7 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "@inquirer/prompts": "^8.2.0",
     "@jest/test-sequencer": "^30.2.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.7.5",
