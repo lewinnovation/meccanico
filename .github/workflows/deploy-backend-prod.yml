@@ -11,6 +11,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID_PROD }}
   REGION: australia-southeast1
   SERVICE_NAME: meccanico-backend-prod
+  JOB_NAME: meccanico-admin-bootstrap-prod
   REPOSITORY: meccanico-backend # Name of the artifact registry repository or image name
 
 jobs:
@@ -50,3 +51,10 @@ jobs:
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}:${{ github.sha }}
           env_vars: |
             NODE_ENV=production
+
+      - name: Run admin bootstrap job
+        run: |
+          gcloud run jobs execute ${{ env.JOB_NAME }} \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --wait

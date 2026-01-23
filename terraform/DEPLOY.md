@@ -97,6 +97,19 @@ After successful deployment:
      --project=mc-dev-482002
    ```
 
+5. **Admin bootstrap job** (runs after backend deploy):
+   - The GitHub Actions backend deploy workflows automatically execute the Cloud Run job
+     `meccanico-admin-bootstrap-<environment>` after a successful deploy.
+   - To run it manually:
+     ```bash
+     gcloud run jobs execute meccanico-admin-bootstrap-dev \
+       --region=australia-southeast1 \
+       --project=mc-dev-482002 \
+       --wait
+     ```
+   - Ensure `admin_user_email` and `admin_user_password` are set in your Terraform
+     variables so the job has the required env vars.
+
 ## Production Notes
 
 - Copy `terraform.tfvars.production.example` to a local `terraform.prod.tfvars`

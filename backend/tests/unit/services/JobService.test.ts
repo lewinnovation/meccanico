@@ -27,6 +27,10 @@ describe('JobService', () => {
   let mockLineItemRepository: any;
   let mockTemplateRepository: any;
   let mockVehicleRepository: any;
+  let mockVehicleOwnerRepository: any;
+  let mockOdometerReadingRepository: any;
+  let mockAuditLogRepository: any;
+  let mockInvoiceRepository: any;
 
   const mockJob: Partial<Job> = {
     id: 'job-1',
@@ -85,12 +89,38 @@ describe('JobService', () => {
       findOne: jest.fn(),
     };
 
+    mockVehicleOwnerRepository = {
+      findOne: jest.fn(),
+      create: jest.fn((data) => ({ ...data })),
+      save: jest.fn(),
+    };
+
+    mockOdometerReadingRepository = {
+      create: jest.fn((data) => ({ ...data })),
+      save: jest.fn(),
+      findOne: jest.fn(),
+      remove: jest.fn(),
+    };
+
+    mockAuditLogRepository = {
+      create: jest.fn((data) => ({ ...data })),
+      save: jest.fn(),
+    };
+
+    mockInvoiceRepository = {
+      delete: jest.fn(),
+    };
+
     const { AppDataSource } = require('../../../src/config/database');
     AppDataSource.getRepository.mockImplementation((entity: any) => {
       if (entity.name === 'Job') return mockJobRepository;
       if (entity.name === 'LineItem') return mockLineItemRepository;
       if (entity.name === 'Template') return mockTemplateRepository;
       if (entity.name === 'Vehicle') return mockVehicleRepository;
+      if (entity.name === 'VehicleOwner') return mockVehicleOwnerRepository;
+      if (entity.name === 'VehicleOdometerReading') return mockOdometerReadingRepository;
+      if (entity.name === 'AuditLog') return mockAuditLogRepository;
+      if (entity.name === 'Invoice') return mockInvoiceRepository;
       return mockJobRepository;
     });
 
@@ -142,6 +172,7 @@ describe('JobService', () => {
     it('should filter by search term', async () => {
       const mockQueryBuilder = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
@@ -153,7 +184,7 @@ describe('JobService', () => {
       await jobService.findAll(1, 50, 'toyota');
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        '(job.code ILIKE :search OR customer.name ILIKE :search OR vehicle.make ILIKE :search OR vehicle.model ILIKE :search)',
+        '(job.code ILIKE :search OR customer.name ILIKE :search OR vehicle.make ILIKE :search OR vehicle.model ILIKE :search OR owner.name ILIKE :search)',
         { search: '%toyota%' }
       );
     });
@@ -227,7 +258,10 @@ describe('JobService', () => {
     };
 
     it('should create a new job successfully', async () => {
-      const mockVehicle = { id: 'vehicle-1', customerId: 'customer-1' };
+      const mockVehicle = {
+        id: 'vehicle-1',
+        vehicleOwners: [{ customerId: 'customer-1', isPrimary: true }],
+      };
       mockVehicleRepository.findOne.mockResolvedValue(mockVehicle);
       mockGenerateJobCode.mockResolvedValue('J001');
       mockJobRepository.create.mockReturnValue(mockJob);
@@ -239,6 +273,7 @@ describe('JobService', () => {
       expect(result).toEqual(mockJob);
       expect(mockVehicleRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'vehicle-1' },
+        relations: ['vehicleOwners', 'vehicleOwners.customer'],
       });
       expect(mockGenerateJobCode).toHaveBeenCalled();
     });
@@ -249,11 +284,29 @@ describe('JobService', () => {
       await expect(jobService.create(createDto)).rejects.toThrow(NotFoundError);
     });
 
-    it('should throw BadRequestError when vehicle belongs to different customer', async () => {
-      const mockVehicle = { id: 'vehicle-1', customerId: 'different-customer' };
+    it('should add customer as owner when not already an owner', async () => {
+      const mockVehicle = {
+        id: 'vehicle-1',
+        vehicleOwners: [{ customerId: 'different-customer', isPrimary: true }],
+      };
       mockVehicleRepository.findOne.mockResolvedValue(mockVehicle);
+      mockVehicleOwnerRepository.findOne.mockResolvedValue(null);
+      mockVehicleOwnerRepository.save.mockResolvedValue(undefined);
+      mockGenerateJobCode.mockResolvedValue('J001');
+      mockJobRepository.create.mockReturnValue(mockJob);
+      mockJobRepository.save.mockResolvedValue(mockJob);
+      mockJobRepository.findOne.mockResolvedValue(mockJob);
 
-      await expect(jobService.create(createDto)).rejects.toThrow(BadRequestError);
+      const result = await jobService.create(createDto);
+
+      expect(result).toEqual(mockJob);
+      expect(mockVehicleOwnerRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vehicleId: 'vehicle-1',
+          customerId: 'customer-1',
+          isPrimary: false,
+        })
+      );
     });
   });
 
@@ -261,10 +314,18 @@ describe('JobService', () => {
     it('should update job notes', async () => {
       mockJobRepository.findOne.mockResolvedValue({ ...mockJob });
       mockJobRepository.save.mockResolvedValue({ ...mockJob, notes: 'Updated notes' });
+      const mockReloadQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({ ...mockJob, notes: 'Updated notes' }),
+      };
+      mockJobRepository.createQueryBuilder.mockReturnValue(mockReloadQueryBuilder);
 
       const result = await jobService.update('job-1', { notes: 'Updated notes' });
 
       expect(mockJobRepository.save).toHaveBeenCalled();
+      expect(result.notes).toBe('Updated notes');
     });
 
     it('should throw BadRequestError when both discount types are provided', async () => {

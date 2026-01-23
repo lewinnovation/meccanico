@@ -13,6 +13,21 @@ resource "google_secret_manager_secret_version" "db_password" {
   secret_data = var.db_password
 }
 
+resource "google_secret_manager_secret" "admin_user_password" {
+  secret_id = "meccanico-admin-user-password-${var.environment}"
+
+  replication {
+    auto {}
+  }
+
+  project = var.project_id
+}
+
+resource "google_secret_manager_secret_version" "admin_user_password" {
+  secret      = google_secret_manager_secret.admin_user_password.id
+  secret_data = var.admin_user_password
+}
+
 resource "google_secret_manager_secret" "jwt_secret" {
   secret_id = "meccanico-jwt-secret-${var.environment}"
   

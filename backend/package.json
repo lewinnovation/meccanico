@@ -18,6 +18,8 @@
     "db:setup": "ts-node src/utils/resetAndSeed.ts",
     "db:migrate-templates": "ts-node src/utils/migrateCommunicationTemplates.ts",
     "db:add-versions": "ts-node src/utils/addVersionColumns.ts",
+    "create-admin": "node dist/utils/createAdminUser.js",
+    "create-admin:cli": "ts-node src/utils/createAdminUserCli.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -27,6 +29,7 @@
     "lint:fix": "eslint src --ext .ts --fix"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
     "@types/nodemailer": "^7.0.4",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",

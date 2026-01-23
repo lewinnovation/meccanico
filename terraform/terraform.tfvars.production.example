@@ -25,6 +25,9 @@ cloudrun_memory        = "1Gi"
 # NOTE: These values are used to create Secret Manager secrets. Do not commit real values.
 jwt_secret  = "replace-with-prod-jwt-secret"
 db_password = "replace-with-prod-db-password"
+admin_user_email    = "admin@meccanico.com"
+admin_user_password = "replace-with-prod-admin-password"
+admin_user_name     = "Shop Admin"
 
 # CORS Configuration
 cors_origin = "https://meccanico.com"

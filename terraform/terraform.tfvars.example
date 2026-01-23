@@ -27,6 +27,9 @@ cloudrun_memory        = "512Mi" # Memory allocation (e.g., "512Mi", "1Gi", "2Gi
 # IMPORTANT: In production, use Google Secret Manager instead of plain text values
 jwt_secret  = "your-super-secure-jwt-secret-key-change-this"
 db_password = "your-secure-database-password-change-this"
+admin_user_email    = "admin@meccanico.com"
+admin_user_password = "change-me-now"
+admin_user_name     = "Shop Admin"
 
 # CORS Configuration
 cors_origin = "*" # In production, set to your specific domain (e.g., "https://meccanico.com")

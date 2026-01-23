@@ -40,12 +40,13 @@ module "iam" {
 module "secrets" {
   source = "./modules/secrets"
 
-  project_id    = var.project_id
-  environment   = var.environment
-  db_password   = var.db_password
-  jwt_secret    = var.jwt_secret
-  smtp_user     = var.smtp_user
-  smtp_password = var.smtp_password
+  project_id          = var.project_id
+  environment         = var.environment
+  db_password         = var.db_password
+  admin_user_password = var.admin_user_password
+  jwt_secret          = var.jwt_secret
+  smtp_user           = var.smtp_user
+  smtp_password       = var.smtp_password
 
   depends_on = [
     module.project
@@ -100,10 +101,11 @@ module "cloudrun" {
   db_user              = module.database.database_user
 
   # Pass Secret IDs instead of values
-  db_password_secret_id   = module.secrets.db_password_secret_id
-  jwt_secret_secret_id    = module.secrets.jwt_secret_secret_id
-  smtp_user_secret_id     = module.secrets.smtp_user_secret_id
-  smtp_password_secret_id = module.secrets.smtp_password_secret_id
+  db_password_secret_id         = module.secrets.db_password_secret_id
+  admin_user_password_secret_id = module.secrets.admin_user_password_secret_id
+  jwt_secret_secret_id          = module.secrets.jwt_secret_secret_id
+  smtp_user_secret_id           = module.secrets.smtp_user_secret_id
+  smtp_password_secret_id       = module.secrets.smtp_password_secret_id
 
   cors_origin            = var.cors_origin
   cloudrun_min_instances = var.cloudrun_min_instances
@@ -121,6 +123,9 @@ module "cloudrun" {
   smtp_from        = var.smtp_from
   smtp_secure      = var.smtp_secure
   smtp_require_tls = var.smtp_require_tls
+
+  admin_user_email = var.admin_user_email
+  admin_user_name  = var.admin_user_name
 
   depends_on = [
     module.network,

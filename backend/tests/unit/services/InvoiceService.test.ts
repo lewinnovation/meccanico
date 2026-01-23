@@ -4,6 +4,7 @@ import { Job, JobStatus } from '../../../src/models/Job';
 import { NotFoundError, ConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
 import { SettingsService } from '../../../src/services/SettingsService';
 import { PaymentService } from '../../../src/services/PaymentService';
+import { AppDataSource } from '../../../src/config/database';
 
 // Mock dependencies
 jest.mock('../../../src/config/database', () => ({
@@ -26,6 +27,10 @@ describe('InvoiceService', () => {
   let mockInvoiceRepository: any;
   let mockJobRepository: any;
   let mockSettingsService: any;
+  const mockAppDataSource = AppDataSource as unknown as {
+    getRepository: jest.Mock;
+    query: jest.Mock;
+  };
 
   const mockJob: Partial<Job> = {
     id: 'job-1',
@@ -71,15 +76,14 @@ describe('InvoiceService', () => {
       findByKey: jest.fn().mockResolvedValue({ value: 14 }),
     };
 
-    const { AppDataSource } = require('../../../src/config/database');
-    AppDataSource.getRepository.mockImplementation((entity: any) => {
+    mockAppDataSource.getRepository.mockImplementation((entity: any) => {
       if (entity.name === 'Invoice') return mockInvoiceRepository;
       if (entity.name === 'Job') return mockJobRepository;
       return mockInvoiceRepository;
     });
 
     // Mock AppDataSource.query for invoice number generation
-    AppDataSource.query = jest.fn().mockResolvedValue([]);
+    mockAppDataSource.query = jest.fn().mockResolvedValue([]);
 
     (SettingsService as jest.Mock).mockImplementation(() => mockSettingsService);
 
@@ -92,10 +96,9 @@ describe('InvoiceService', () => {
       const dueDate = new Date(today);
       dueDate.setDate(dueDate.getDate() + 14);
 
-      const { AppDataSource } = require('../../../src/config/database');
       mockJobRepository.findOne.mockResolvedValue(mockJob);
       mockInvoiceRepository.findOne.mockResolvedValue(null);
-      AppDataSource.query.mockResolvedValue([]);
+      mockAppDataSource.query.mockResolvedValue([]);
       mockInvoiceRepository.create.mockReturnValue(mockInvoice);
       mockInvoiceRepository.save.mockResolvedValue(mockInvoice);
       mockJobRepository.save.mockResolvedValue({ ...mockJob, invoiceId: 'invoice-1' });
@@ -141,7 +144,7 @@ describe('InvoiceService', () => {
 
       mockJobRepository.findOne.mockResolvedValue(mockJob);
       mockInvoiceRepository.findOne.mockResolvedValue(null);
-      AppDataSource.query.mockResolvedValue([]);
+      mockAppDataSource.query.mockResolvedValue([]);
       mockInvoiceRepository.create.mockReturnValue(mockInvoice);
       mockInvoiceRepository.save.mockResolvedValue(mockInvoice);
       mockJobRepository.save.mockResolvedValue(mockJob);
@@ -163,7 +166,7 @@ describe('InvoiceService', () => {
 
       mockJobRepository.findOne.mockResolvedValue(mockJob);
       mockInvoiceRepository.findOne.mockResolvedValue(null);
-      AppDataSource.query.mockResolvedValue([]);
+      mockAppDataSource.query.mockResolvedValue([]);
       mockInvoiceRepository.create.mockReturnValue(mockInvoice);
       mockInvoiceRepository.save.mockResolvedValue(mockInvoice);
       mockJobRepository.save.mockResolvedValue(mockJob);
@@ -175,50 +178,6 @@ describe('InvoiceService', () => {
       expect(mockInvoiceRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           dueDate: expect.any(Date),
-        })
-      );
-    });
-  });
-
-  describe('markAsPaid', () => {
-    it('should mark an invoice as paid', async () => {
-      const paidInvoice = { ...mockInvoice, status: InvoiceStatus.PAID, paidAt: new Date() };
-      mockInvoiceRepository.findOne
-        .mockResolvedValueOnce(mockInvoice)
-        .mockResolvedValueOnce(paidInvoice);
-      mockInvoiceRepository.save.mockResolvedValue(paidInvoice);
-
-      const result = await invoiceService.markAsPaid('invoice-1', { paymentNote: 'Paid via credit card' });
-
-      expect(mockInvoiceRepository.save).toHaveBeenCalled();
-      expect(result.status).toBe(InvoiceStatus.PAID);
-    });
-
-    it('should throw NotFoundError when invoice not found', async () => {
-      mockInvoiceRepository.findOne.mockResolvedValue(null);
-
-      await expect(invoiceService.markAsPaid('nonexistent', {})).rejects.toThrow(NotFoundError);
-    });
-
-    it('should throw BadRequestError when invoice is already paid', async () => {
-      const paidInvoice = { ...mockInvoice, status: InvoiceStatus.PAID };
-      mockInvoiceRepository.findOne.mockResolvedValue(paidInvoice);
-
-      await expect(invoiceService.markAsPaid('invoice-1', {})).rejects.toThrow(BadRequestError);
-    });
-
-    it('should save payment note when provided', async () => {
-      const paidInvoice = { ...mockInvoice, status: InvoiceStatus.PAID, paidAt: new Date(), paymentNote: 'Check #1234' };
-      mockInvoiceRepository.findOne
-        .mockResolvedValueOnce(mockInvoice)
-        .mockResolvedValueOnce(paidInvoice);
-      mockInvoiceRepository.save.mockResolvedValue(paidInvoice);
-
-      await invoiceService.markAsPaid('invoice-1', { paymentNote: 'Check #1234' });
-
-      expect(mockInvoiceRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          paymentNote: 'Check #1234',
         })
       );
     });

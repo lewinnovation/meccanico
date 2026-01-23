@@ -1,7 +1,8 @@
 import { VehicleService, CreateVehicleDto, UpdateVehicleDto } from '../../../src/services/VehicleService';
 import { Vehicle } from '../../../src/models/Vehicle';
 import { Customer } from '../../../src/models/Customer';
-import { NotFoundError, ConflictError } from '../../../src/middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError } from '../../../src/middleware/errorHandler';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 
 // Mock the database
 jest.mock('../../../src/config/database', () => ({
@@ -31,6 +32,20 @@ describe('VehicleService', () => {
   };
   let mockCustomerRepository: {
     findOne: jest.Mock;
+    find: jest.Mock;
+  };
+  let mockVehicleOwnerRepository: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    update: jest.Mock;
+    count: jest.Mock;
+    remove: jest.Mock;
+  };
+  let mockAuditLogRepository: {
+    create: jest.Mock;
+    save: jest.Mock;
   };
 
   beforeEach(() => {
@@ -45,11 +60,29 @@ describe('VehicleService', () => {
 
     mockCustomerRepository = {
       findOne: jest.fn(),
+      find: jest.fn(),
+    };
+
+    mockVehicleOwnerRepository = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn((data) => ({ ...data })),
+      save: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+      remove: jest.fn(),
+    };
+
+    mockAuditLogRepository = {
+      create: jest.fn((data) => ({ ...data })),
+      save: jest.fn(),
     };
 
     (AppDataSource.getRepository as jest.Mock).mockImplementation((entity) => {
       if (entity === Vehicle) return mockVehicleRepository;
       if (entity === Customer) return mockCustomerRepository;
+      if (entity.name === 'VehicleOwner') return mockVehicleOwnerRepository;
+      if (entity.name === 'AuditLog') return mockAuditLogRepository;
       return {};
     });
 
@@ -117,7 +150,7 @@ describe('VehicleService', () => {
       await vehicleService.findAll(1, 50, undefined, 'customer-123');
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'vehicle.customerId = :customerId',
+        'owner.id = :customerId',
         { customerId: 'customer-123' }
       );
     });
@@ -139,7 +172,7 @@ describe('VehicleService', () => {
       expect(result).toEqual(mockVehicle);
       expect(mockVehicleRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'test-id' },
-        relations: ['customer', 'jobs'],
+        relations: ['vehicleOwners', 'vehicleOwners.customer', 'jobs'],
       });
     });
 
@@ -165,7 +198,7 @@ describe('VehicleService', () => {
       expect(result).toEqual(mockVehicle);
       expect(mockVehicleRepository.findOne).toHaveBeenCalledWith({
         where: { code: 'V001' },
-        relations: ['customer', 'jobs'],
+        relations: ['vehicleOwners', 'vehicleOwners.customer', 'jobs'],
       });
     });
 
@@ -179,16 +212,20 @@ describe('VehicleService', () => {
   describe('findByCustomerId', () => {
     it('should return vehicles for customer', async () => {
       const mockVehicles = [
-        { id: '1', make: 'Toyota', model: 'Camry' },
-        { id: '2', make: 'Honda', model: 'Civic' },
+        { id: '1', make: 'Toyota', model: 'Camry', vehicleOwners: [] },
+        { id: '2', make: 'Honda', model: 'Civic', vehicleOwners: [] },
       ];
-      mockVehicleRepository.find.mockResolvedValue(mockVehicles);
+      mockVehicleOwnerRepository.find.mockResolvedValue([
+        { vehicle: mockVehicles[0] },
+        { vehicle: mockVehicles[1] },
+      ]);
 
       const result = await vehicleService.findByCustomerId('customer-123');
 
       expect(result).toEqual(mockVehicles);
-      expect(mockVehicleRepository.find).toHaveBeenCalledWith({
+      expect(mockVehicleOwnerRepository.find).toHaveBeenCalledWith({
         where: { customerId: 'customer-123' },
+        relations: ['vehicle', 'vehicle.vehicleOwners', 'vehicle.vehicleOwners.customer'],
         order: { createdAt: 'DESC' },
       });
     });
@@ -197,16 +234,24 @@ describe('VehicleService', () => {
   describe('create', () => {
     it('should create vehicle with generated code', async () => {
       const createDto: CreateVehicleDto = {
-        customerId: 'customer-123',
+        customerIds: ['customer-123'],
         make: 'Toyota',
         model: 'Camry',
         year: 2023,
       };
 
-      mockCustomerRepository.findOne.mockResolvedValue({ id: 'customer-123', name: 'John' });
-      mockVehicleRepository.findOne.mockResolvedValue(null); // No duplicate VIN or plate
+      mockCustomerRepository.find.mockResolvedValue([{ id: 'customer-123', name: 'John' }]);
+      mockVehicleRepository.findOne.mockResolvedValue({
+        id: 'new-id',
+        code: 'V001',
+        make: 'Toyota',
+        model: 'Camry',
+        vehicleOwners: [],
+        jobs: [],
+      });
       mockVehicleRepository.create.mockReturnValue({ ...createDto, code: 'V001' });
       mockVehicleRepository.save.mockResolvedValue({ id: 'new-id', ...createDto, code: 'V001' });
+      mockVehicleOwnerRepository.save.mockResolvedValue([]);
 
       const result = await vehicleService.create(createDto);
 
@@ -217,25 +262,25 @@ describe('VehicleService', () => {
 
     it('should throw NotFoundError when customer does not exist', async () => {
       const createDto: CreateVehicleDto = {
-        customerId: 'non-existent',
+        customerIds: ['non-existent'],
         make: 'Toyota',
         model: 'Camry',
       };
 
-      mockCustomerRepository.findOne.mockResolvedValue(null);
+      mockCustomerRepository.find.mockResolvedValue([]);
 
       await expect(vehicleService.create(createDto)).rejects.toThrow(NotFoundError);
     });
 
     it('should throw ConflictError for duplicate VIN', async () => {
       const createDto: CreateVehicleDto = {
-        customerId: 'customer-123',
+        customerIds: ['customer-123'],
         make: 'Toyota',
         model: 'Camry',
         vin: 'ABC123456789DEF01',
       };
 
-      mockCustomerRepository.findOne.mockResolvedValue({ id: 'customer-123' });
+      mockCustomerRepository.find.mockResolvedValue([{ id: 'customer-123' }]);
       mockVehicleRepository.findOne.mockResolvedValue({ id: 'existing', vin: 'ABC123456789DEF01' });
 
       await expect(vehicleService.create(createDto)).rejects.toThrow(ConflictError);
@@ -243,14 +288,14 @@ describe('VehicleService', () => {
 
     it('should throw ConflictError for duplicate license plate', async () => {
       const createDto: CreateVehicleDto = {
-        customerId: 'customer-123',
+        customerIds: ['customer-123'],
         make: 'Toyota',
         model: 'Camry',
         vin: undefined, // No VIN to check
         licensePlate: 'ABC123',
       };
 
-      mockCustomerRepository.findOne.mockResolvedValue({ id: 'customer-123' });
+      mockCustomerRepository.find.mockResolvedValue([{ id: 'customer-123' }]);
       // Only licensePlate check happens since no VIN
       mockVehicleRepository.findOne.mockResolvedValue({ id: 'existing', licensePlate: 'ABC123' });
 
@@ -317,7 +362,7 @@ describe('VehicleService', () => {
         jobs: [],
       };
       mockVehicleRepository.findOne.mockResolvedValue(existingVehicle);
-      mockVehicleRepository.save.mockRejectedValue(new OptimisticLockVersionMismatchError('', ''));
+      mockVehicleRepository.save.mockRejectedValue(new OptimisticLockVersionMismatchError('Vehicle', 1, 2));
 
       await expect(vehicleService.update('test-id', { make: 'Honda' }))
         .rejects
@@ -419,41 +464,5 @@ describe('VehicleService', () => {
     });
   });
 
-  describe('transferToCustomer', () => {
-    it('should transfer vehicle to new customer', async () => {
-      const existingVehicle = {
-        id: 'test-id',
-        code: 'V001',
-        make: 'Toyota',
-        model: 'Camry',
-        customerId: 'old-customer',
-        jobs: [],
-      };
-      mockVehicleRepository.findOne.mockResolvedValue(existingVehicle);
-      mockCustomerRepository.findOne.mockResolvedValue({ id: 'new-customer', name: 'Jane' });
-      mockVehicleRepository.save.mockResolvedValue({ ...existingVehicle, customerId: 'new-customer' });
-
-      const result = await vehicleService.transferToCustomer('test-id', 'new-customer');
-
-      expect(result.customerId).toBe('new-customer');
-    });
-
-    it('should throw NotFoundError when new customer not found', async () => {
-      const existingVehicle = {
-        id: 'test-id',
-        code: 'V001',
-        make: 'Toyota',
-        model: 'Camry',
-        customerId: 'old-customer',
-        jobs: [],
-      };
-      mockVehicleRepository.findOne.mockResolvedValue(existingVehicle);
-      mockCustomerRepository.findOne.mockResolvedValue(null);
-
-      await expect(
-        vehicleService.transferToCustomer('test-id', 'non-existent')
-      ).rejects.toThrow(NotFoundError);
-    });
-  });
 });
 

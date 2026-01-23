@@ -14,6 +14,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "admin_user_password" {
+  description = "Admin bootstrap user password"
+  type        = string
+  sensitive   = true
+}
+
 variable "jwt_secret" {
   description = "JWT secret"
   type        = string
