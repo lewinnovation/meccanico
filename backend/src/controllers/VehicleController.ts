@@ -43,14 +43,6 @@ export class VehicleController extends Controller {
   }
 
   /**
-   * Get a vehicle by ID
-   */
-  @Get('/{id}')
-  public async getVehicle(@Path() id: string): Promise<Vehicle> {
-    return this.vehicleService.findById(id);
-  }
-
-  /**
    * Get a vehicle by code (e.g., V001)
    */
   @Get('/code/{code}')
@@ -86,6 +78,14 @@ export class VehicleController extends Controller {
     @Path() vin: string
   ): Promise<Vehicle> {
     return this.vehicleService.findByVin(vin);
+  }
+
+  /**
+   * Get a vehicle by ID
+   */
+  @Get('/{id}')
+  public async getVehicle(@Path() id: string): Promise<Vehicle> {
+    return this.vehicleService.findById(id);
   }
 
   /**

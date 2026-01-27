@@ -51,19 +51,19 @@ export class InventoryController extends Controller {
   }
 
   /**
-   * Get an inventory item by ID
-   */
-  @Get('/{id}')
-  public async getInventoryItem(@Path() id: string): Promise<Inventory> {
-    return this.inventoryService.findById(id);
-  }
-
-  /**
    * Get an inventory item by code
    */
   @Get('/code/{code}')
   public async getInventoryItemByCode(@Path() code: string): Promise<Inventory> {
     return this.inventoryService.findByCode(code);
+  }
+
+  /**
+   * Get an inventory item by ID
+   */
+  @Get('/{id}')
+  public async getInventoryItem(@Path() id: string): Promise<Inventory> {
+    return this.inventoryService.findById(id);
   }
 
   /**

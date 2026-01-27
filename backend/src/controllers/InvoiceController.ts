@@ -39,16 +39,6 @@ export class InvoiceController extends Controller {
   }
 
   /**
-   * Get invoice by ID
-   */
-  @Get('{id}')
-  @SuccessResponse('200', 'Invoice found')
-  @Response<NotFoundError>(404, 'Invoice not found')
-  public async getInvoice(@Path() id: string): Promise<Invoice> {
-    return this.invoiceService.findById(id);
-  }
-
-  /**
    * Get invoice for a job
    */
   @Get('job/{jobId}')
@@ -56,6 +46,16 @@ export class InvoiceController extends Controller {
   @Response<NotFoundError>(404, 'Invoice not found')
   public async getInvoiceByJob(@Path() jobId: string): Promise<Invoice | null> {
     return this.invoiceService.findByJobId(jobId);
+  }
+
+  /**
+   * Get invoice by ID
+   */
+  @Get('{id}')
+  @SuccessResponse('200', 'Invoice found')
+  @Response<NotFoundError>(404, 'Invoice not found')
+  public async getInvoice(@Path() id: string): Promise<Invoice> {
+    return this.invoiceService.findById(id);
   }
 
   /**

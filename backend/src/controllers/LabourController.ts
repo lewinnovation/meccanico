@@ -49,19 +49,19 @@ export class LabourController extends Controller {
   }
 
   /**
-   * Get a labour item by ID
-   */
-  @Get('/{id}')
-  public async getLabourItem(@Path() id: string): Promise<Labour> {
-    return this.labourService.findById(id);
-  }
-
-  /**
    * Get a labour item by code
    */
   @Get('/code/{code}')
   public async getLabourItemByCode(@Path() code: string): Promise<Labour> {
     return this.labourService.findByCode(code);
+  }
+
+  /**
+   * Get a labour item by ID
+   */
+  @Get('/{id}')
+  public async getLabourItem(@Path() id: string): Promise<Labour> {
+    return this.labourService.findById(id);
   }
 
   /**

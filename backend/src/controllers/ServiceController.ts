@@ -49,19 +49,19 @@ export class ServiceController extends Controller {
   }
 
   /**
-   * Get a service by ID
-   */
-  @Get('/{id}')
-  public async getService(@Path() id: string): Promise<Service> {
-    return this.serviceService.findById(id);
-  }
-
-  /**
    * Get a service by code
    */
   @Get('/code/{code}')
   public async getServiceByCode(@Path() code: string): Promise<Service> {
     return this.serviceService.findByCode(code);
+  }
+
+  /**
+   * Get a service by ID
+   */
+  @Get('/{id}')
+  public async getService(@Path() id: string): Promise<Service> {
+    return this.serviceService.findById(id);
   }
 
   /**

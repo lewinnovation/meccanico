@@ -39,19 +39,19 @@ export class CustomerController extends Controller {
   }
 
   /**
-   * Get a customer by ID
-   */
-  @Get('/{id}')
-  public async getCustomer(@Path() id: string): Promise<Customer> {
-    return this.customerService.findById(id);
-  }
-
-  /**
    * Get a customer by code (e.g., C001)
    */
   @Get('/code/{code}')
   public async getCustomerByCode(@Path() code: string): Promise<Customer> {
     return this.customerService.findByCode(code);
+  }
+
+  /**
+   * Get a customer by ID
+   */
+  @Get('/{id}')
+  public async getCustomer(@Path() id: string): Promise<Customer> {
+    return this.customerService.findById(id);
   }
 
   /**

@@ -79,6 +79,14 @@ export class JobController extends Controller {
   }
 
   /**
+   * Get a job by code
+   */
+  @Get('/code/{code}')
+  public async getJobByCode(@Path() code: string): Promise<Job> {
+    return this.jobService.findByCode(code);
+  }
+
+  /**
    * Get a job by ID
    */
   @Get('/{id}')
@@ -87,14 +95,6 @@ export class JobController extends Controller {
     @Path() id: string
   ): Promise<Job> {
     return this.jobService.findById(id, request.user?.id, request.user?.role);
-  }
-
-  /**
-   * Get a job by code
-   */
-  @Get('/code/{code}')
-  public async getJobByCode(@Path() code: string): Promise<Job> {
-    return this.jobService.findByCode(code);
   }
 
   /**

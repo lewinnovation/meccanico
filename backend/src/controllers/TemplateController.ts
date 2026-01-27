@@ -45,19 +45,19 @@ export class TemplateController extends Controller {
   }
 
   /**
-   * Get a template by ID
-   */
-  @Get('/{id}')
-  public async getTemplate(@Path() id: string): Promise<Template> {
-    return this.templateService.findById(id);
-  }
-
-  /**
    * Get a template by code
    */
   @Get('/code/{code}')
   public async getTemplateByCode(@Path() code: string): Promise<Template> {
     return this.templateService.findByCode(code);
+  }
+
+  /**
+   * Get a template by ID
+   */
+  @Get('/{id}')
+  public async getTemplate(@Path() id: string): Promise<Template> {
+    return this.templateService.findById(id);
   }
 
   /**

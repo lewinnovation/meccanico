@@ -42,18 +42,6 @@ export class SettingsController extends Controller {
   }
 
   /**
-   * Update a single setting (Admin only)
-   */
-  @Put('/{key}')
-  @Security('jwt', ['ADMIN'])
-  public async updateSetting(
-    @Path() key: string,
-    @Body() body: UpdateSettingDto
-  ): Promise<SettingValue> {
-    return this.settingsService.update(key, body);
-  }
-
-  /**
    * Update multiple settings at once (Admin only)
    */
   @Put('/')
@@ -71,6 +59,18 @@ export class SettingsController extends Controller {
   @Security('jwt', ['ADMIN'])
   public async resetSetting(@Path() key: string): Promise<SettingValue> {
     return this.settingsService.resetToDefault(key);
+  }
+
+  /**
+   * Update a single setting (Admin only)
+   */
+  @Put('/{key}')
+  @Security('jwt', ['ADMIN'])
+  public async updateSetting(
+    @Path() key: string,
+    @Body() body: UpdateSettingDto
+  ): Promise<SettingValue> {
+    return this.settingsService.update(key, body);
   }
 }
 

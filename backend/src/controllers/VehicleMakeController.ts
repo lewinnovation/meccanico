@@ -40,48 +40,6 @@ export class VehicleMakeController extends Controller {
     return this.service.findAllMakes(includeInactive);
   }
 
-  /**
-   * Get a vehicle make by ID
-   */
-  @Get('/{id}')
-  public async getMake(@Path() id: string): Promise<VehicleMake> {
-    return this.service.findMakeById(id);
-  }
-
-  /**
-   * Create a new vehicle make
-   */
-  @Post('/')
-  @SuccessResponse(201, 'Created')
-  @Security('jwt', ['ADMIN', 'MECHANIC'])
-  public async createMake(@Body() body: CreateVehicleMakeDto): Promise<VehicleMake> {
-    this.setStatus(201);
-    return this.service.createMake(body);
-  }
-
-  /**
-   * Update a vehicle make
-   */
-  @Patch('/{id}')
-  @Security('jwt', ['ADMIN', 'MECHANIC'])
-  public async updateMake(
-    @Path() id: string,
-    @Body() body: UpdateVehicleMakeDto
-  ): Promise<VehicleMake> {
-    return this.service.updateMake(id, body);
-  }
-
-  /**
-   * Delete a vehicle make
-   */
-  @Delete('/{id}')
-  @SuccessResponse(204, 'Deleted')
-  @Security('jwt', ['ADMIN', 'MECHANIC'])
-  public async deleteMake(@Path() id: string): Promise<void> {
-    this.setStatus(204);
-    return this.service.deleteMake(id);
-  }
-
   // ===================== MODELS =====================
 
   /**
@@ -146,6 +104,50 @@ export class VehicleMakeController extends Controller {
   public async deleteModel(@Path() id: string): Promise<void> {
     this.setStatus(204);
     return this.service.deleteModel(id);
+  }
+
+  // ===================== MAKES =====================
+
+  /**
+   * Get a vehicle make by ID
+   */
+  @Get('/{id}')
+  public async getMake(@Path() id: string): Promise<VehicleMake> {
+    return this.service.findMakeById(id);
+  }
+
+  /**
+   * Create a new vehicle make
+   */
+  @Post('/')
+  @SuccessResponse(201, 'Created')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
+  public async createMake(@Body() body: CreateVehicleMakeDto): Promise<VehicleMake> {
+    this.setStatus(201);
+    return this.service.createMake(body);
+  }
+
+  /**
+   * Update a vehicle make
+   */
+  @Patch('/{id}')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
+  public async updateMake(
+    @Path() id: string,
+    @Body() body: UpdateVehicleMakeDto
+  ): Promise<VehicleMake> {
+    return this.service.updateMake(id, body);
+  }
+
+  /**
+   * Delete a vehicle make
+   */
+  @Delete('/{id}')
+  @SuccessResponse(204, 'Deleted')
+  @Security('jwt', ['ADMIN', 'MECHANIC'])
+  public async deleteMake(@Path() id: string): Promise<void> {
+    this.setStatus(204);
+    return this.service.deleteMake(id);
   }
 }
 
