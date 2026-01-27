@@ -16,12 +16,15 @@ import {
 import {
   VehicleService,
   CreateVehicleDto,
+  CreateVehicleBulkDto,
+  BulkCreateVehiclesDto,
   UpdateVehicleDto,
 } from '../services/VehicleService';
 import { Vehicle } from '../models/Vehicle';
 import { VehicleOdometerReading } from '../models/VehicleOdometerReading';
 import { PaginatedResult } from '../types/common';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { BadRequestError } from '../middleware/errorHandler';
 
 @Route('api/vehicles')
 @Tags('Vehicles')
@@ -97,6 +100,20 @@ export class VehicleController extends Controller {
   public async createVehicle(@Body() body: CreateVehicleDto): Promise<Vehicle> {
     this.setStatus(201);
     return this.vehicleService.create(body);
+  }
+
+  /**
+   * Bulk create vehicles (admin only)
+   */
+  @Post('/bulk')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse(201, 'Created')
+  public async createVehiclesBulk(@Body() body: BulkCreateVehiclesDto): Promise<Vehicle[]> {
+    if (body.items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 vehicles at once');
+    }
+    this.setStatus(201);
+    return this.vehicleService.createBulk(body.items);
   }
 
   /**

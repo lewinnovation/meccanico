@@ -9,7 +9,7 @@ import { VehicleOwner } from '../models/VehicleOwner';
 import { VehicleOdometerReading } from '../models/VehicleOdometerReading';
 import { generateJobCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, BadRequestError, VersionConflictError, UnauthorizedError } from '../middleware/errorHandler';
-import { OptimisticLockVersionMismatchError } from 'typeorm';
+import { OptimisticLockVersionMismatchError, In } from 'typeorm';
 import { PaginatedResult } from '../types/common';
 import { createAuditLog } from '../utils/auditLogger';
 import { AuditAction } from '../models/AuditLog';
@@ -42,6 +42,14 @@ export interface UpdateJobDto {
   version?: number;
 }
 
+export interface CreateJobBulkDto extends CreateJobDto {
+  code?: string;
+}
+
+export interface BulkCreateJobsDto {
+  items: CreateJobBulkDto[];
+}
+
 export interface CreateLineItemDto {
   type: LineItemType;
   referenceId?: string;
@@ -50,6 +58,10 @@ export interface CreateLineItemDto {
   unitPrice: number;
   notes?: string;
   sortOrder?: number;
+}
+
+export interface BulkCreateLineItemsDto {
+  items: CreateLineItemDto[];
 }
 
 export interface UpdateLineItemDto {
@@ -339,6 +351,167 @@ export class JobService {
     );
     
     return this.findById(savedJob.id);
+  }
+
+  async createBulk(items: CreateJobBulkDto[], userId?: string | null): Promise<Job[]> {
+    if (items.length === 0) {
+      throw new BadRequestError('At least one job is required');
+    }
+    if (items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 jobs at once');
+    }
+
+    const createdJobs: Job[] = [];
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      for (const data of items) {
+        let customerId = data.customerId;
+
+        // If vehicle is provided, validate and potentially set default customer
+        if (data.vehicleId) {
+          const vehicle = await queryRunner.manager.findOne(Vehicle, {
+            where: { id: data.vehicleId },
+            relations: ['vehicleOwners', 'vehicleOwners.customer'],
+          });
+
+          if (!vehicle) {
+            throw new NotFoundError(`Vehicle not found: ${data.vehicleId}`);
+          }
+
+          // If customerId not provided, use last job's customer or first/primary owner
+          if (!customerId) {
+            const lastJob = await queryRunner.manager.findOne(Job, {
+              where: { vehicleId: data.vehicleId },
+              order: { createdAt: 'DESC' },
+            });
+
+            if (lastJob) {
+              customerId = lastJob.customerId;
+            } else {
+              const primaryOwner = vehicle.vehicleOwners?.find(vo => vo.isPrimary);
+              if (primaryOwner) {
+                customerId = primaryOwner.customerId;
+              } else if (vehicle.vehicleOwners && vehicle.vehicleOwners.length > 0) {
+                customerId = vehicle.vehicleOwners[0].customerId;
+              } else {
+                throw new BadRequestError(`Vehicle ${data.vehicleId} has no owners`);
+              }
+            }
+          }
+
+          // Check if customer is in vehicle's owners list
+          const isOwner = vehicle.vehicleOwners?.some(
+            vo => vo.customerId === customerId
+          );
+
+          // If customer is not an owner, automatically add them as an owner
+          if (!isOwner) {
+            const vehicleOwnerRepository = queryRunner.manager.getRepository(VehicleOwner);
+            const existingOwner = await vehicleOwnerRepository.findOne({
+              where: {
+                vehicleId: data.vehicleId,
+                customerId: customerId,
+              },
+            });
+            
+            if (!existingOwner) {
+              const vehicleOwner = vehicleOwnerRepository.create({
+                vehicleId: data.vehicleId,
+                customerId: customerId,
+                isPrimary: false,
+              });
+              await vehicleOwnerRepository.save(vehicleOwner);
+            }
+          }
+        } else if (!customerId) {
+          throw new BadRequestError('Customer is required when vehicle is not specified');
+        }
+
+        // Use provided code or generate one
+        let code = data.code;
+        if (!code) {
+          code = await generateJobCode();
+        } else {
+          // Validate code uniqueness within transaction
+          const existing = await queryRunner.manager.findOne(Job, {
+            where: { code },
+          });
+          if (existing) {
+            throw new ConflictError(`Job with code ${code} already exists`);
+          }
+        }
+
+        const job = queryRunner.manager.create(Job, {
+          code,
+          customerId,
+          vehicleId: data.vehicleId || null,
+          assignedTo: data.assignedTo,
+          notes: data.notes,
+          taxRate: data.taxRate ?? 0,
+          status: JobStatus.BOOKED,
+          odometer: data.odometer || null,
+          odometerUnit: data.odometerUnit || null,
+        });
+
+        const savedJob = await queryRunner.manager.save(job);
+        
+        // Handle odometer reading if provided
+        if (data.odometer !== undefined && data.odometer !== null && data.odometerUnit && savedJob.vehicleId) {
+          const readingInBaseUnit = this.convertToBaseUnit(data.odometer, data.odometerUnit);
+          
+          const odometerReading = queryRunner.manager.create(VehicleOdometerReading, {
+            vehicleId: savedJob.vehicleId,
+            jobId: savedJob.id,
+            reading: readingInBaseUnit,
+            unit: data.odometerUnit,
+            source: 'job',
+            notes: null,
+            createdBy: userId || null,
+          });
+          
+          await queryRunner.manager.save(odometerReading);
+        }
+        
+        // Create audit log
+        await createAuditLog(
+          userId || null,
+          AuditAction.CREATE,
+          'Job',
+          savedJob.id,
+          null,
+          {
+            code: savedJob.code,
+            customerId: savedJob.customerId,
+            vehicleId: savedJob.vehicleId,
+            status: savedJob.status,
+            odometer: savedJob.odometer,
+            odometerUnit: savedJob.odometerUnit,
+          }
+        );
+
+        createdJobs.push(savedJob);
+      }
+
+      await queryRunner.commitTransaction();
+      
+      // Load full job details with relations
+      const jobIds = createdJobs.map(j => j.id);
+      const fullJobs = await this.repository.find({
+        where: { id: In(jobIds) },
+        relations: ['customer', 'vehicle', 'assignee', 'lineItems', 'invoice'],
+        order: { createdAt: 'ASC' },
+      });
+
+      return fullJobs;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async update(id: string, data: UpdateJobDto, userId?: string | null): Promise<Job> {
@@ -956,6 +1129,21 @@ export class JobService {
     }
     
     return savedItems;
+  }
+
+  async addLineItemsBulkAdmin(
+    jobId: string,
+    items: CreateLineItemDto[],
+    userId?: string | null
+  ): Promise<LineItem[]> {
+    if (items.length === 0) {
+      throw new BadRequestError('At least one line item is required');
+    }
+    if (items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 line items at once');
+    }
+
+    return this.addLineItemsBulk(jobId, items, userId);
   }
 
   /**

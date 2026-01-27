@@ -11,7 +11,7 @@ import {
   Response,
   SuccessResponse,
 } from 'tsoa';
-import { PaymentService, CreatePaymentDto } from '../services/PaymentService';
+import { PaymentService, CreatePaymentDto, CreatePaymentBulkDto, BulkCreatePaymentsDto } from '../services/PaymentService';
 import { Payment } from '../models/Payment';
 import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
 
@@ -38,6 +38,25 @@ export class PaymentController extends Controller {
       ...body,
       invoiceId,
     });
+  }
+
+  /**
+   * Bulk create payments for an invoice (admin only)
+   */
+  @Post('/{invoiceId}/payments/bulk')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse('201', 'Payments created')
+  @Response<NotFoundError>(404, 'Invoice or payment method not found')
+  @Response<BadRequestError>(400, 'Invalid payment amount or exceeds remaining balance')
+  public async createPaymentsBulk(
+    @Path() invoiceId: string,
+    @Body() body: BulkCreatePaymentsDto
+  ): Promise<Payment[]> {
+    if (body.items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 payments at once');
+    }
+    this.setStatus(201);
+    return this.paymentService.createBulk(invoiceId, body.items);
   }
 
   /**

@@ -1,6 +1,6 @@
-import { CustomerService, CreateCustomerDto, UpdateCustomerDto } from '../../../src/services/CustomerService';
+import { CustomerService, CreateCustomerDto, CreateCustomerBulkDto, UpdateCustomerDto } from '../../../src/services/CustomerService';
 import { Customer } from '../../../src/models/Customer';
-import { NotFoundError, ConflictError, VersionConflictError } from '../../../src/middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
 import { OptimisticLockVersionMismatchError } from 'typeorm';
 // Mock dependencies
 jest.mock('../../../src/config/database', () => ({
@@ -455,6 +455,86 @@ describe('CustomerService', () => {
       await expect(customerService.delete('123'))
         .rejects
         .toThrow('Cannot delete customer who owns vehicles. Remove vehicle ownership first.');
+    });
+  });
+
+  describe('createBulk', () => {
+    it('should create multiple customers with generated codes', async () => {
+      const items: CreateCustomerBulkDto[] = [
+        { name: 'John Smith', email: 'john@example.com' },
+        { name: 'Jane Doe', email: 'jane@example.com' },
+      ];
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null), // No duplicate emails
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockQueryRunner.query
+        .mockResolvedValueOnce([]) // First advisory lock
+        .mockResolvedValueOnce([]) // First code generation query
+        .mockResolvedValueOnce([]) // Second advisory lock
+        .mockResolvedValueOnce([]); // Second code generation query
+      mockRepository.create.mockImplementation((data: any) => ({ ...data, id: 'mock-id' }));
+      mockRepository.save.mockImplementation((customer: any) => Promise.resolve(customer));
+      mockQueryRunner.manager.getRepository.mockReturnValue(mockRepository);
+
+      const result = await customerService.createBulk(items);
+
+      expect(result).toHaveLength(2);
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestError when items array is empty', async () => {
+      await expect(customerService.createBulk([]))
+        .rejects
+        .toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when more than 100 items', async () => {
+      const items = Array(101).fill({ name: 'Test', email: 'test@example.com' });
+      await expect(customerService.createBulk(items))
+        .rejects
+        .toThrow('Cannot create more than 100 customers at once');
+    });
+
+    it('should throw ConflictError for duplicate email in bulk', async () => {
+      const items: CreateCustomerBulkDto[] = [
+        { name: 'John Smith', email: 'john@example.com' },
+      ];
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({ id: 'existing-id' }), // Duplicate email
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockQueryRunner.manager.getRepository.mockReturnValue(mockRepository);
+
+      await expect(customerService.createBulk(items))
+        .rejects
+        .toThrow(ConflictError);
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+    });
+
+    it('should use provided codes when specified', async () => {
+      const items: CreateCustomerBulkDto[] = [
+        { name: 'John Smith', code: 'CUSTOM001' },
+      ];
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockRepository.findOne.mockResolvedValue(null); // Code not taken
+      mockRepository.create.mockImplementation((data: any) => ({ ...data, id: 'mock-id' }));
+      mockRepository.save.mockImplementation((customer: any) => Promise.resolve(customer));
+      mockQueryRunner.manager.getRepository.mockReturnValue(mockRepository);
+
+      const result = await customerService.createBulk(items);
+
+      expect(result[0].code).toBe('CUSTOM001');
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
     });
   });
 });

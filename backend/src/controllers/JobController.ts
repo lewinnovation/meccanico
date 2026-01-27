@@ -18,8 +18,11 @@ import { Readable } from 'stream';
 import {
   JobService,
   CreateJobDto,
+  CreateJobBulkDto,
+  BulkCreateJobsDto,
   UpdateJobDto,
   CreateLineItemDto,
+  BulkCreateLineItemsDto,
   UpdateLineItemDto,
   PaginatedResult,
 } from '../services/JobService';
@@ -109,6 +112,23 @@ export class JobController extends Controller {
   ): Promise<Job> {
     this.setStatus(201);
     return this.jobService.create(body, request.user?.id);
+  }
+
+  /**
+   * Bulk create jobs (admin only)
+   */
+  @Post('/bulk')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse(201, 'Created')
+  public async createJobsBulk(
+    @Body() body: BulkCreateJobsDto,
+    @Request() request: { user: User }
+  ): Promise<Job[]> {
+    if (body.items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 jobs at once');
+    }
+    this.setStatus(201);
+    return this.jobService.createBulk(body.items, request.user?.id);
   }
 
   /**
@@ -212,6 +232,24 @@ export class JobController extends Controller {
   ): Promise<LineItem[]> {
     this.setStatus(201);
     return this.jobService.addLineItemsBulk(id, body.items, request.user?.id);
+  }
+
+  /**
+   * Bulk add line items to a job (admin only)
+   */
+  @Post('/{id}/line-items/bulk-admin')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse(201, 'Created')
+  public async addLineItemsBulkAdmin(
+    @Path() id: string,
+    @Body() body: BulkCreateLineItemsDto,
+    @Request() request: { user: User }
+  ): Promise<LineItem[]> {
+    if (body.items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 line items at once');
+    }
+    this.setStatus(201);
+    return this.jobService.addLineItemsBulkAdmin(id, body.items, request.user?.id);
   }
 
   /**

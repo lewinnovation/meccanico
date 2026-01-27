@@ -12,7 +12,7 @@ import {
   Response,
   SuccessResponse,
 } from 'tsoa';
-import { InvoiceService, CreateInvoiceFromJobDto } from '../services/InvoiceService';
+import { InvoiceService, CreateInvoiceFromJobDto, CreateInvoiceFromJobBulkDto } from '../services/InvoiceService';
 import { CreditNoteService, CreateCreditNoteDto } from '../services/CreditNoteService';
 import { Invoice } from '../models/Invoice';
 import { CreditNote } from '../models/CreditNote';
@@ -36,6 +36,22 @@ export class InvoiceController extends Controller {
   @Response<BadRequestError>(409, 'Invoice already exists for this job')
   public async createFromJob(@Path() jobId: string): Promise<Invoice> {
     return this.invoiceService.createFromJob(jobId);
+  }
+
+  /**
+   * Bulk create invoices from completed jobs (admin only)
+   */
+  @Post('/bulk-from-jobs')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse('201', 'Invoices created')
+  @Response<NotFoundError>(404, 'One or more jobs not found')
+  @Response<BadRequestError>(400, 'One or more jobs are not completed')
+  @Response<BadRequestError>(409, 'Invoices already exist for one or more jobs')
+  public async createBulkFromJobs(@Body() body: CreateInvoiceFromJobBulkDto): Promise<Invoice[]> {
+    if (body.jobIds.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 invoices at once');
+    }
+    return this.invoiceService.createBulkFromJobs(body.jobIds);
   }
 
   /**
