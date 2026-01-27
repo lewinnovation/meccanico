@@ -18,7 +18,7 @@ export type CodePrefix = typeof CODE_PREFIXES[keyof typeof CODE_PREFIXES];
 
 const getAdvisoryLockKey = (value: string) => {
   const hash = crypto.createHash('sha256').update(value).digest();
-  return hash.readBigUInt64BE(0);
+  return hash.readBigInt64BE(0);
 };
 
 const withAdvisoryLock = async <T>(
@@ -32,7 +32,7 @@ const withAdvisoryLock = async <T>(
   await queryRunner.startTransaction();
   try {
     await queryRunner.query('SELECT pg_advisory_xact_lock($1)', [
-      getAdvisoryLockKey(lockKey),
+      getAdvisoryLockKey(lockKey).toString(),
     ]);
     const result = await run(queryRunner);
     await queryRunner.commitTransaction();
