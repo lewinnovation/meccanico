@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { AppDataSource } from '../config/database';
 
 /**
@@ -15,6 +16,35 @@ export const CODE_PREFIXES = {
 
 export type CodePrefix = typeof CODE_PREFIXES[keyof typeof CODE_PREFIXES];
 
+const getAdvisoryLockKey = (value: string) => {
+  const hash = crypto.createHash('sha256').update(value).digest();
+  return hash.readBigUInt64BE(0);
+};
+
+const withAdvisoryLock = async <T>(
+  lockKey: string,
+  run: (queryRunner: {
+    query: (query: string, parameters?: unknown[]) => Promise<unknown[]>;
+  }) => Promise<T>
+): Promise<T> => {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+  try {
+    await queryRunner.query('SELECT pg_advisory_xact_lock($1)', [
+      getAdvisoryLockKey(lockKey),
+    ]);
+    const result = await run(queryRunner);
+    await queryRunner.commitTransaction();
+    return result;
+  } catch (error) {
+    await queryRunner.rollbackTransaction();
+    throw error;
+  } finally {
+    await queryRunner.release();
+  }
+};
+
 /**
  * Generate the next code for an entity type
  * Format: {PREFIX}{NNN} e.g., C001, J042
@@ -25,25 +55,27 @@ export async function generateCode(
 ): Promise<string> {
   const tableName = entityName.toLowerCase();
   
-  // Get the highest code number for this entity type
-  const result = await AppDataSource.query(`
-    SELECT code FROM ${tableName}
-    WHERE code LIKE '${prefix}%'
-    ORDER BY code DESC
-    LIMIT 1
-  `);
+  return withAdvisoryLock(`${tableName}:${prefix}`, async (queryRunner) => {
+    // Get the highest code number for this entity type
+    const result = await queryRunner.query(`
+      SELECT code FROM ${tableName}
+      WHERE code LIKE '${prefix}%'
+      ORDER BY code DESC
+      LIMIT 1
+    `);
 
-  let nextNumber = 1;
-  
-  if (result.length > 0) {
-    const lastCode = result[0].code as string;
-    const lastNumber = parseInt(lastCode.substring(1), 10);
-    nextNumber = lastNumber + 1;
-  }
+    let nextNumber = 1;
+    
+    if (result.length > 0) {
+      const lastCode = result[0].code as string;
+      const lastNumber = parseInt(lastCode.substring(1), 10);
+      nextNumber = lastNumber + 1;
+    }
 
-  // Pad to 3 digits minimum, but allow more if needed
-  const paddedNumber = nextNumber.toString().padStart(3, '0');
-  return `${prefix}${paddedNumber}`;
+    // Pad to 3 digits minimum, but allow more if needed
+    const paddedNumber = nextNumber.toString().padStart(3, '0');
+    return `${prefix}${paddedNumber}`;
+  });
 }
 
 /**
@@ -56,28 +88,30 @@ export async function generateCustomerCode(name: string): Promise<string> {
   const namePrefix = cleanName.substring(0, 5).padEnd(5, 'X');
   const fullPrefix = `${CODE_PREFIXES.CUSTOMER}${namePrefix}`;
   
-  // Get the highest code number for this customer name prefix
-  const result = await AppDataSource.query(`
-    SELECT code FROM customers
-    WHERE code LIKE '${fullPrefix}%'
-    ORDER BY code DESC
-    LIMIT 1
-  `);
+  return withAdvisoryLock(`customers:${fullPrefix}`, async (queryRunner) => {
+    // Get the highest code number for this customer name prefix
+    const result = await queryRunner.query(`
+      SELECT code FROM customers
+      WHERE code LIKE '${fullPrefix}%'
+      ORDER BY code DESC
+      LIMIT 1
+    `);
 
-  let nextNumber = 1;
-  
-  if (result.length > 0) {
-    const lastCode = result[0].code as string;
-    // Extract the number portion (last 3 characters)
-    const lastNumber = parseInt(lastCode.substring(6), 10);
-    if (!isNaN(lastNumber)) {
-      nextNumber = lastNumber + 1;
+    let nextNumber = 1;
+    
+    if (result.length > 0) {
+      const lastCode = result[0].code as string;
+      // Extract the number portion (last 3 characters)
+      const lastNumber = parseInt(lastCode.substring(6), 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
     }
-  }
 
-  // Pad to 3 digits
-  const paddedNumber = nextNumber.toString().padStart(3, '0');
-  return `${fullPrefix}${paddedNumber}`;
+    // Pad to 3 digits
+    const paddedNumber = nextNumber.toString().padStart(3, '0');
+    return `${fullPrefix}${paddedNumber}`;
+  });
 }
 
 /**
@@ -91,28 +125,30 @@ export async function generateJobCode(): Promise<string> {
   const dd = now.getDate().toString().padStart(2, '0');
   const datePrefix = `${CODE_PREFIXES.JOB}${yy}${mm}${dd}`;
   
-  // Get the highest code number for this date
-  const result = await AppDataSource.query(`
-    SELECT code FROM jobs
-    WHERE code LIKE '${datePrefix}%'
-    ORDER BY code DESC
-    LIMIT 1
-  `);
+  return withAdvisoryLock(`jobs:${datePrefix}`, async (queryRunner) => {
+    // Get the highest code number for this date
+    const result = await queryRunner.query(`
+      SELECT code FROM jobs
+      WHERE code LIKE '${datePrefix}%'
+      ORDER BY code DESC
+      LIMIT 1
+    `);
 
-  let nextNumber = 1;
-  
-  if (result.length > 0) {
-    const lastCode = result[0].code as string;
-    // Extract the number portion (last 3 characters after the date prefix)
-    const lastNumber = parseInt(lastCode.substring(7), 10);
-    if (!isNaN(lastNumber)) {
-      nextNumber = lastNumber + 1;
+    let nextNumber = 1;
+    
+    if (result.length > 0) {
+      const lastCode = result[0].code as string;
+      // Extract the number portion (last 3 characters after the date prefix)
+      const lastNumber = parseInt(lastCode.substring(7), 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
     }
-  }
 
-  // Pad to 3 digits
-  const paddedNumber = nextNumber.toString().padStart(3, '0');
-  return `${datePrefix}${paddedNumber}`;
+    // Pad to 3 digits
+    const paddedNumber = nextNumber.toString().padStart(3, '0');
+    return `${datePrefix}${paddedNumber}`;
+  });
 }
 
 /**
@@ -125,26 +161,28 @@ export async function generateCodes(
 ): Promise<string[]> {
   const tableName = entityName.toLowerCase();
   
-  const result = await AppDataSource.query(`
-    SELECT code FROM ${tableName}
-    WHERE code LIKE '${prefix}%'
-    ORDER BY code DESC
-    LIMIT 1
-  `);
+  return withAdvisoryLock(`${tableName}:${prefix}`, async (queryRunner) => {
+    const result = await queryRunner.query(`
+      SELECT code FROM ${tableName}
+      WHERE code LIKE '${prefix}%'
+      ORDER BY code DESC
+      LIMIT 1
+    `);
 
-  let startNumber = 1;
-  
-  if (result.length > 0) {
-    const lastCode = result[0].code as string;
-    startNumber = parseInt(lastCode.substring(1), 10) + 1;
-  }
+    let startNumber = 1;
+    
+    if (result.length > 0) {
+      const lastCode = result[0].code as string;
+      startNumber = parseInt(lastCode.substring(1), 10) + 1;
+    }
 
-  const codes: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const paddedNumber = (startNumber + i).toString().padStart(3, '0');
-    codes.push(`${prefix}${paddedNumber}`);
-  }
+    const codes: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const paddedNumber = (startNumber + i).toString().padStart(3, '0');
+      codes.push(`${prefix}${paddedNumber}`);
+    }
 
-  return codes;
+    return codes;
+  });
 }
 

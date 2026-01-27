@@ -8,20 +8,34 @@ import {
 // Mock the database
 jest.mock('../../../src/config/database', () => ({
   AppDataSource: {
-    query: jest.fn(),
+    createQueryRunner: jest.fn(),
   },
 }));
 
-const mockQuery = AppDataSource.query as jest.Mock;
+const mockQueryRunner = {
+  query: jest.fn(),
+  connect: jest.fn(),
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  rollbackTransaction: jest.fn(),
+  release: jest.fn(),
+};
+const mockCreateQueryRunner = AppDataSource.createQueryRunner as jest.Mock;
+
+const mockQueryWithResult = (result: unknown[]) => {
+  mockQueryRunner.query.mockResolvedValueOnce([]).mockResolvedValueOnce(result);
+};
 
 describe('codeGenerator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCreateQueryRunner.mockReturnValue(mockQueryRunner);
+    mockQueryRunner.query.mockResolvedValue([]);
   });
 
   describe('generateCode', () => {
     it('should generate first code as 001 when no existing codes', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCode('jobs', CODE_PREFIXES.JOB);
       
@@ -29,7 +43,7 @@ describe('codeGenerator', () => {
     });
 
     it('should increment code number from last existing code', async () => {
-      mockQuery.mockResolvedValue([{ code: 'J042' }]);
+      mockQueryWithResult([{ code: 'J042' }]);
       
       const code = await generateCode('jobs', CODE_PREFIXES.JOB);
       
@@ -37,7 +51,7 @@ describe('codeGenerator', () => {
     });
 
     it('should pad numbers to 3 digits', async () => {
-      mockQuery.mockResolvedValue([{ code: 'V005' }]);
+      mockQueryWithResult([{ code: 'V005' }]);
       
       const code = await generateCode('vehicles', CODE_PREFIXES.VEHICLE);
       
@@ -45,7 +59,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle numbers larger than 999', async () => {
-      mockQuery.mockResolvedValue([{ code: 'I1234' }]);
+      mockQueryWithResult([{ code: 'I1234' }]);
       
       const code = await generateCode('inventory', CODE_PREFIXES.INVENTORY);
       
@@ -53,7 +67,7 @@ describe('codeGenerator', () => {
     });
 
     it('should use correct prefix for each entity type', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryRunner.query.mockResolvedValue([]);
       
       expect(await generateCode('customers', CODE_PREFIXES.CUSTOMER)).toMatch(/^C\d{3}$/);
       expect(await generateCode('vehicles', CODE_PREFIXES.VEHICLE)).toMatch(/^V\d{3}$/);
@@ -67,7 +81,7 @@ describe('codeGenerator', () => {
 
   describe('generateCustomerCode', () => {
     it('should generate code with first 5 letters of name in uppercase', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('John Smith');
       
@@ -75,7 +89,7 @@ describe('codeGenerator', () => {
     });
 
     it('should remove spaces from name before extracting letters', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('Mary Jane Watson');
       
@@ -83,7 +97,7 @@ describe('codeGenerator', () => {
     });
 
     it('should pad short names with X', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('Bob');
       
@@ -92,7 +106,7 @@ describe('codeGenerator', () => {
     });
 
     it('should pad 4-letter names with one X', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('Jack');
       
@@ -100,7 +114,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle exactly 5 letter names', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('Alice');
       
@@ -108,7 +122,7 @@ describe('codeGenerator', () => {
     });
 
     it('should convert lowercase names to uppercase', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('alice');
       
@@ -116,7 +130,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle mixed case names', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('JoHn SmItH');
       
@@ -125,7 +139,7 @@ describe('codeGenerator', () => {
 
     it('should start at 001 for new name prefix', async () => {
       // CJOHNS001 exists, but John Doe gives CJOHND which is different prefix
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('John Doe');
       
@@ -134,7 +148,7 @@ describe('codeGenerator', () => {
     });
 
     it('should increment number for exact same prefix', async () => {
-      mockQuery.mockResolvedValue([{ code: 'CJOHNS005' }]);
+      mockQueryWithResult([{ code: 'CJOHNS005' }]);
       
       const code = await generateCustomerCode('John Smith');
       
@@ -142,7 +156,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle single character name', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('X');
       
@@ -150,7 +164,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle empty string by using all X', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('');
       
@@ -158,7 +172,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle names with only spaces', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode('   ');
       
@@ -166,7 +180,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle names with special characters', async () => {
-      mockQuery.mockResolvedValue([]);
+      mockQueryWithResult([]);
       
       const code = await generateCustomerCode("O'Brien");
       
@@ -175,7 +189,7 @@ describe('codeGenerator', () => {
     });
 
     it('should handle numbers in high range', async () => {
-      mockQuery.mockResolvedValue([{ code: 'CJOHNS999' }]);
+      mockQueryWithResult([{ code: 'CJOHNS999' }]);
       
       const code = await generateCustomerCode('John Smith');
       
