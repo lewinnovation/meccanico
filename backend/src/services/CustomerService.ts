@@ -1,7 +1,6 @@
 import { AppDataSource } from '../config/database';
 import { Customer } from '../models/Customer';
 import { VehicleOwner } from '../models/VehicleOwner';
-import { generateCustomerCode } from '../utils/codeGenerator';
 import { NotFoundError, ConflictError, VersionConflictError } from '../middleware/errorHandler';
 import { OptimisticLockVersionMismatchError } from 'typeorm';
 import { PaginatedResult } from '../types/common';
@@ -85,24 +84,65 @@ export class CustomerService {
   }
 
   async create(data: CreateCustomerDto): Promise<Customer> {
-    // Check for duplicate email if provided
-    if (data.email) {
-      const existing = await this.repository.findOne({
-        where: { email: data.email },
-      });
-      if (existing) {
-        throw new ConflictError('Customer with this email already exists');
+    const normalizedEmail = data.email?.trim().toLowerCase() || undefined;
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const repository = queryRunner.manager.getRepository(Customer);
+      if (normalizedEmail) {
+        const existing = await repository
+          .createQueryBuilder('customer')
+          .where('LOWER(customer.email) = :email', { email: normalizedEmail })
+          .getOne();
+        if (existing) {
+          throw new ConflictError('Customer with this email already exists');
+        }
       }
+
+      const cleanName = data.name.replace(/[^a-zA-Z]/g, '').toUpperCase();
+      const namePrefix = cleanName.substring(0, 5).padEnd(5, 'X');
+      const fullPrefix = `C${namePrefix}`;
+
+      await queryRunner.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        [`customer_code_${fullPrefix}`],
+      );
+      const result = await queryRunner.query(
+        `
+          SELECT code FROM customers
+          WHERE code LIKE $1
+          ORDER BY code DESC
+          LIMIT 1
+        `,
+        [`${fullPrefix}%`],
+      );
+
+      let nextNumber = 1;
+      if (result.length > 0) {
+        const lastCode = result[0].code as string;
+        const lastNumber = Number.parseInt(lastCode.substring(6), 10);
+        if (!Number.isNaN(lastNumber)) {
+          nextNumber = lastNumber + 1;
+        }
+      }
+      const code = `${fullPrefix}${nextNumber.toString().padStart(3, '0')}`;
+
+      const customer = repository.create({
+        ...data,
+        email: normalizedEmail ?? null,
+        code,
+      });
+
+      const saved = await repository.save(customer);
+      await queryRunner.commitTransaction();
+      return saved;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    const code = await generateCustomerCode(data.name);
-    
-    const customer = this.repository.create({
-      ...data,
-      code,
-    });
-
-    return this.repository.save(customer);
   }
 
   async update(id: string, data: UpdateCustomerDto): Promise<Customer> {
@@ -115,14 +155,19 @@ export class CustomerService {
       );
     }
 
-    // Check for duplicate email if being updated
-    if (data.email && data.email !== customer.email) {
-      const existing = await this.repository.findOne({
-        where: { email: data.email },
-      });
-      if (existing) {
-        throw new ConflictError('Customer with this email already exists');
+    if (data.email !== undefined) {
+      const normalizedEmail = data.email?.trim().toLowerCase() || undefined;
+      const existingEmail = customer.email?.toLowerCase() || undefined;
+      if (normalizedEmail && normalizedEmail !== existingEmail) {
+        const existing = await this.repository
+          .createQueryBuilder('customer')
+          .where('LOWER(customer.email) = :email', { email: normalizedEmail })
+          .getOne();
+        if (existing) {
+          throw new ConflictError('Customer with this email already exists');
+        }
       }
+      data.email = normalizedEmail;
     }
 
     Object.assign(customer, data);
