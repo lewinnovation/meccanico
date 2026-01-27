@@ -57,12 +57,15 @@ export async function generateCode(
   
   return withAdvisoryLock(`${tableName}:${prefix}`, async (queryRunner) => {
     // Get the highest code number for this entity type
-    const result = await queryRunner.query(`
+    const result = (await queryRunner.query(
+      `
       SELECT code FROM ${tableName}
-      WHERE code LIKE '${prefix}%'
-      ORDER BY code DESC
+      WHERE code LIKE $1
+      ORDER BY CAST(substring(code, 2) AS INTEGER) DESC
       LIMIT 1
-    `);
+    `,
+      [`${prefix}%`]
+    )) as Array<{ code: string }>;
 
     let nextNumber = 1;
     
@@ -90,12 +93,15 @@ export async function generateCustomerCode(name: string): Promise<string> {
   
   return withAdvisoryLock(`customers:${fullPrefix}`, async (queryRunner) => {
     // Get the highest code number for this customer name prefix
-    const result = await queryRunner.query(`
+    const result = (await queryRunner.query(
+      `
       SELECT code FROM customers
-      WHERE code LIKE '${fullPrefix}%'
-      ORDER BY code DESC
+      WHERE code LIKE $1
+      ORDER BY CAST(substring(code, 7) AS INTEGER) DESC
       LIMIT 1
-    `);
+    `,
+      [`${fullPrefix}%`]
+    )) as Array<{ code: string }>;
 
     let nextNumber = 1;
     
@@ -127,12 +133,15 @@ export async function generateJobCode(): Promise<string> {
   
   return withAdvisoryLock(`jobs:${datePrefix}`, async (queryRunner) => {
     // Get the highest code number for this date
-    const result = await queryRunner.query(`
+    const result = (await queryRunner.query(
+      `
       SELECT code FROM jobs
-      WHERE code LIKE '${datePrefix}%'
-      ORDER BY code DESC
+      WHERE code LIKE $1
+      ORDER BY CAST(substring(code, 8) AS INTEGER) DESC
       LIMIT 1
-    `);
+    `,
+      [`${datePrefix}%`]
+    )) as Array<{ code: string }>;
 
     let nextNumber = 1;
     
@@ -162,12 +171,15 @@ export async function generateCodes(
   const tableName = entityName.toLowerCase();
   
   return withAdvisoryLock(`${tableName}:${prefix}`, async (queryRunner) => {
-    const result = await queryRunner.query(`
+    const result = (await queryRunner.query(
+      `
       SELECT code FROM ${tableName}
-      WHERE code LIKE '${prefix}%'
-      ORDER BY code DESC
+      WHERE code LIKE $1
+      ORDER BY CAST(substring(code, 2) AS INTEGER) DESC
       LIMIT 1
-    `);
+    `,
+      [`${prefix}%`]
+    )) as Array<{ code: string }>;
 
     let startNumber = 1;
     
