@@ -12,7 +12,7 @@ import {
   Response,
   SuccessResponse,
 } from 'tsoa';
-import { InvoiceService, CreateInvoiceFromJobDto } from '../services/InvoiceService';
+import { InvoiceService, CreateInvoiceFromJobDto, CreateInvoiceFromJobBulkDto } from '../services/InvoiceService';
 import { CreditNoteService, CreateCreditNoteDto } from '../services/CreditNoteService';
 import { Invoice } from '../models/Invoice';
 import { CreditNote } from '../models/CreditNote';
@@ -28,7 +28,7 @@ export class InvoiceController extends Controller {
   /**
    * Create an invoice from a completed job
    */
-  @Post('from-job/{jobId}')
+  @Post('/from-job/{jobId}')
   @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('201', 'Invoice created')
   @Response<NotFoundError>(404, 'Job not found')
@@ -39,19 +39,25 @@ export class InvoiceController extends Controller {
   }
 
   /**
-   * Get invoice by ID
+   * Bulk create invoices from completed jobs (admin only)
    */
-  @Get('{id}')
-  @SuccessResponse('200', 'Invoice found')
-  @Response<NotFoundError>(404, 'Invoice not found')
-  public async getInvoice(@Path() id: string): Promise<Invoice> {
-    return this.invoiceService.findById(id);
+  @Post('/bulk-from-jobs')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse('201', 'Invoices created')
+  @Response<NotFoundError>(404, 'One or more jobs not found')
+  @Response<BadRequestError>(400, 'One or more jobs are not completed')
+  @Response<BadRequestError>(409, 'Invoices already exist for one or more jobs')
+  public async createBulkFromJobs(@Body() body: CreateInvoiceFromJobBulkDto): Promise<Invoice[]> {
+    if (body.jobIds.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 invoices at once');
+    }
+    return this.invoiceService.createBulkFromJobs(body.jobIds);
   }
 
   /**
    * Get invoice for a job
    */
-  @Get('job/{jobId}')
+  @Get('/job/{jobId}')
   @SuccessResponse('200', 'Invoice found')
   @Response<NotFoundError>(404, 'Invoice not found')
   public async getInvoiceByJob(@Path() jobId: string): Promise<Invoice | null> {
@@ -59,9 +65,19 @@ export class InvoiceController extends Controller {
   }
 
   /**
+   * Get invoice by ID
+   */
+  @Get('/{id}')
+  @SuccessResponse('200', 'Invoice found')
+  @Response<NotFoundError>(404, 'Invoice not found')
+  public async getInvoice(@Path() id: string): Promise<Invoice> {
+    return this.invoiceService.findById(id);
+  }
+
+  /**
    * Get all invoices with pagination
    */
-  @Get()
+  @Get('/')
   @SuccessResponse('200', 'Invoices retrieved')
   public async getInvoices(
     @Query() page: number = 1,
@@ -74,7 +90,7 @@ export class InvoiceController extends Controller {
   /**
    * Create a credit note for an invoice
    */
-  @Post('{id}/credit-notes')
+  @Post('/{id}/credit-notes')
   @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('201', 'Credit note created')
   @Response<NotFoundError>(404, 'Invoice not found')
@@ -93,7 +109,7 @@ export class InvoiceController extends Controller {
   /**
    * Get all credit notes for an invoice
    */
-  @Get('{id}/credit-notes')
+  @Get('/{id}/credit-notes')
   @SuccessResponse('200', 'Credit notes retrieved')
   @Response<NotFoundError>(404, 'Invoice not found')
   public async getCreditNotes(@Path() id: string): Promise<CreditNote[]> {
@@ -103,7 +119,7 @@ export class InvoiceController extends Controller {
   /**
    * Get remaining balance for an invoice (invoice total - payments - credit notes)
    */
-  @Get('{id}/remaining-balance')
+  @Get('/{id}/remaining-balance')
   @SuccessResponse('200', 'Remaining balance calculated')
   @Response<NotFoundError>(404, 'Invoice not found')
   public async getRemainingBalance(@Path() id: string): Promise<{ remainingBalance: number }> {
@@ -114,7 +130,7 @@ export class InvoiceController extends Controller {
   /**
    * Delete a credit note
    */
-  @Delete('{invoiceId}/credit-notes/{creditNoteId}')
+  @Delete('/{invoiceId}/credit-notes/{creditNoteId}')
   @Security('jwt', ['ADMIN', 'MECHANIC'])
   @SuccessResponse('204', 'Credit note deleted')
   @Response<NotFoundError>(404, 'Credit note not found')

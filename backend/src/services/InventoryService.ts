@@ -102,27 +102,62 @@ export class InventoryService {
   }
 
   async create(data: CreateInventoryDto): Promise<Inventory> {
-    // Check for duplicate SKU if provided
-    if (data.sku) {
-      const existing = await this.repository.findOne({
-        where: { sku: data.sku },
-      });
-      if (existing) {
-        throw new ConflictError('Inventory item with this SKU already exists');
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const repository = queryRunner.manager.getRepository(Inventory);
+      if (data.sku) {
+        const existing = await repository.findOne({
+          where: { sku: data.sku },
+        });
+        if (existing) {
+          throw new ConflictError('Inventory item with this SKU already exists');
+        }
       }
+
+      await queryRunner.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        ["inventory_code"],
+      );
+      const result = await queryRunner.query(
+        `
+          SELECT code FROM inventory
+          WHERE code LIKE $1
+          ORDER BY code DESC
+          LIMIT 1
+        `,
+        [`${CODE_PREFIXES.INVENTORY}%`],
+      );
+      let nextNumber = 1;
+      if (result.length > 0) {
+        const lastCode = result[0].code as string;
+        const lastNumber = Number.parseInt(lastCode.substring(1), 10);
+        if (!Number.isNaN(lastNumber)) {
+          nextNumber = lastNumber + 1;
+        }
+      }
+      const code = `${CODE_PREFIXES.INVENTORY}${nextNumber
+        .toString()
+        .padStart(3, "0")}`;
+
+      const item = repository.create({
+        ...data,
+        code,
+        quantityInStock: data.quantityInStock ?? 0,
+        minimumStock: data.minimumStock ?? 0,
+        unit: data.unit ?? "each",
+      });
+
+      const saved = await repository.save(item);
+      await queryRunner.commitTransaction();
+      return saved;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    const code = await generateCode('inventory', CODE_PREFIXES.INVENTORY);
-
-    const item = this.repository.create({
-      ...data,
-      code,
-      quantityInStock: data.quantityInStock ?? 0,
-      minimumStock: data.minimumStock ?? 0,
-      unit: data.unit ?? 'each',
-    });
-
-    return this.repository.save(item);
   }
 
   async update(id: string, data: UpdateInventoryDto): Promise<Inventory> {

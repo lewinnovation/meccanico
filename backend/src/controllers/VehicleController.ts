@@ -16,12 +16,15 @@ import {
 import {
   VehicleService,
   CreateVehicleDto,
+  CreateVehicleBulkDto,
+  BulkCreateVehiclesDto,
   UpdateVehicleDto,
 } from '../services/VehicleService';
 import { Vehicle } from '../models/Vehicle';
 import { VehicleOdometerReading } from '../models/VehicleOdometerReading';
 import { PaginatedResult } from '../types/common';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { BadRequestError } from '../middleware/errorHandler';
 
 @Route('api/vehicles')
 @Tags('Vehicles')
@@ -40,14 +43,6 @@ export class VehicleController extends Controller {
     @Query() customerId?: string
   ): Promise<PaginatedResult<Vehicle>> {
     return this.vehicleService.findAll(page, limit, search, customerId);
-  }
-
-  /**
-   * Get a vehicle by ID
-   */
-  @Get('/{id}')
-  public async getVehicle(@Path() id: string): Promise<Vehicle> {
-    return this.vehicleService.findById(id);
   }
 
   /**
@@ -71,7 +66,7 @@ export class VehicleController extends Controller {
   /**
    * Find a vehicle by license plate
    */
-  @Get('/search/license-plate/:plate')
+  @Get('/search/license-plate/{plate}')
   public async getVehicleByLicensePlate(
     @Path() plate: string
   ): Promise<Vehicle> {
@@ -81,11 +76,19 @@ export class VehicleController extends Controller {
   /**
    * Find a vehicle by VIN
    */
-  @Get('/search/vin/:vin')
+  @Get('/search/vin/{vin}')
   public async getVehicleByVin(
     @Path() vin: string
   ): Promise<Vehicle> {
     return this.vehicleService.findByVin(vin);
+  }
+
+  /**
+   * Get a vehicle by ID
+   */
+  @Get('/{id}')
+  public async getVehicle(@Path() id: string): Promise<Vehicle> {
+    return this.vehicleService.findById(id);
   }
 
   /**
@@ -97,6 +100,20 @@ export class VehicleController extends Controller {
   public async createVehicle(@Body() body: CreateVehicleDto): Promise<Vehicle> {
     this.setStatus(201);
     return this.vehicleService.create(body);
+  }
+
+  /**
+   * Bulk create vehicles (admin only)
+   */
+  @Post('/bulk')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse(201, 'Created')
+  public async createVehiclesBulk(@Body() body: BulkCreateVehiclesDto): Promise<Vehicle[]> {
+    if (body.items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 vehicles at once');
+    }
+    this.setStatus(201);
+    return this.vehicleService.createBulk(body.items);
   }
 
   /**

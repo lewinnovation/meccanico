@@ -15,10 +15,13 @@ import {
 import {
   CustomerService,
   CreateCustomerDto,
+  CreateCustomerBulkDto,
+  BulkCreateCustomersDto,
   UpdateCustomerDto,
   PaginatedResult,
 } from '../services/CustomerService';
 import { Customer } from '../models/Customer';
+import { BadRequestError } from '../middleware/errorHandler';
 
 @Route('api/customers')
 @Tags('Customers')
@@ -39,19 +42,19 @@ export class CustomerController extends Controller {
   }
 
   /**
-   * Get a customer by ID
-   */
-  @Get('/{id}')
-  public async getCustomer(@Path() id: string): Promise<Customer> {
-    return this.customerService.findById(id);
-  }
-
-  /**
    * Get a customer by code (e.g., C001)
    */
   @Get('/code/{code}')
   public async getCustomerByCode(@Path() code: string): Promise<Customer> {
     return this.customerService.findByCode(code);
+  }
+
+  /**
+   * Get a customer by ID
+   */
+  @Get('/{id}')
+  public async getCustomer(@Path() id: string): Promise<Customer> {
+    return this.customerService.findById(id);
   }
 
   /**
@@ -63,6 +66,20 @@ export class CustomerController extends Controller {
   public async createCustomer(@Body() body: CreateCustomerDto): Promise<Customer> {
     this.setStatus(201);
     return this.customerService.create(body);
+  }
+
+  /**
+   * Bulk create customers (admin only)
+   */
+  @Post('/bulk')
+  @Security('jwt', ['ADMIN'])
+  @SuccessResponse(201, 'Created')
+  public async createCustomersBulk(@Body() body: BulkCreateCustomersDto): Promise<Customer[]> {
+    if (body.items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 customers at once');
+    }
+    this.setStatus(201);
+    return this.customerService.createBulk(body.items);
   }
 
   /**

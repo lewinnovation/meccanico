@@ -1,24 +1,21 @@
-import { CustomerService, CreateCustomerDto, UpdateCustomerDto } from '../../../src/services/CustomerService';
+import { CustomerService, CreateCustomerDto, CreateCustomerBulkDto, UpdateCustomerDto } from '../../../src/services/CustomerService';
 import { Customer } from '../../../src/models/Customer';
-import { NotFoundError, ConflictError, VersionConflictError } from '../../../src/middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
 import { OptimisticLockVersionMismatchError } from 'typeorm';
-import { generateCustomerCode } from '../../../src/utils/codeGenerator';
-
 // Mock dependencies
-jest.mock('../../../src/utils/codeGenerator');
 jest.mock('../../../src/config/database', () => ({
   AppDataSource: {
     getRepository: jest.fn(),
     query: jest.fn(),
+    createQueryRunner: jest.fn(),
   },
 }));
-
-const mockGenerateCustomerCode = generateCustomerCode as jest.Mock;
 
 describe('CustomerService', () => {
   let customerService: CustomerService;
   let mockRepository: any;
   let mockVehicleOwnerRepository: any;
+  let mockQueryRunner: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -36,11 +33,28 @@ describe('CustomerService', () => {
       count: jest.fn(),
     };
 
+    mockQueryRunner = {
+      connect: jest.fn(),
+      startTransaction: jest.fn(),
+      query: jest.fn(),
+      commitTransaction: jest.fn(),
+      rollbackTransaction: jest.fn(),
+      release: jest.fn(),
+      manager: {
+        getRepository: jest.fn(),
+      },
+    };
+
     // Mock AppDataSource.getRepository
     const { AppDataSource } = require('../../../src/config/database');
     AppDataSource.getRepository.mockImplementation((entity: any) => {
       if (entity.name === 'Customer') return mockRepository;
       if (entity.name === 'VehicleOwner') return mockVehicleOwnerRepository;
+      return mockRepository;
+    });
+    AppDataSource.createQueryRunner.mockReturnValue(mockQueryRunner);
+    mockQueryRunner.manager.getRepository.mockImplementation((entity: any) => {
+      if (entity.name === 'Customer') return mockRepository;
       return mockRepository;
     });
 
@@ -204,8 +218,14 @@ describe('CustomerService', () => {
     };
 
     it('should create customer with generated code', async () => {
-      mockGenerateCustomerCode.mockResolvedValue('CJOHNS001');
-      mockRepository.findOne.mockResolvedValue(null); // No existing customer with email
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockQueryRunner.query
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       mockRepository.create.mockReturnValue({ ...createDto, code: 'CJOHNS001' });
       mockRepository.save.mockResolvedValue({ 
         id: '123', 
@@ -215,13 +235,16 @@ describe('CustomerService', () => {
 
       const result = await customerService.create(createDto);
 
-      expect(mockGenerateCustomerCode).toHaveBeenCalledWith('John Smith');
       expect(result.code).toBe('CJOHNS001');
       expect(result.name).toBe('John Smith');
     });
 
     it('should throw ConflictError for duplicate email', async () => {
-      mockRepository.findOne.mockResolvedValue({ id: 'existing', email: 'john@example.com' });
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({ id: 'existing', email: 'john@example.com' }),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       await expect(customerService.create(createDto))
         .rejects
@@ -229,7 +252,11 @@ describe('CustomerService', () => {
     });
 
     it('should throw ConflictError with correct message', async () => {
-      mockRepository.findOne.mockResolvedValue({ id: 'existing', email: 'john@example.com' });
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({ id: 'existing', email: 'john@example.com' }),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       await expect(customerService.create(createDto))
         .rejects
@@ -241,7 +268,9 @@ describe('CustomerService', () => {
         name: 'John Smith',
         phone: '555-1234',
       };
-      mockGenerateCustomerCode.mockResolvedValue('CJOHNS001');
+      mockQueryRunner.query
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       mockRepository.create.mockReturnValue({ ...dtoWithoutEmail, code: 'CJOHNS001' });
       mockRepository.save.mockResolvedValue({ 
         id: '123', 
@@ -251,7 +280,7 @@ describe('CustomerService', () => {
 
       const result = await customerService.create(dtoWithoutEmail);
 
-      expect(mockRepository.findOne).not.toHaveBeenCalled();
+      expect(mockRepository.createQueryBuilder).not.toHaveBeenCalled();
       expect(result.code).toBe('CJOHNS001');
     });
 
@@ -263,8 +292,14 @@ describe('CustomerService', () => {
         address: '123 Main St',
         notes: 'VIP customer',
       };
-      mockGenerateCustomerCode.mockResolvedValue('CJOHNS001');
-      mockRepository.findOne.mockResolvedValue(null);
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockQueryRunner.query
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       mockRepository.create.mockReturnValue({ ...fullDto, code: 'CJOHNS001' });
       mockRepository.save.mockResolvedValue({ id: '123', ...fullDto, code: 'CJOHNS001' });
 
@@ -287,9 +322,12 @@ describe('CustomerService', () => {
     };
 
     it('should update customer fields', async () => {
-      mockRepository.findOne
-        .mockResolvedValueOnce(existingCustomer) // findById
-        .mockResolvedValueOnce(null); // email check
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockRepository.findOne.mockResolvedValueOnce(existingCustomer);
       mockRepository.save.mockImplementation((customer: any) => Promise.resolve(customer));
 
       const updateDto: UpdateCustomerDto = { name: 'John Updated' };
@@ -307,9 +345,12 @@ describe('CustomerService', () => {
     });
 
     it('should throw ConflictError when updating to existing email', async () => {
-      mockRepository.findOne
-        .mockResolvedValueOnce(existingCustomer) // findById
-        .mockResolvedValueOnce({ id: 'other', email: 'other@example.com' }); // email check
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({ id: 'other', email: 'other@example.com' }),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockRepository.findOne.mockResolvedValueOnce(existingCustomer);
 
       await expect(customerService.update('123', { email: 'other@example.com' }))
         .rejects
@@ -343,9 +384,12 @@ describe('CustomerService', () => {
     });
 
     it('should update multiple fields at once', async () => {
-      mockRepository.findOne
-        .mockResolvedValueOnce(existingCustomer)
-        .mockResolvedValueOnce(null);
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockRepository.findOne.mockResolvedValueOnce(existingCustomer);
       mockRepository.save.mockImplementation((customer: any) => Promise.resolve(customer));
 
       const updateDto: UpdateCustomerDto = {
@@ -411,6 +455,86 @@ describe('CustomerService', () => {
       await expect(customerService.delete('123'))
         .rejects
         .toThrow('Cannot delete customer who owns vehicles. Remove vehicle ownership first.');
+    });
+  });
+
+  describe('createBulk', () => {
+    it('should create multiple customers with generated codes', async () => {
+      const items: CreateCustomerBulkDto[] = [
+        { name: 'John Smith', email: 'john@example.com' },
+        { name: 'Jane Doe', email: 'jane@example.com' },
+      ];
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null), // No duplicate emails
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockQueryRunner.query
+        .mockResolvedValueOnce([]) // First advisory lock
+        .mockResolvedValueOnce([]) // First code generation query
+        .mockResolvedValueOnce([]) // Second advisory lock
+        .mockResolvedValueOnce([]); // Second code generation query
+      mockRepository.create.mockImplementation((data: any) => ({ ...data, id: 'mock-id' }));
+      mockRepository.save.mockImplementation((customer: any) => Promise.resolve(customer));
+      mockQueryRunner.manager.getRepository.mockReturnValue(mockRepository);
+
+      const result = await customerService.createBulk(items);
+
+      expect(result).toHaveLength(2);
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestError when items array is empty', async () => {
+      await expect(customerService.createBulk([]))
+        .rejects
+        .toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when more than 100 items', async () => {
+      const items = Array(101).fill({ name: 'Test', email: 'test@example.com' });
+      await expect(customerService.createBulk(items))
+        .rejects
+        .toThrow('Cannot create more than 100 customers at once');
+    });
+
+    it('should throw ConflictError for duplicate email in bulk', async () => {
+      const items: CreateCustomerBulkDto[] = [
+        { name: 'John Smith', email: 'john@example.com' },
+      ];
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({ id: 'existing-id' }), // Duplicate email
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockQueryRunner.manager.getRepository.mockReturnValue(mockRepository);
+
+      await expect(customerService.createBulk(items))
+        .rejects
+        .toThrow(ConflictError);
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+    });
+
+    it('should use provided codes when specified', async () => {
+      const items: CreateCustomerBulkDto[] = [
+        { name: 'John Smith', code: 'CUSTOM001' },
+      ];
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockRepository.findOne.mockResolvedValue(null); // Code not taken
+      mockRepository.create.mockImplementation((data: any) => ({ ...data, id: 'mock-id' }));
+      mockRepository.save.mockImplementation((customer: any) => Promise.resolve(customer));
+      mockQueryRunner.manager.getRepository.mockReturnValue(mockRepository);
+
+      const result = await customerService.createBulk(items);
+
+      expect(result[0].code).toBe('CUSTOM001');
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
     });
   });
 });

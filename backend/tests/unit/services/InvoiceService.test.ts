@@ -1,4 +1,4 @@
-import { InvoiceService, CreateInvoiceFromJobDto } from '../../../src/services/InvoiceService';
+import { InvoiceService, CreateInvoiceFromJobDto, CreateInvoiceFromJobBulkDto } from '../../../src/services/InvoiceService';
 import { Invoice, InvoiceStatus } from '../../../src/models/Invoice';
 import { Job, JobStatus } from '../../../src/models/Job';
 import { NotFoundError, ConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
@@ -265,6 +265,21 @@ describe('InvoiceService', () => {
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('invoice.status = :status', {
         status: InvoiceStatus.UNPAID,
       });
+    });
+  });
+
+  describe('createBulkFromJobs', () => {
+    it('should throw BadRequestError when jobIds array is empty', async () => {
+      await expect(invoiceService.createBulkFromJobs([]))
+        .rejects
+        .toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when more than 100 jobIds', async () => {
+      const jobIds = Array(101).fill('job-1');
+      await expect(invoiceService.createBulkFromJobs(jobIds))
+        .rejects
+        .toThrow('Cannot create more than 100 invoices at once');
     });
   });
 });

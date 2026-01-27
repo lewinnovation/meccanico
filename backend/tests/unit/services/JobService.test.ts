@@ -1,8 +1,10 @@
 import {
   JobService,
   CreateJobDto,
+  CreateJobBulkDto,
   UpdateJobDto,
   CreateLineItemDto,
+  BulkCreateLineItemsDto,
 } from '../../../src/services/JobService';
 import { Job, JobStatus } from '../../../src/models/Job';
 import { LineItem, LineItemType } from '../../../src/models/LineItem';
@@ -650,6 +652,49 @@ describe('JobService', () => {
           { type: LineItemType.TEXT, description: 'Note', quantity: 1, unitPrice: 0 },
         ])
       ).rejects.toThrow(ConflictError);
+    });
+  });
+
+  describe('createBulk', () => {
+    it('should throw BadRequestError when items array is empty', async () => {
+      await expect(jobService.createBulk([], 'user-1'))
+        .rejects
+        .toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when more than 100 items', async () => {
+      const items = Array(101).fill({ customerId: 'customer-1' });
+      await expect(jobService.createBulk(items, 'user-1'))
+        .rejects
+        .toThrow('Cannot create more than 100 jobs at once');
+    });
+  });
+
+  describe('addLineItemsBulkAdmin', () => {
+    it('should throw BadRequestError when items array is empty', async () => {
+      await expect(jobService.addLineItemsBulkAdmin('job-1', [], 'user-1'))
+        .rejects
+        .toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when more than 100 items', async () => {
+      const items = Array(101).fill({ type: LineItemType.TEXT, description: 'Test', quantity: 1, unitPrice: 0 });
+      await expect(jobService.addLineItemsBulkAdmin('job-1', items, 'user-1'))
+        .rejects
+        .toThrow('Cannot create more than 100 line items at once');
+    });
+
+    it('should delegate to addLineItemsBulk when valid', async () => {
+      const items: CreateLineItemDto[] = [
+        { type: LineItemType.TEXT, description: 'Test', quantity: 1, unitPrice: 0 },
+      ];
+      mockJobRepository.findOne.mockResolvedValue(mockJob);
+      mockLineItemRepository.create.mockImplementation((data: any) => ({ ...data, id: 'item-1' }));
+      mockLineItemRepository.save.mockResolvedValue([{ id: 'item-1' }]);
+
+      await jobService.addLineItemsBulkAdmin('job-1', items, 'user-1');
+
+      expect(mockLineItemRepository.save).toHaveBeenCalled();
     });
   });
 });

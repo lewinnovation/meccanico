@@ -1,8 +1,9 @@
-import { input, password } from '@inquirer/prompts';
-import { createAdminUser } from './createAdminUser';
+import { input, password } from "@inquirer/prompts";
+import { createAdminUser } from "./createAdminUser";
+import { generateTokens } from "../middleware/auth";
 
 const requireNonEmpty = (value: string): true | string =>
-  value.trim().length > 0 ? true : 'This value is required.';
+  value.trim().length > 0 ? true : "This value is required.";
 
 const promptForAdminDetails = async (): Promise<{
   email: string;
@@ -10,29 +11,29 @@ const promptForAdminDetails = async (): Promise<{
   password: string;
 }> => {
   const email = await input({
-    message: 'Admin email:',
+    message: "Admin email:",
     validate: requireNonEmpty,
   });
 
   const name = await input({
-    message: 'Admin name (optional):',
-    default: '',
+    message: "Admin name (optional):",
+    default: "",
   });
 
   const adminPassword = await password({
-    message: 'Admin password:',
-    mask: '*',
+    message: "Admin password:",
+    mask: "*",
     validate: requireNonEmpty,
   });
 
   const confirmPassword = await password({
-    message: 'Confirm admin password:',
-    mask: '*',
+    message: "Confirm admin password:",
+    mask: "*",
     validate: requireNonEmpty,
   });
 
   if (adminPassword !== confirmPassword) {
-    throw new Error('Passwords do not match.');
+    throw new Error("Passwords do not match.");
   }
 
   return {
@@ -43,7 +44,11 @@ const promptForAdminDetails = async (): Promise<{
 };
 
 export async function runCreateAdminUserCli(): Promise<void> {
-  const { email, name, password: adminPassword } = await promptForAdminDetails();
+  const {
+    email,
+    name,
+    password: adminPassword,
+  } = await promptForAdminDetails();
 
   process.env.ADMIN_USER_EMAIL = email;
   process.env.ADMIN_USER_PASSWORD = adminPassword;
@@ -54,7 +59,9 @@ export async function runCreateAdminUserCli(): Promise<void> {
     delete process.env.ADMIN_USER_NAME;
   }
 
-  await createAdminUser();
+  const { user } = await createAdminUser();
+  console.log(`User tokens:`);
+  console.log(generateTokens(user));
 }
 
 if (require.main === module) {

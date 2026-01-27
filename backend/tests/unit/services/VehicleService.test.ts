@@ -1,7 +1,7 @@
-import { VehicleService, CreateVehicleDto, UpdateVehicleDto } from '../../../src/services/VehicleService';
+import { VehicleService, CreateVehicleDto, CreateVehicleBulkDto, UpdateVehicleDto } from '../../../src/services/VehicleService';
 import { Vehicle } from '../../../src/models/Vehicle';
 import { Customer } from '../../../src/models/Customer';
-import { NotFoundError, ConflictError, VersionConflictError } from '../../../src/middleware/errorHandler';
+import { NotFoundError, ConflictError, VersionConflictError, BadRequestError } from '../../../src/middleware/errorHandler';
 import { OptimisticLockVersionMismatchError } from 'typeorm';
 
 // Mock the database
@@ -461,6 +461,21 @@ describe('VehicleService', () => {
       mockVehicleRepository.findOne.mockResolvedValue(mockVehicle);
 
       await expect(vehicleService.delete('test-id')).rejects.toThrow(ConflictError);
+    });
+  });
+
+  describe('createBulk', () => {
+    it('should throw BadRequestError when items array is empty', async () => {
+      await expect(vehicleService.createBulk([]))
+        .rejects
+        .toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when more than 100 items', async () => {
+      const items = Array(101).fill({ customerIds: ['customer-1'], make: 'Toyota', model: 'Camry' });
+      await expect(vehicleService.createBulk(items))
+        .rejects
+        .toThrow('Cannot create more than 100 vehicles at once');
     });
   });
 

@@ -4,6 +4,7 @@ import { Invoice, InvoiceStatus } from '../models/Invoice';
 import { PaymentMethod } from '../models/PaymentMethod';
 import { CreditNote } from '../models/CreditNote';
 import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { In } from 'typeorm';
 
 export interface CreatePaymentDto {
   invoiceId: string;
@@ -11,6 +12,14 @@ export interface CreatePaymentDto {
   amount: number;
   paymentDate?: Date;
   paymentNote?: string;
+}
+
+export interface CreatePaymentBulkDto extends Omit<CreatePaymentDto, 'invoiceId'> {
+  // invoiceId is provided in the path, not in the DTO
+}
+
+export interface BulkCreatePaymentsDto {
+  items: CreatePaymentBulkDto[];
 }
 
 export class PaymentService {
@@ -230,5 +239,117 @@ export class PaymentService {
 
     // Update invoice status
     await this.updateInvoiceStatus(invoiceId);
+  }
+
+  async createBulk(invoiceId: string, items: CreatePaymentBulkDto[]): Promise<Payment[]> {
+    if (items.length === 0) {
+      throw new BadRequestError('At least one payment is required');
+    }
+    if (items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 payments at once');
+    }
+
+    // Validate invoice exists
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ['job', 'job.lineItems'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundError('Invoice not found');
+    }
+
+    const createdPayments: Payment[] = [];
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Validate all payment methods exist and are active
+      const paymentMethodIds = [...new Set(items.map(item => item.paymentMethodId))];
+      const paymentMethods = await queryRunner.manager.find(PaymentMethod, {
+        where: { id: In(paymentMethodIds) },
+      });
+
+      if (paymentMethods.length !== paymentMethodIds.length) {
+        throw new NotFoundError('One or more payment methods not found');
+      }
+
+      const inactiveMethods = paymentMethods.filter(pm => !pm.isActive);
+      if (inactiveMethods.length > 0) {
+        throw new BadRequestError(`Payment method(s) ${inactiveMethods.map(pm => pm.id).join(', ')} are not active`);
+      }
+
+      const paymentMethodMap = new Map(paymentMethods.map(pm => [pm.id, pm]));
+
+      // Calculate remaining balance once
+      const invoiceTotal = this.calculateInvoiceTotal(invoice);
+      const existingPayments = await queryRunner.manager.find(Payment, {
+        where: { invoiceId },
+      });
+      const totalPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
+      
+      const totalCreditsResult = await queryRunner.manager
+        .createQueryBuilder(CreditNote, 'creditNote')
+        .select('SUM(creditNote.amount)', 'total')
+        .where('creditNote.invoiceId = :invoiceId', { invoiceId })
+        .getRawOne();
+      const totalCreditsPreTax = parseFloat(totalCreditsResult?.total || '0');
+      const taxRate = invoice.job?.taxRate || 0;
+      const totalCreditsPostTax = totalCreditsPreTax * (1 + taxRate / 100);
+      
+      const remainingBalance = Math.max(0, invoiceTotal - totalPaid - totalCreditsPostTax);
+
+      // Process each payment
+      let cumulativeAmount = 0;
+      for (const item of items) {
+        // Validate amount is positive
+        if (item.amount <= 0) {
+          throw new BadRequestError('Payment amount must be greater than zero');
+        }
+
+        cumulativeAmount += item.amount;
+        const cumulativeAmountRounded = Math.round(cumulativeAmount * 100) / 100;
+        const remainingBalanceRounded = Math.round(remainingBalance * 100) / 100;
+
+        // Validate that cumulative payments don't exceed remaining balance
+        if (cumulativeAmountRounded > remainingBalanceRounded + 0.01) {
+          throw new BadRequestError(
+            `Cumulative payment amount (${cumulativeAmount.toFixed(2)}) exceeds remaining balance (${remainingBalance.toFixed(2)})`
+          );
+        }
+
+        const payment = queryRunner.manager.create(Payment, {
+          invoiceId,
+          paymentMethodId: item.paymentMethodId,
+          amount: item.amount,
+          paymentDate: item.paymentDate || new Date(),
+          paymentNote: item.paymentNote || null,
+        });
+
+        const savedPayment = await queryRunner.manager.save(payment);
+        createdPayments.push(savedPayment);
+      }
+
+      await queryRunner.commitTransaction();
+
+      // Update invoice status
+      await this.updateInvoiceStatus(invoiceId);
+
+      // Load full payment details with relations
+      const paymentIds = createdPayments.map(p => p.id);
+      const fullPayments = await this.repository.find({
+        where: { id: In(paymentIds) },
+        relations: ['paymentMethod'],
+        order: { paymentDate: 'DESC', createdAt: 'DESC' },
+      });
+
+      return fullPayments;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

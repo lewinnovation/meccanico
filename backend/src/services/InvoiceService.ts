@@ -4,9 +4,14 @@ import { Job, JobStatus } from '../models/Job';
 import { NotFoundError, ConflictError, BadRequestError } from '../middleware/errorHandler';
 import { SettingsService } from './SettingsService';
 import { PaymentService } from './PaymentService';
+import { In } from 'typeorm';
 
 export interface CreateInvoiceFromJobDto {
   jobId: string;
+}
+
+export interface CreateInvoiceFromJobBulkDto {
+  jobIds: string[];
 }
 
 export class InvoiceService {
@@ -168,6 +173,97 @@ export class InvoiceService {
       .getManyAndCount();
 
     return { data, total, page, limit };
+  }
+
+  async createBulkFromJobs(jobIds: string[]): Promise<Invoice[]> {
+    if (jobIds.length === 0) {
+      throw new BadRequestError('At least one job ID is required');
+    }
+    if (jobIds.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 invoices at once');
+    }
+
+    // Validate all jobs exist and are completed (outside transaction for better error messages)
+    const jobs = await this.jobRepository.find({
+      where: { id: In(jobIds) },
+      relations: ['customer', 'vehicle'],
+    });
+
+    if (jobs.length !== jobIds.length) {
+      throw new NotFoundError('One or more jobs not found');
+    }
+
+    // Check for jobs that are not completed
+    const incompleteJobs = jobs.filter(job => job.status !== JobStatus.COMPLETED);
+    if (incompleteJobs.length > 0) {
+      throw new BadRequestError(
+        `Jobs ${incompleteJobs.map(j => j.code).join(', ')} are not completed`
+      );
+    }
+
+    // Check for existing invoices
+    const existingInvoices = await this.repository.find({
+      where: { jobId: In(jobIds) },
+    });
+
+    const existingJobIds = new Set(existingInvoices.map(inv => inv.jobId));
+    const duplicateJobIds = jobIds.filter(id => existingJobIds.has(id));
+    if (duplicateJobIds.length > 0) {
+      throw new ConflictError(
+        `Invoices already exist for jobs: ${duplicateJobIds.join(', ')}`
+      );
+    }
+
+    // Generate invoice numbers and due dates (outside transaction for advisory locks)
+    const invoiceData = [];
+    for (const job of jobs) {
+      const invoiceDate = new Date();
+      const invoiceNumber = await this.generateInvoiceNumber();
+      const dueDate = await this.calculateDueDate(invoiceDate);
+      invoiceData.push({ job, invoiceNumber, invoiceDate, dueDate });
+    }
+
+    // Create invoices in a transaction
+    const createdInvoices: Invoice[] = [];
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      for (const { job, invoiceNumber, invoiceDate, dueDate } of invoiceData) {
+        const invoice = queryRunner.manager.create(Invoice, {
+          invoiceNumber,
+          jobId: job.id,
+          status: InvoiceStatus.UNPAID,
+          invoiceDate,
+          dueDate,
+        });
+
+        const savedInvoice = await queryRunner.manager.save(invoice);
+
+        // Update job to link to invoice
+        job.invoiceId = savedInvoice.id;
+        await queryRunner.manager.save(job);
+
+        createdInvoices.push(savedInvoice);
+      }
+
+      await queryRunner.commitTransaction();
+
+      // Load full invoice details with relations
+      const invoiceIds = createdInvoices.map(inv => inv.id);
+      const fullInvoices = await this.repository.find({
+        where: { id: In(invoiceIds) },
+        relations: ['job', 'job.customer', 'job.vehicle', 'job.lineItems', 'creditNotes', 'payments', 'payments.paymentMethod'],
+      });
+
+      return fullInvoices;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
 

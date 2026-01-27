@@ -44,18 +44,6 @@ export class UserController extends Controller {
   }
 
   /**
-   * Get user by ID (admin only)
-   */
-  @Get('/{id}')
-  @Security('jwt', ['ADMIN'])
-  public async getUser(
-    @Path() id: string,
-    @Request() request: { user: User }
-  ): Promise<Omit<User, 'passwordHash'>> {
-    return this.userService.findById(id);
-  }
-
-  /**
    * Suspend a user (admin only)
    */
   @Put('/{id}/suspend')
@@ -114,5 +102,17 @@ export class UserController extends Controller {
     @Request() request: { user: User }
   ): Promise<Omit<User, 'passwordHash'>> {
     return this.userService.updateProfile(request.user.id, body);
+  }
+
+  /**
+   * Get user by ID (admin only)
+   */
+  @Get('/{id}')
+  @Security('jwt', ['ADMIN'])
+  public async getUser(
+    @Path() id: string,
+    @Request() request: { user: User }
+  ): Promise<Omit<User, 'passwordHash'>> {
+    return this.userService.findById(id);
   }
 }

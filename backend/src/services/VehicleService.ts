@@ -35,6 +35,14 @@ export interface UpdateVehicleDto {
   version?: number;
 }
 
+export interface CreateVehicleBulkDto extends CreateVehicleDto {
+  code?: string;
+}
+
+export interface BulkCreateVehiclesDto {
+  items: CreateVehicleBulkDto[];
+}
+
 export class VehicleService {
   private vehicleRepository = AppDataSource.getRepository(Vehicle);
   private customerRepository = AppDataSource.getRepository(Customer);
@@ -515,6 +523,112 @@ export class VehicleService {
     await this.vehicleOwnerRepository.save(vehicleOwner);
 
     return this.findById(vehicleId);
+  }
+
+  async createBulk(items: CreateVehicleBulkDto[]): Promise<Vehicle[]> {
+    if (items.length === 0) {
+      throw new BadRequestError('At least one vehicle is required');
+    }
+    if (items.length > 100) {
+      throw new BadRequestError('Cannot create more than 100 vehicles at once');
+    }
+
+    const createdVehicles: Vehicle[] = [];
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      for (const data of items) {
+        if (!data.customerIds || data.customerIds.length === 0) {
+          throw new BadRequestError('At least one customer must be specified');
+        }
+
+        // Verify all customers exist
+        const customers = await queryRunner.manager.find(Customer, {
+          where: { id: In(data.customerIds) },
+        });
+        if (customers.length !== data.customerIds.length) {
+          throw new NotFoundError('One or more customers not found');
+        }
+
+        // Check for duplicate VIN if provided
+        if (data.vin) {
+          const existingVin = await queryRunner.manager.findOne(Vehicle, {
+            where: { vin: data.vin },
+          });
+          if (existingVin) {
+            throw new ConflictError(`Vehicle with VIN ${data.vin} already exists`);
+          }
+        }
+
+        // Check for duplicate license plate if provided
+        if (data.licensePlate) {
+          const existingPlate = await queryRunner.manager.findOne(Vehicle, {
+            where: { licensePlate: data.licensePlate },
+          });
+          if (existingPlate) {
+            throw new ConflictError(`Vehicle with license plate ${data.licensePlate} already exists`);
+          }
+        }
+
+        // Use provided code or generate one
+        let code = data.code;
+        if (!code) {
+          code = await generateCode('vehicles', CODE_PREFIXES.VEHICLE);
+        } else {
+          // Validate code uniqueness within transaction
+          const existing = await queryRunner.manager.findOne(Vehicle, {
+            where: { code },
+          });
+          if (existing) {
+            throw new ConflictError(`Vehicle with code ${code} already exists`);
+          }
+        }
+
+        // Create vehicle without customerId
+        const { customerIds, ...vehicleData } = data;
+        const vehicle = queryRunner.manager.create(Vehicle, {
+          ...vehicleData,
+          code,
+        });
+
+        const savedVehicle = await queryRunner.manager.save(vehicle);
+
+        // Create VehicleOwner records
+        const vehicleOwners = customerIds.map((customerId, index) => {
+          return queryRunner.manager.create(VehicleOwner, {
+            vehicleId: savedVehicle.id,
+            customerId,
+            isPrimary: index === 0, // First customer is primary
+          });
+        });
+
+        await queryRunner.manager.save(vehicleOwners);
+        createdVehicles.push(savedVehicle);
+      }
+
+      await queryRunner.commitTransaction();
+      
+      // Load full vehicle details with relations
+      const vehicleIds = createdVehicles.map(v => v.id);
+      const fullVehicles = await this.vehicleRepository.find({
+        where: { id: In(vehicleIds) },
+        relations: ['vehicleOwners', 'vehicleOwners.customer', 'jobs'],
+      });
+
+      // Populate owners for each vehicle
+      for (const vehicle of fullVehicles) {
+        vehicle.owners = vehicle.vehicleOwners?.map(vo => vo.customer) || [];
+      }
+
+      return fullVehicles;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
 
