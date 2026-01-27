@@ -1,6 +1,6 @@
 import { input, password } from "@inquirer/prompts";
 import { createAdminUser } from "./createAdminUser";
-import { generateTokens } from "@/middleware/auth";
+import { generateTokens } from "../middleware/auth";
 
 const requireNonEmpty = (value: string): true | string =>
   value.trim().length > 0 ? true : "This value is required.";
