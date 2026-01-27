@@ -11,31 +11,31 @@ import {
   Tags,
   Security,
   SuccessResponse,
-} from 'tsoa';
+} from "tsoa";
 import {
   ServiceService,
   CreateServiceDto,
   UpdateServiceDto,
   PaginatedResult,
-} from '../services/ServiceService';
-import { Service } from '../models/Service';
+} from "../services/ServiceService";
+import { Service } from "../models/Service";
 
-@Route('api/services')
-@Tags('Services')
-@Security('jwt')
+@Route("api/services")
+@Tags("Services")
+@Security("jwt")
 export class ServiceController extends Controller {
   private serviceService = new ServiceService();
 
   /**
    * Get all services with pagination and filters
    */
-  @Get('/')
+  @Get("/")
   public async getServices(
     @Query() page: number = 1,
     @Query() limit: number = 50,
     @Query() search?: string,
     @Query() category?: string,
-    @Query() active?: boolean
+    @Query() active?: boolean,
   ): Promise<PaginatedResult<Service>> {
     return this.serviceService.findAll(page, limit, search, category, active);
   }
@@ -43,15 +43,15 @@ export class ServiceController extends Controller {
   /**
    * Get available categories
    */
-  @Get('/categories')
-  public async getCategories(): Promise<string[]> {
+  @Get("/categories")
+  public async getServiceCategories(): Promise<string[]> {
     return this.serviceService.getCategories();
   }
 
   /**
    * Get a service by code
    */
-  @Get('/code/{code}')
+  @Get("/code/{code}")
   public async getServiceByCode(@Path() code: string): Promise<Service> {
     return this.serviceService.findByCode(code);
   }
@@ -59,7 +59,7 @@ export class ServiceController extends Controller {
   /**
    * Get a service by ID
    */
-  @Get('/{id}')
+  @Get("/{id}")
   public async getService(@Path() id: string): Promise<Service> {
     return this.serviceService.findById(id);
   }
@@ -67,9 +67,9 @@ export class ServiceController extends Controller {
   /**
    * Create a new service
    */
-  @Post('/')
-  @Security('jwt', ['ADMIN'])
-  @SuccessResponse(201, 'Created')
+  @Post("/")
+  @Security("jwt", ["ADMIN"])
+  @SuccessResponse(201, "Created")
   public async createService(@Body() body: CreateServiceDto): Promise<Service> {
     this.setStatus(201);
     return this.serviceService.create(body);
@@ -78,11 +78,11 @@ export class ServiceController extends Controller {
   /**
    * Update a service
    */
-  @Patch('/{id}')
-  @Security('jwt', ['ADMIN'])
+  @Patch("/{id}")
+  @Security("jwt", ["ADMIN"])
   public async updateService(
     @Path() id: string,
-    @Body() body: UpdateServiceDto
+    @Body() body: UpdateServiceDto,
   ): Promise<Service> {
     return this.serviceService.update(id, body);
   }
@@ -90,12 +90,11 @@ export class ServiceController extends Controller {
   /**
    * Delete a service
    */
-  @Delete('/{id}')
-  @Security('jwt', ['ADMIN'])
-  @SuccessResponse(204, 'Deleted')
+  @Delete("/{id}")
+  @Security("jwt", ["ADMIN"])
+  @SuccessResponse(204, "Deleted")
   public async deleteService(@Path() id: string): Promise<void> {
     this.setStatus(204);
     return this.serviceService.delete(id);
   }
 }
-

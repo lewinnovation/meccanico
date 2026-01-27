@@ -11,31 +11,31 @@ import {
   Tags,
   Security,
   SuccessResponse,
-} from 'tsoa';
+} from "tsoa";
 import {
   LabourService,
   CreateLabourDto,
   UpdateLabourDto,
   PaginatedResult,
-} from '../services/LabourService';
-import { Labour } from '../models/Labour';
+} from "../services/LabourService";
+import { Labour } from "../models/Labour";
 
-@Route('api/labour')
-@Tags('Labour')
-@Security('jwt')
+@Route("api/labour")
+@Tags("Labour")
+@Security("jwt")
 export class LabourController extends Controller {
   private labourService = new LabourService();
 
   /**
    * Get all labour items with pagination and filters
    */
-  @Get('/')
+  @Get("/")
   public async getLabour(
     @Query() page: number = 1,
     @Query() limit: number = 50,
     @Query() search?: string,
     @Query() category?: string,
-    @Query() active?: boolean
+    @Query() active?: boolean,
   ): Promise<PaginatedResult<Labour>> {
     return this.labourService.findAll(page, limit, search, category, active);
   }
@@ -43,15 +43,15 @@ export class LabourController extends Controller {
   /**
    * Get available categories
    */
-  @Get('/categories')
-  public async getCategories(): Promise<string[]> {
+  @Get("/categories")
+  public async getLabourCategories(): Promise<string[]> {
     return this.labourService.getCategories();
   }
 
   /**
    * Get a labour item by code
    */
-  @Get('/code/{code}')
+  @Get("/code/{code}")
   public async getLabourItemByCode(@Path() code: string): Promise<Labour> {
     return this.labourService.findByCode(code);
   }
@@ -59,7 +59,7 @@ export class LabourController extends Controller {
   /**
    * Get a labour item by ID
    */
-  @Get('/{id}')
+  @Get("/{id}")
   public async getLabourItem(@Path() id: string): Promise<Labour> {
     return this.labourService.findById(id);
   }
@@ -67,10 +67,12 @@ export class LabourController extends Controller {
   /**
    * Create a new labour item
    */
-  @Post('/')
-  @Security('jwt', ['ADMIN'])
-  @SuccessResponse(201, 'Created')
-  public async createLabourItem(@Body() body: CreateLabourDto): Promise<Labour> {
+  @Post("/")
+  @Security("jwt", ["ADMIN"])
+  @SuccessResponse(201, "Created")
+  public async createLabourItem(
+    @Body() body: CreateLabourDto,
+  ): Promise<Labour> {
     this.setStatus(201);
     return this.labourService.create(body);
   }
@@ -78,11 +80,11 @@ export class LabourController extends Controller {
   /**
    * Update a labour item
    */
-  @Patch('/{id}')
-  @Security('jwt', ['ADMIN'])
+  @Patch("/{id}")
+  @Security("jwt", ["ADMIN"])
   public async updateLabourItem(
     @Path() id: string,
-    @Body() body: UpdateLabourDto
+    @Body() body: UpdateLabourDto,
   ): Promise<Labour> {
     return this.labourService.update(id, body);
   }
@@ -90,12 +92,11 @@ export class LabourController extends Controller {
   /**
    * Delete a labour item
    */
-  @Delete('/{id}')
-  @Security('jwt', ['ADMIN'])
-  @SuccessResponse(204, 'Deleted')
+  @Delete("/{id}")
+  @Security("jwt", ["ADMIN"])
+  @SuccessResponse(204, "Deleted")
   public async deleteLabourItem(@Path() id: string): Promise<void> {
     this.setStatus(204);
     return this.labourService.delete(id);
   }
 }
-
